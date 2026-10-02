@@ -102,6 +102,64 @@
               "main/animations/walk/west/frame_005.png"
             ]
           },
+          "crouch": {
+            "south": [
+              "main/animations/crouch/south/frame_000.png",
+              "main/animations/crouch/south/frame_001.png",
+              "main/animations/crouch/south/frame_002.png",
+              "main/animations/crouch/south/frame_003.png",
+              "main/animations/crouch/south/frame_004.png"
+            ],
+            "west": [
+              "main/animations/crouch/west/frame_000.png",
+              "main/animations/crouch/west/frame_001.png",
+              "main/animations/crouch/west/frame_002.png",
+              "main/animations/crouch/west/frame_003.png",
+              "main/animations/crouch/west/frame_004.png"
+            ],
+            "south-east": [
+              "main/animations/crouch/south-east/frame_000.png",
+              "main/animations/crouch/south-east/frame_001.png",
+              "main/animations/crouch/south-east/frame_002.png",
+              "main/animations/crouch/south-east/frame_003.png",
+              "main/animations/crouch/south-east/frame_004.png"
+            ],
+            "south-west": [
+              "main/animations/crouch/south-west/frame_000.png",
+              "main/animations/crouch/south-west/frame_001.png",
+              "main/animations/crouch/south-west/frame_002.png",
+              "main/animations/crouch/south-west/frame_003.png",
+              "main/animations/crouch/south-west/frame_004.png"
+            ],
+            "north-east": [
+              "main/animations/crouch/north-east/frame_000.png",
+              "main/animations/crouch/north-east/frame_001.png",
+              "main/animations/crouch/north-east/frame_002.png",
+              "main/animations/crouch/north-east/frame_003.png",
+              "main/animations/crouch/north-east/frame_004.png"
+            ],
+            "east": [
+              "main/animations/crouch/east/frame_000.png",
+              "main/animations/crouch/east/frame_001.png",
+              "main/animations/crouch/east/frame_002.png",
+              "main/animations/crouch/east/frame_003.png",
+              "main/animations/crouch/east/frame_004.png"
+            ],
+            "north-west": [
+              "main/animations/crouch/north-west/frame_000.png",
+              "main/animations/crouch/north-west/frame_001.png",
+              "main/animations/crouch/north-west/frame_002.png",
+              "main/animations/crouch/north-west/frame_003.png",
+              "main/animations/crouch/north-west/frame_004.png"
+            ],
+            "north": [
+              "main/animations/crouch/north/frame_000.png",
+              "main/animations/crouch/north/frame_001.png",
+              "main/animations/crouch/north/frame_002.png",
+              "main/animations/crouch/north/frame_003.png",
+              "main/animations/crouch/north/frame_004.png"
+            ]
+          },
           "run": {
             "south-east": [
               "main/animations/run/south-east/frame_000.png",
@@ -217,6 +275,96 @@
               "main/animations/idle/west/frame_002.png",
               "main/animations/idle/west/frame_003.png"
             ]
+          },
+          "jump": {
+            "east": [
+              "main/animations/jump/east/frame_000.png",
+              "main/animations/jump/east/frame_001.png",
+              "main/animations/jump/east/frame_002.png",
+              "main/animations/jump/east/frame_003.png",
+              "main/animations/jump/east/frame_004.png",
+              "main/animations/jump/east/frame_005.png",
+              "main/animations/jump/east/frame_006.png",
+              "main/animations/jump/east/frame_007.png",
+              "main/animations/jump/east/frame_008.png"
+            ],
+            "south-west": [
+              "main/animations/jump/south-west/frame_000.png",
+              "main/animations/jump/south-west/frame_001.png",
+              "main/animations/jump/south-west/frame_002.png",
+              "main/animations/jump/south-west/frame_003.png",
+              "main/animations/jump/south-west/frame_004.png",
+              "main/animations/jump/south-west/frame_005.png",
+              "main/animations/jump/south-west/frame_006.png",
+              "main/animations/jump/south-west/frame_007.png",
+              "main/animations/jump/south-west/frame_008.png"
+            ],
+            "south-east": [
+              "main/animations/jump/south-east/frame_000.png",
+              "main/animations/jump/south-east/frame_001.png",
+              "main/animations/jump/south-east/frame_002.png",
+              "main/animations/jump/south-east/frame_003.png",
+              "main/animations/jump/south-east/frame_004.png",
+              "main/animations/jump/south-east/frame_005.png",
+              "main/animations/jump/south-east/frame_006.png",
+              "main/animations/jump/south-east/frame_007.png",
+              "main/animations/jump/south-east/frame_008.png"
+            ],
+            "north-west": [
+              "main/animations/jump/north-west/frame_000.png",
+              "main/animations/jump/north-west/frame_001.png",
+              "main/animations/jump/north-west/frame_002.png",
+              "main/animations/jump/north-west/frame_003.png",
+              "main/animations/jump/north-west/frame_004.png",
+              "main/animations/jump/north-west/frame_005.png",
+              "main/animations/jump/north-west/frame_006.png",
+              "main/animations/jump/north-west/frame_007.png",
+              "main/animations/jump/north-west/frame_008.png"
+            ],
+            "north-east": [
+              "main/animations/jump/north-east/frame_000.png",
+              "main/animations/jump/north-east/frame_001.png",
+              "main/animations/jump/north-east/frame_002.png",
+              "main/animations/jump/north-east/frame_003.png",
+              "main/animations/jump/north-east/frame_004.png",
+              "main/animations/jump/north-east/frame_005.png",
+              "main/animations/jump/north-east/frame_006.png",
+              "main/animations/jump/north-east/frame_007.png",
+              "main/animations/jump/north-east/frame_008.png"
+            ],
+            "south": [
+              "main/animations/jump/south/frame_000.png",
+              "main/animations/jump/south/frame_001.png",
+              "main/animations/jump/south/frame_002.png",
+              "main/animations/jump/south/frame_003.png",
+              "main/animations/jump/south/frame_004.png",
+              "main/animations/jump/south/frame_005.png",
+              "main/animations/jump/south/frame_006.png",
+              "main/animations/jump/south/frame_007.png",
+              "main/animations/jump/south/frame_008.png"
+            ],
+            "west": [
+              "main/animations/jump/west/frame_000.png",
+              "main/animations/jump/west/frame_001.png",
+              "main/animations/jump/west/frame_002.png",
+              "main/animations/jump/west/frame_003.png",
+              "main/animations/jump/west/frame_004.png",
+              "main/animations/jump/west/frame_005.png",
+              "main/animations/jump/west/frame_006.png",
+              "main/animations/jump/west/frame_007.png",
+              "main/animations/jump/west/frame_008.png"
+            ],
+            "north": [
+              "main/animations/jump/north/frame_000.png",
+              "main/animations/jump/north/frame_001.png",
+              "main/animations/jump/north/frame_002.png",
+              "main/animations/jump/north/frame_003.png",
+              "main/animations/jump/north/frame_004.png",
+              "main/animations/jump/north/frame_005.png",
+              "main/animations/jump/north/frame_006.png",
+              "main/animations/jump/north/frame_007.png",
+              "main/animations/jump/north/frame_008.png"
+            ]
           }
         }
       }
@@ -311,5 +459,5 @@
     }
   ],
   "export_version": "3.1",
-  "export_date": "2026-10-02T17:09:35.865645"
+  "export_date": "2026-10-02T17:43:59.741618"
 }
