@@ -94,6 +94,7 @@
     "mode": "v3",
     "animation_group_id": "85f4d598-a5f8-44d3-82e6-e2fee0331e7e",
     "directions": 8,
-    "frames_south": 9
+    "frames_south": 9,
+    "resync_note": "Pulled latest vault from PixelLab after manual edits"
   }
 }
