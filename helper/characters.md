@@ -15,3 +15,14 @@ Primary playable character.
   - rotations: `south.png` … `south-west.png` (also `Idle/rotations/`)
   - anims: `animations/{walk,idle}/{dir}/frame_XXX.png`
   - package: `character-with-anims.zip`
+
+## Main High Top-Down (`assets/characters/main-high/`)
+
+Same student look, steeper camera for comparison / optional use.
+
+- **character_id:** `37ad4d45-4dfd-442e-ace5-f38ec3c83706`
+- **mode:** standard
+- **view:** high top-down
+- **directions:** 8
+- **animations:** walk + idle (8 dirs)
+

@@ -9,3 +9,11 @@
 - **directions:** 8
 - **size:** 48x48
 - **files:** `south.png` … `south-west.png`
+
+## Main skateboard High Top-Down (`assets/objects/skateboard-high/`)
+
+- **object_id:** `719fe069-30be-4dff-89ef-6cc04e7cd4fa`
+- **view:** high top-down
+- **directions:** 8
+- **size:** 48x48
+
