@@ -7,6 +7,8 @@
   "description": "teenage high school male student for a mobile skate game, short dark hair tied back in a small ponytail / bun at the back, youthful face, casual school-street style: white hoodie, blue jeans, red sneakers, empty hands, no skateboard, no board, no props, clean readable pixel art",
   "role": "CANONICAL main character for the game",
   "reference_rule": "All future outfits, bags, accessories, and variants for the main character MUST use this character as style/identity reference (style_character_id / south.png).",
-  "resync_note": "Pulled latest from PixelLab after manual walk edit on create-character page",
-  "path": "assets/characters/main/character/92x92/"
+  "resync_note": "Pulled latest main state walk+idle from PixelLab; walk south = newest API variant 44d9369a",
+  "path": "assets/characters/main/character/92x92/",
+  "state_name": "main",
+  "walk_south_source": "south-44d9369a"
 }
