@@ -1,0 +1,20 @@
+{
+  "character_id": "12076436-e27d-4015-98b9-5875c3ecf071",
+  "state_name": "crouch",
+  "source_character_id": "37ad4d45-4dfd-442e-ace5-f38ec3c83706",
+  "view": "high top-down",
+  "size": 92,
+  "n_directions": 8,
+  "pose": "deep game crouch held low; no skateboard",
+  "animations": [
+    "idle"
+  ],
+  "idle": {
+    "mode": "v3",
+    "style": "pose-frozen breathing",
+    "animation_group_id": "3adf2b74-b03e-40d0-ba64-84a784566632",
+    "directions": 8,
+    "frames": 5
+  },
+  "path": "assets/characters/main/character/92x92/states/crouch/"
+}
