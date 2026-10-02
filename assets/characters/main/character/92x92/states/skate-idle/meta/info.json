@@ -1,0 +1,15 @@
+{
+  "character_id": "2be6dc14-97ed-493e-b32c-3f9d26ac1d5c",
+  "state_name": "SkateStance",
+  "source_character_id": "37ad4d45-4dfd-442e-ace5-f38ec3c83706",
+  "view": "high top-down",
+  "size": 92,
+  "animation_canvas_note": "v3 skate-idle frames are 96x96; static rotations 92x92",
+  "n_directions": 8,
+  "pose": "knees bent crouch, head turned right, arms out to sides, no skateboard",
+  "animation": "skate-idle (v3)",
+  "animation_group_id": "a047eef7-f9d4-427a-9101-49620868dab4",
+  "no_skateboard_in_sprite": true,
+  "path": "assets/characters/main/character/92x92/states/skate-idle/",
+  "pixellab_url": "https://www.pixellab.ai/create-character/2be6dc14-97ed-493e-b32c-3f9d26ac1d5c"
+}

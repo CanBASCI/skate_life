@@ -1,0 +1,9 @@
+character: f577c878-2977-498f-a014-48524ead54e6
+animation: subtle breathing idle while holding a skateboarding stance: knees stay slightly bent, arms stay lightly out to the sides, head stays turned to his right, small chest breathe only, no walking
+directions: south, south-east, east, north-east, north, north-west, west, south-west (8 jobs)
+group: 9cc860d8-8d59-4696-9cf0-b388b542bb01
+eta: ~2-4 min
+add more directions to this group: animate_character(character_id="f577c878-2977-498f-a014-48524ead54e6", template_animation_id="breathing-idle", animation_group_id="9cc860d8-8d59-4696-9cf0-b388b542bb01", directions=[...])
+
+hint: get_character(character_id="f577c878-2977-498f-a014-48524ead54e6")
+if poor: delete_animation(character_id="f577c878-2977-498f-a014-48524ead54e6", animation_type="...") then retry with mode="v3"

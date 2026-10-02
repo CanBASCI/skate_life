@@ -43,3 +43,12 @@ assets/characters/main/character/
     animations/{walk,idle}/{dir}/frame_XXX.png
     character-with-anims.zip
 ```
+
+### Skate stance idle (no board in sprite)
+
+- **state:** `SkateStance` — `assets/characters/main/character/92x92/states/skate-idle/`
+- **character_id:** `2be6dc14-97ed-493e-b32c-3f9d26ac1d5c`
+- **pose:** knees bent, head turned right, arms slightly out; empty hands; **no skateboard drawn**
+- **animation:** `animations/skate-idle/` (v3, 8 directions; frames may be 96×96)
+- Board is a separate object; mount in game code.
+

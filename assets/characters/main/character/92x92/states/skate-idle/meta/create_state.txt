@@ -1,0 +1,8 @@
+id: 2be6dc14-97ed-493e-b32c-3f9d26ac1d5c
+source: 37ad4d45-4dfd-442e-ace5-f38ec3c83706
+edit: POSE CHANGE ONLY — keep the exact same face, hair bun, white hoodie, blue jeans, red sneakers. Replace the upright standing pose with a clear skateboard riding stance (NO skateboard drawn). Knees bent and lowered into a slight crouch; legs shorter/wider than standing. Feet planted apart left-right as if on a board. Both arms lifted slightly away from the torso, open to the sides for balance (not hanging down). Head turned to the character's right so he looks sideways, not straight at camera. Empty hands, no props, no board.
+cost: ~20-40 generations (Gemini tier by canvas size)
+status: processing (~30-90s)
+note: linked via group_id, inherits skeleton for animations
+
+hint: get_character(character_id="2be6dc14-97ed-493e-b32c-3f9d26ac1d5c")
