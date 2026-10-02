@@ -12,5 +12,15 @@
     "state_name": "withSkate",
     "character_id": "2be6dc14-97ed-493e-b32c-3f9d26ac1d5c",
     "path": "assets/characters/main/character/92x92/states/withSkate/"
+  },
+  "animations": [
+    "idle",
+    "walk",
+    "run"
+  ],
+  "run": {
+    "template": "running-6-frames",
+    "animation_group_id": "44b236d6-e64b-498e-bc0c-7c4937f80df9",
+    "directions": 8
   }
 }

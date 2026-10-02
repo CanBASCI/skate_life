@@ -7,5 +7,15 @@
   "walk_south_source": "south-44d9369a",
   "view": "high top-down",
   "size": 92,
-  "n_directions": 8
+  "n_directions": 8,
+  "animations": [
+    "idle",
+    "walk",
+    "run"
+  ],
+  "run": {
+    "template": "running-6-frames",
+    "animation_group_id": "44b236d6-e64b-498e-bc0c-7c4937f80df9",
+    "directions": 8
+  }
 }
