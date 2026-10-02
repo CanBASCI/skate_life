@@ -45,11 +45,11 @@ assets/characters/main/character/
     ...
 ```
 
-### Skate stance idle (no board in sprite)
+### withSkate stance idle (no board in sprite)
 
-- **state:** `SkateStance` — `assets/characters/main/character/92x92/states/skate-idle/`
+- **state:** `withSkate` — `assets/characters/main/character/92x92/states/withSkate/`
 - **character_id:** `2be6dc14-97ed-493e-b32c-3f9d26ac1d5c`
 - **pose:** knees bent, head turned right, arms slightly out; empty hands; **no skateboard drawn**
-- **animation:** `animations/skate-idle/` (v3, 8 directions; frames may be 96×96)
+- **animation:** under `animations/` (sibling of PixelLab state `main`)
 - Board is a separate object; mount in game code.
 

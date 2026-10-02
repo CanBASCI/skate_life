@@ -7,5 +7,10 @@
   "walk_south_source": "south-44d9369a",
   "view": "high top-down",
   "size": 92,
-  "n_directions": 8
+  "n_directions": 8,
+  "sibling_state": {
+    "state_name": "withSkate",
+    "character_id": "2be6dc14-97ed-493e-b32c-3f9d26ac1d5c",
+    "path": "assets/characters/main/character/92x92/states/withSkate/"
+  }
 }
