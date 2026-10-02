@@ -6,7 +6,7 @@
 
 | Size | Path | character_id | Role |
 |------|------|--------------|------|
-| **92×92** (game scale + master reference) | `assets/characters/main/character/92x92/` | `37ad4d45-4dfd-442e-ace5-f38ec3c83706` | **Active game size.** Identity + style source for all variants. Houses/map props scale to this. |
+| **92×92** (game scale + master reference) | `assets/characters/main/character/92x92/` (state **`main`**) | `37ad4d45-4dfd-442e-ace5-f38ec3c83706` | **Active game size.** Walk/idle under `main/animations/`. |
 | **64×64** (optional smaller variant) | `assets/characters/main/character/64x64/` | `25c95faa-03fb-4cdf-808c-031c97dba441` | Kept on disk; not the current gameplay target |
 
 - **view:** high top-down
@@ -35,13 +35,14 @@
 ```
 assets/characters/main/character/
   92x92/
-    {south,south-east,east,...}.png
-    animations/{walk,idle}/{dir}/frame_XXX.png
+    main/                         # PixelLab state name
+      rotations/
+      animations/{walk,idle}/
+    animations/{walk,idle}/       # convenience mirror of main
+    {south,south-east,...}.png
     character-with-anims.zip
   64x64/
-    {south,south-east,east,...}.png
-    animations/{walk,idle}/{dir}/frame_XXX.png
-    character-with-anims.zip
+    ...
 ```
 
 ### Skate stance idle (no board in sprite)
