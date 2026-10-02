@@ -16,11 +16,18 @@
   "animations": [
     "idle",
     "walk",
-    "run"
+    "run",
+    "jump"
   ],
   "run": {
     "template": "running-6-frames",
     "animation_group_id": "44b236d6-e64b-498e-bc0c-7c4937f80df9",
     "directions": 8
+  },
+  "jump": {
+    "template": "jumping-1",
+    "animation_group_id": "d4304d91-6f0c-4d69-9e5d-a2a64b8afa74",
+    "directions": 8,
+    "frames_south": 9
   }
 }

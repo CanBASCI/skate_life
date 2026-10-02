@@ -6,7 +6,7 @@
 
 | Size | Path | character_id | Role |
 |------|------|--------------|------|
-| **92×92** (game scale + master reference) | `assets/characters/main/character/92x92/` (state **`main`**) | `37ad4d45-4dfd-442e-ace5-f38ec3c83706` | **Active game size.** Walk/idle/run under `main/animations/`. |
+| **92×92** (game scale + master reference) | `assets/characters/main/character/92x92/` (state **`main`**) | `37ad4d45-4dfd-442e-ace5-f38ec3c83706` | **Active game size.** Walk/idle/run/jump under `main/animations/`. |
 | **64×64** (optional smaller variant) | `assets/characters/main/character/64x64/` | `25c95faa-03fb-4cdf-808c-031c97dba441` | Kept on disk; not the current gameplay target |
 
 - **view:** high top-down
@@ -37,8 +37,8 @@ assets/characters/main/character/
   92x92/
     main/                         # PixelLab state name
       rotations/
-      animations/{walk,idle,run}/
-    animations/{walk,idle,run}/       # convenience mirror of main
+      animations/{walk,idle,run,jump}/
+    animations/{walk,idle,run,jump}/       # convenience mirror of main
     {south,south-east,...}.png
     character-with-anims.zip
   64x64/
