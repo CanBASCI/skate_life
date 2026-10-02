@@ -1,0 +1,10 @@
+id: 25c95faa-03fb-4cdf-808c-031c97dba441
+name: Main Student 64 High Top-Down
+mode: v3 reference (1 generations, 8 directions)
+body: humanoid
+size: 64x64px
+view: high top-down
+style: from reference image (outline/detail hints ignored)
+status: processing (~3-5 min)
+
+hint: get_character(character_id="25c95faa-03fb-4cdf-808c-031c97dba441")

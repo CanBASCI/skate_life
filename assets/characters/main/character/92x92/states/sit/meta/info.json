@@ -1,0 +1,12 @@
+{
+  "character_id": "82a5ecf5-0b39-4edb-a260-1f84ec18dfa1",
+  "state_name": "sit",
+  "source_character_id": "37ad4d45-4dfd-442e-ace5-f38ec3c83706",
+  "view": "high top-down",
+  "size": 92,
+  "n_directions": 8,
+  "pose": "sitting with no bench/seat/props; knees bent, hips low, hands on thighs",
+  "animations": [],
+  "note": "State only \u2014 waiting for user before idle; no furniture in sprite",
+  "path": "assets/characters/main/character/92x92/states/sit/"
+}

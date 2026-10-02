@@ -2,23 +2,62 @@
 
 ## HARD RULE — Main character reference
 
-**Canonical main character is `assets/characters/main/` (high top-down).**
+**Canonical identity reference is the 92×92 high top-down character.**
 
-- **character_id:** `37ad4d45-4dfd-442e-ace5-f38ec3c83706`
+| Size | Path | character_id | Role |
+|------|------|--------------|------|
+| **92×92** (game scale + master reference) | `assets/characters/main/character/92x92/` (state **`main`**) | `37ad4d45-4dfd-442e-ace5-f38ec3c83706` | **Active game size.** Walk/idle/run/jump/vault under `main/animations/`. |
+| **64×64** (optional smaller variant) | `assets/characters/main/character/64x64/` | `25c95faa-03fb-4cdf-808c-031c97dba441` | Kept on disk; not the current gameplay target |
+
 - **view:** high top-down
 - **directions:** 8
 - **look:** high-school male student, dark hair tied back (small bun/ponytail), white hoodie, blue jeans, red sneakers
+- **separate assets:** character and skateboard stay separate — never store pre-mounted composites
 
 ### When adding clothes, bags, accessories, states, or variants
 
-1. Always use this character as the identity/style reference.
-2. Prefer PixelLab `style_character_id=37ad4d45-4dfd-442e-ace5-f38ec3c83706` (or `create_character_state` from this id).
-3. Visual style reference file: `assets/characters/main/south.png`.
+1. Always use the **92×92** character as the identity/style reference.
+2. Prefer PixelLab `style_character_id=37ad4d45-4dfd-442e-ace5-f38ec3c83706` (or `create_character_state` from this id) when **size ≥ source content size**.
+3. Visual style reference file: `assets/characters/main/character/92x92/south.png`.
 4. Keep **high top-down**, **8 directions**, boardless character sprites unless explicitly requested otherwise.
-5. Do **not** composite the character onto the skateboard in asset files — keep character and board as separate sprites.
+5. Do **not** composite the character onto the skateboard in asset files.
+
+### Downsizing note (92 → 64)
+
+`mode=pro` + `style_character_id` **cannot** target a smaller canvas than the style character (job fails; no charge). For a smaller size:
+
+1. Nearest-neighbor scale `92x92/south.png` → 64×64.
+2. `create_character` with `mode=v3`, `view=high top-down`, `size=64`, `reference_image_base64` (or URL) of that 64px south.
+3. Then queue `walk` / `breathing-idle` for all 8 directions.
 
 ### Layout
 
-- rotations: `assets/characters/main/{south,south-east,east,...}.png`
-- animations: `assets/characters/main/animations/{walk,idle}/{dir}/frame_XXX.png`
-- package: `assets/characters/main/character-with-anims.zip`
+```
+assets/characters/main/character/
+  92x92/
+    main/                         # PixelLab state name
+      rotations/
+      animations/{walk,idle,run,jump,vault}/
+    animations/{walk,idle,run,jump,vault}/       # convenience mirror of main
+    {south,south-east,...}.png
+    character-with-anims.zip
+  64x64/
+    ...
+```
+
+### withSkate stance idle (no board in sprite)
+
+- **state:** `withSkate` — `assets/characters/main/character/92x92/states/withSkate/`
+- **character_id:** `2be6dc14-97ed-493e-b32c-3f9d26ac1d5c`
+- **pose:** knees bent, head turned right, arms slightly out; empty hands; **no skateboard drawn**
+- **animation:** under `animations/` (sibling of PixelLab state `main`)
+- Board is a separate object; mount in game code.
+
+### crouch state (duck / hold low)
+
+- **state:** `crouch` — `assets/characters/main/character/92x92/states/crouch/`
+- **character_id:** `12076436-e27d-4015-98b9-5875c3ecf071`
+- **pose:** deep game crouch, hips low, knees bent; empty hands; **no skateboard**
+- **idle:** pose-frozen v3 breathing (`animations/idle/`) — do **not** use `breathing-idle` template (stands them up)
+- **walk:** `crouched-walking` (`animations/walk/`) — stays low while stepping
+

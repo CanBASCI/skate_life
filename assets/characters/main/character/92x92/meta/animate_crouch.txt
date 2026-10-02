@@ -1,0 +1,9 @@
+character: 37ad4d45-4dfd-442e-ace5-f38ec3c83706
+animation: crouching
+directions: south, south-east, east, north-east, north, north-west, west, south-west (8 jobs)
+group: 1c9e58ea-5d4d-40ec-9c86-103b337c6209
+eta: ~2-4 min
+add more directions to this group: animate_character(character_id="37ad4d45-4dfd-442e-ace5-f38ec3c83706", template_animation_id="crouching", animation_group_id="1c9e58ea-5d4d-40ec-9c86-103b337c6209", directions=[...])
+
+hint: get_character(character_id="37ad4d45-4dfd-442e-ace5-f38ec3c83706")
+if poor: delete_animation(character_id="37ad4d45-4dfd-442e-ace5-f38ec3c83706", animation_type="...") then retry with mode="v3"

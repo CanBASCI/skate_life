@@ -1,0 +1,16 @@
+{
+  "object_id": "4cee3c3b-bb9c-4805-b83b-e1e0ccb09e4d",
+  "name": "Main Skateboard 80 High Top-Down",
+  "view": "high top-down",
+  "directions": 8,
+  "size": 80,
+  "matches_character_id": "37ad4d45-4dfd-442e-ace5-f38ec3c83706",
+  "matches_character_path": "assets/characters/main/character/92x92/",
+  "role": "Canonical skateboard for 92x92 main character (game scale)",
+  "sizing_notes": "Board length target ~33-39px (~50-60% of 66px character content height). Canvas 80x80.",
+  "animations": [
+    "spin-360"
+  ],
+  "spin_notes": "Yaw-only 360; deck face-up; avoid underside flip (extra-wheels artifact).",
+  "animation_group_id": "04e2cffc-14c7-4776-a7b3-c596b00de2e4"
+}
