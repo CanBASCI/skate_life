@@ -1,5 +1,17 @@
 # Generated characters
 
+
+## Mobile Skater Clean (preferred)
+
+- **character_id:** `b51afdd0-5318-456f-b17b-82744028af53`
+- **mode:** standard
+- **view:** oblique
+- **directions:** 4 (south, east, north, west)
+- **size:** 92x92 output
+- **notes:** no skateboard / no held props; yellow-orange hoodie street look
+- **local assets:** `assets/characters/mobile-skater-clean/`
+- **download:** https://api.pixellab.ai/mcp/characters/b51afdd0-5318-456f-b17b-82744028af53/download
+
 ## Mobile Skater
 
 - **character_id:** `fd61b160-78a4-469d-91fd-e87a1fc70fcc`

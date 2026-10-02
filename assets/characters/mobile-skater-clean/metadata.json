@@ -1,0 +1,32 @@
+{
+  "group_id": "75c8f6ab-d621-40c6-8da1-3ef8c37d1320",
+  "states": [
+    {
+      "character": {
+        "id": "b51afdd0-5318-456f-b17b-82744028af53",
+        "name": "Idle",
+        "prompt": "young street skater style character for a mobile skate game, black beanie, orange hoodie with zipper, dark blue baggy jeans, black sneakers with white soles, empty hands, standing idle pose, NO skateboard, no board, no props, no held objects, clean silhouette only, readable pixel art for small mobile screen",
+        "size": {
+          "width": 92,
+          "height": 92
+        },
+        "template_id": "mannequin",
+        "directions": 4,
+        "view": "oblique",
+        "created_at": "2026-10-02T14:50:03.103144+00:00"
+      },
+      "folder": "Idle",
+      "frames": {
+        "rotations": {
+          "south": "Idle/rotations/south.png",
+          "west": "Idle/rotations/west.png",
+          "east": "Idle/rotations/east.png",
+          "north": "Idle/rotations/north.png"
+        },
+        "animations": {}
+      }
+    }
+  ],
+  "export_version": "3.1",
+  "export_date": "2026-10-02T14:51:05.296634"
+}
