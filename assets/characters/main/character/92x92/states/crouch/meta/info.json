@@ -7,7 +7,8 @@
   "n_directions": 8,
   "pose": "deep game crouch held low; no skateboard",
   "animations": [
-    "idle"
+    "idle",
+    "walk"
   ],
   "idle": {
     "mode": "v3",
@@ -16,5 +17,12 @@
     "directions": 8,
     "frames": 5
   },
-  "path": "assets/characters/main/character/92x92/states/crouch/"
+  "path": "assets/characters/main/character/92x92/states/crouch/",
+  "walk": {
+    "template": "crouched-walking",
+    "animation_group_id": "4e7f1ef6-92a5-4859-8816-e51c401000bf",
+    "directions": 8,
+    "frames": 6
+  },
+  "note": "crouch idle + crouch walk"
 }

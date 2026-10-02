@@ -53,3 +53,11 @@ assets/characters/main/character/
 - **animation:** under `animations/` (sibling of PixelLab state `main`)
 - Board is a separate object; mount in game code.
 
+### crouch state (duck / hold low)
+
+- **state:** `crouch` — `assets/characters/main/character/92x92/states/crouch/`
+- **character_id:** `12076436-e27d-4015-98b9-5875c3ecf071`
+- **pose:** deep game crouch, hips low, knees bent; empty hands; **no skateboard**
+- **idle:** pose-frozen v3 breathing (`animations/idle/`) — do **not** use `breathing-idle` template (stands them up)
+- **walk:** `crouched-walking` (`animations/walk/`) — stays low while stepping
+
