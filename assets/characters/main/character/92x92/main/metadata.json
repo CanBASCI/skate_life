@@ -102,6 +102,72 @@
               "main/animations/walk/west/frame_005.png"
             ]
           },
+          "run": {
+            "south-east": [
+              "main/animations/run/south-east/frame_000.png",
+              "main/animations/run/south-east/frame_001.png",
+              "main/animations/run/south-east/frame_002.png",
+              "main/animations/run/south-east/frame_003.png",
+              "main/animations/run/south-east/frame_004.png",
+              "main/animations/run/south-east/frame_005.png"
+            ],
+            "south-west": [
+              "main/animations/run/south-west/frame_000.png",
+              "main/animations/run/south-west/frame_001.png",
+              "main/animations/run/south-west/frame_002.png",
+              "main/animations/run/south-west/frame_003.png",
+              "main/animations/run/south-west/frame_004.png",
+              "main/animations/run/south-west/frame_005.png"
+            ],
+            "south": [
+              "main/animations/run/south/frame_000.png",
+              "main/animations/run/south/frame_001.png",
+              "main/animations/run/south/frame_002.png",
+              "main/animations/run/south/frame_003.png",
+              "main/animations/run/south/frame_004.png",
+              "main/animations/run/south/frame_005.png"
+            ],
+            "north": [
+              "main/animations/run/north/frame_000.png",
+              "main/animations/run/north/frame_001.png",
+              "main/animations/run/north/frame_002.png",
+              "main/animations/run/north/frame_003.png",
+              "main/animations/run/north/frame_004.png",
+              "main/animations/run/north/frame_005.png"
+            ],
+            "north-west": [
+              "main/animations/run/north-west/frame_000.png",
+              "main/animations/run/north-west/frame_001.png",
+              "main/animations/run/north-west/frame_002.png",
+              "main/animations/run/north-west/frame_003.png",
+              "main/animations/run/north-west/frame_004.png",
+              "main/animations/run/north-west/frame_005.png"
+            ],
+            "east": [
+              "main/animations/run/east/frame_000.png",
+              "main/animations/run/east/frame_001.png",
+              "main/animations/run/east/frame_002.png",
+              "main/animations/run/east/frame_003.png",
+              "main/animations/run/east/frame_004.png",
+              "main/animations/run/east/frame_005.png"
+            ],
+            "west": [
+              "main/animations/run/west/frame_000.png",
+              "main/animations/run/west/frame_001.png",
+              "main/animations/run/west/frame_002.png",
+              "main/animations/run/west/frame_003.png",
+              "main/animations/run/west/frame_004.png",
+              "main/animations/run/west/frame_005.png"
+            ],
+            "north-east": [
+              "main/animations/run/north-east/frame_000.png",
+              "main/animations/run/north-east/frame_001.png",
+              "main/animations/run/north-east/frame_002.png",
+              "main/animations/run/north-east/frame_003.png",
+              "main/animations/run/north-east/frame_004.png",
+              "main/animations/run/north-east/frame_005.png"
+            ]
+          },
           "idle": {
             "east": [
               "main/animations/idle/east/frame_000.png",
@@ -197,6 +263,20 @@
               "withSkate/animations/skate-idle/south-west/frame_003.png",
               "withSkate/animations/skate-idle/south-west/frame_004.png"
             ],
+            "south": [
+              "withSkate/animations/skate-idle/south/frame_000.png",
+              "withSkate/animations/skate-idle/south/frame_001.png",
+              "withSkate/animations/skate-idle/south/frame_002.png",
+              "withSkate/animations/skate-idle/south/frame_003.png",
+              "withSkate/animations/skate-idle/south/frame_004.png"
+            ],
+            "north": [
+              "withSkate/animations/skate-idle/north/frame_000.png",
+              "withSkate/animations/skate-idle/north/frame_001.png",
+              "withSkate/animations/skate-idle/north/frame_002.png",
+              "withSkate/animations/skate-idle/north/frame_003.png",
+              "withSkate/animations/skate-idle/north/frame_004.png"
+            ],
             "south-east": [
               "withSkate/animations/skate-idle/south-east/frame_000.png",
               "withSkate/animations/skate-idle/south-east/frame_001.png",
@@ -231,5 +311,5 @@
     }
   ],
   "export_version": "3.1",
-  "export_date": "2026-10-02T17:00:27.441240"
+  "export_date": "2026-10-02T17:09:35.865645"
 }
