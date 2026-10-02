@@ -1,17 +1,6 @@
 {
-  "role": "main skateboard",
-  "directions": 4,
-  "projection": "hand-authored oblique",
-  "facing": {
-    "south": "sw",
-    "east": "se",
-    "north": "se",
-    "west": "se"
-  },
-  "canonical": [
-    "south.png",
-    "east.png",
-    "north.png",
-    "west.png"
-  ]
+  "object_id": "1432fd03-bd58-4a01-b95a-b24ee655655f",
+  "view": "low top-down",
+  "directions": 8,
+  "matches_character": "f71a7224-4c01-4fb6-96d8-bc056ba2060a"
 }

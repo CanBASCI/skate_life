@@ -1,3 +1,6 @@
 .env
 !.env.example
 *.pem
+assets/**/_archive_*/
+assets/characters/_archive_*/
+assets/objects/_archive_*/

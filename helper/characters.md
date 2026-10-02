@@ -2,28 +2,16 @@
 
 ## Main (`assets/characters/main/`)
 
-Primary playable character for the skate game.
+Primary playable character.
 
-- **character_id:** `b51afdd0-5318-456f-b17b-82744028af53`
-- **role:** main character
+- **character_id:** `f71a7224-4c01-4fb6-96d8-bc056ba2060a`
+- **look:** high-school male student, dark hair tied back (small bun / ponytail)
 - **mode:** standard
-- **view:** oblique
-- **directions:** 4 (south, east, north, west)
+- **view:** low top-down
+- **directions:** 8 (S, SE, E, NE, N, NW, W, SW)
 - **size:** 92x92
-- **notes:** boardless; streetwear hoodie look
-- **download:** https://api.pixellab.ai/mcp/characters/b51afdd0-5318-456f-b17b-82744028af53/download
-
-### Animations
-
-| Name | Template | Frames | Dirs | Path |
-|------|----------|--------|------|------|
-| `idle` | `breathing-idle` | 4 | 4 | `animations/idle/{dir}/frame_XXX.png` |
-| `walk` | `walk` | 6 | 4 | `animations/walk/{dir}/frame_XXX.png` |
-
-Also mirrored under PixelLab layout: `Idle/animations/{idle,walk}/...`  
-Full package: `character-with-anims.zip`
-
-### Static rotations
-
-- `south.png` / `east.png` / `north.png` / `west.png`
-- `Idle/rotations/*.png`
+- **animations:** `walk` (6f), `idle` / breathing-idle (4f) — all 8 dirs
+- **paths:**
+  - rotations: `south.png` … `south-west.png` (also `Idle/rotations/`)
+  - anims: `animations/{walk,idle}/{dir}/frame_XXX.png`
+  - package: `character-with-anims.zip`
