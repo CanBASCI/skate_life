@@ -18,7 +18,8 @@
     "walk",
     "run",
     "jump",
-    "crouch"
+    "crouch",
+    "vault"
   ],
   "run": {
     "template": "running-6-frames",
@@ -88,5 +89,11 @@
       "west": 5,
       "south-west": 5
     }
+  },
+  "vault": {
+    "mode": "v3",
+    "animation_group_id": "85f4d598-a5f8-44d3-82e6-e2fee0331e7e",
+    "directions": 8,
+    "frames_south": 9
   }
 }
