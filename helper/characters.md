@@ -1,28 +1,28 @@
 # Characters
 
-## Main (`assets/characters/main/`)
+## HARD RULE — Main character reference
 
-Primary playable character.
-
-- **character_id:** `f71a7224-4c01-4fb6-96d8-bc056ba2060a`
-- **look:** high-school male student, dark hair tied back (small bun / ponytail)
-- **mode:** standard
-- **view:** low top-down
-- **directions:** 8 (S, SE, E, NE, N, NW, W, SW)
-- **size:** 92x92
-- **animations:** `walk` (6f), `idle` / breathing-idle (4f) — all 8 dirs
-- **paths:**
-  - rotations: `south.png` … `south-west.png` (also `Idle/rotations/`)
-  - anims: `animations/{walk,idle}/{dir}/frame_XXX.png`
-  - package: `character-with-anims.zip`
-
-## Main High Top-Down (`assets/characters/main-high/`)
-
-Same student look, steeper camera for comparison / optional use.
+**Canonical main character is `assets/characters/main/` (high top-down).**
 
 - **character_id:** `37ad4d45-4dfd-442e-ace5-f38ec3c83706`
-- **mode:** standard
 - **view:** high top-down
 - **directions:** 8
-- **animations:** walk + idle (8 dirs)
+- **look:** high-school male student, dark hair tied back (small bun/ponytail), white hoodie, blue jeans, red sneakers
 
+### When adding clothes, bags, accessories, states, or variants
+
+1. Always use this character as the identity/style reference.
+2. Prefer PixelLab `style_character_id=37ad4d45-4dfd-442e-ace5-f38ec3c83706` (or `create_character_state` from this id).
+3. Visual style reference file: `assets/characters/main/south.png` (and other dirs under the same folder).
+4. Keep **high top-down**, **8 directions**, boardless character sprites unless explicitly requested otherwise.
+5. Do **not** use `assets/characters/main-low/` as the main reference (low top-down archive only).
+
+### Layout
+
+- rotations: `assets/characters/main/{south,south-east,east,...}.png`
+- animations: `assets/characters/main/animations/{walk,idle}/{dir}/frame_XXX.png`
+- package: `assets/characters/main/character-with-anims.zip`
+
+## Main Low Top-Down archive (`assets/characters/main-low/`)
+
+Previous low top-down variant. Comparison / backup only — not the game main.

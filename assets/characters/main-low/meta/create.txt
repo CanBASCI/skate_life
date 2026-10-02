@@ -1,0 +1,10 @@
+id: f71a7224-4c01-4fb6-96d8-bc056ba2060a
+name: Main Student
+mode: standard (1 generation)
+directions: 8
+body: humanoid
+size: 64x64px
+style: basic shading, single color black outline, medium detail
+status: processing (~3-5 minutes)
+
+hint: get_character(character_id="f71a7224-4c01-4fb6-96d8-bc056ba2060a")

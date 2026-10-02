@@ -1,8 +1,10 @@
 {
-  "character_id": "f71a7224-4c01-4fb6-96d8-bc056ba2060a",
-  "name": "Main Student",
+  "character_id": "37ad4d45-4dfd-442e-ace5-f38ec3c83706",
+  "name": "Main Student High Top-Down",
   "mode": "standard",
-  "view": "low top-down",
+  "view": "high top-down",
   "n_directions": 8,
-  "description": "teenage high school male student for a mobile skate game, short dark hair tied back in a small ponytail / hair tied at the back, youthful face, casual school-street style: hoodie, jeans, sneakers, empty hands, no skateboard, no board, no props, clean readable pixel art"
+  "description": "teenage high school male student for a mobile skate game, short dark hair tied back in a small ponytail / bun at the back, youthful face, casual school-street style: white hoodie, blue jeans, red sneakers, empty hands, no skateboard, no board, no props, clean readable pixel art",
+  "role": "CANONICAL main character for the game",
+  "reference_rule": "All future outfits, bags, accessories, and variants for the main character MUST use this character as style/identity reference (style_character_id / south.png)."
 }

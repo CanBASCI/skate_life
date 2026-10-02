@@ -1,6 +1,10 @@
 {
-  "object_id": "1432fd03-bd58-4a01-b95a-b24ee655655f",
-  "view": "low top-down",
+  "object_id": "719fe069-30be-4dff-89ef-6cc04e7cd4fa",
+  "view": "high top-down",
   "directions": 8,
-  "matches_character": "f71a7224-4c01-4fb6-96d8-bc056ba2060a"
+  "matches_character": "37ad4d45-4dfd-442e-ace5-f38ec3c83706",
+  "size": 48,
+  "role": "Canonical skateboard for main character (high top-down)",
+  "matches_character_path": "assets/characters/main/",
+  "matches_character_id": "37ad4d45-4dfd-442e-ace5-f38ec3c83706"
 }
