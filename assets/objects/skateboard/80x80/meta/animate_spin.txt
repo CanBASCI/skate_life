@@ -1,0 +1,10 @@
+object: 4cee3c3b-bb9c-4805-b83b-e1e0ccb09e4d
+group: 04e2cffc-14c7-4776-a7b3-c596b00de2e4
+mode: v3
+description: smooth yaw spin turning a full 360 degrees in place on flat ground like a turntable; skateboard rotates horizontally only; deck grip tape always faces up toward the camera; NEVER flip, NEVER show underside, NEVER invert the board; keep exactly two trucks and exactly four wheels under the deck; no extra wheels, no wheels on the grip-tape side; same scale and center every frame
+display_name: spin-360
+frames: 8
+directions: south, south-west, west, north-west, north, north-east, east, south-east (8 queued)
+eta: ~30-60s/direction
+
+hint: get_object(object_id="4cee3c3b-bb9c-4805-b83b-e1e0ccb09e4d")

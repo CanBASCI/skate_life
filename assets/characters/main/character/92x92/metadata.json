@@ -91,7 +91,8 @@
               "Idle/animations/walk/south/frame_002.png",
               "Idle/animations/walk/south/frame_003.png",
               "Idle/animations/walk/south/frame_004.png",
-              "Idle/animations/walk/south/frame_005.png"
+              "Idle/animations/walk/south/frame_005.png",
+              "Idle/animations/walk/south/frame_006.png"
             ]
           },
           "idle": {
@@ -149,5 +150,5 @@
     }
   ],
   "export_version": "3.1",
-  "export_date": "2026-10-02T15:40:14.558404"
+  "export_date": "2026-10-02T16:22:13.392456"
 }

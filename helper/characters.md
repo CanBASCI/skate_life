@@ -6,8 +6,8 @@
 
 | Size | Path | character_id | Role |
 |------|------|--------------|------|
-| **92×92** (master / style reference) | `assets/characters/main/character/92x92/` | `37ad4d45-4dfd-442e-ace5-f38ec3c83706` | Identity + style source for all variants |
-| **64×64** (in-game city map) | `assets/characters/main/character/64x64/` | `25c95faa-03fb-4cdf-808c-031c97dba441` | Playable size on mid-scale city maps |
+| **92×92** (game scale + master reference) | `assets/characters/main/character/92x92/` | `37ad4d45-4dfd-442e-ace5-f38ec3c83706` | **Active game size.** Identity + style source for all variants. Houses/map props scale to this. |
+| **64×64** (optional smaller variant) | `assets/characters/main/character/64x64/` | `25c95faa-03fb-4cdf-808c-031c97dba441` | Kept on disk; not the current gameplay target |
 
 - **view:** high top-down
 - **directions:** 8

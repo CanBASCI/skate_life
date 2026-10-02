@@ -1,0 +1,37 @@
+status: completed
+id: 4cee3c3b-bb9c-4805-b83b-e1e0ccb09e4d
+name: Main Skateboard 80 High Top-Down
+state_name: base
+directions: 8
+size: 80x80px
+view: high top-down
+group: d339dc9e-6c99-461d-8e37-0c582c9a97ed
+
+rotations:
+  east: https://backblaze.pixellab.ai/file/pixellab-characters/objects/04365e2f-1a02-45f9-951a-e225d637dcdb/4cee3c3b-bb9c-4805-b83b-e1e0ccb09e4d/rotations/east.png
+  west: https://backblaze.pixellab.ai/file/pixellab-characters/objects/04365e2f-1a02-45f9-951a-e225d637dcdb/4cee3c3b-bb9c-4805-b83b-e1e0ccb09e4d/rotations/west.png
+  north: https://backblaze.pixellab.ai/file/pixellab-characters/objects/04365e2f-1a02-45f9-951a-e225d637dcdb/4cee3c3b-bb9c-4805-b83b-e1e0ccb09e4d/rotations/north.png
+  south: https://backblaze.pixellab.ai/file/pixellab-characters/objects/04365e2f-1a02-45f9-951a-e225d637dcdb/4cee3c3b-bb9c-4805-b83b-e1e0ccb09e4d/rotations/south.png
+  north-east: https://backblaze.pixellab.ai/file/pixellab-characters/objects/04365e2f-1a02-45f9-951a-e225d637dcdb/4cee3c3b-bb9c-4805-b83b-e1e0ccb09e4d/rotations/north-east.png
+  north-west: https://backblaze.pixellab.ai/file/pixellab-characters/objects/04365e2f-1a02-45f9-951a-e225d637dcdb/4cee3c3b-bb9c-4805-b83b-e1e0ccb09e4d/rotations/north-west.png
+  south-east: https://backblaze.pixellab.ai/file/pixellab-characters/objects/04365e2f-1a02-45f9-951a-e225d637dcdb/4cee3c3b-bb9c-4805-b83b-e1e0ccb09e4d/rotations/south-east.png
+  south-west: https://backblaze.pixellab.ai/file/pixellab-characters/objects/04365e2f-1a02-45f9-951a-e225d637dcdb/4cee3c3b-bb9c-4805-b83b-e1e0ccb09e4d/rotations/south-west.png
+
+animations (1 groups):
+  spin-360 [group: 04e2cffc-14c7-4776-a7b3-c596b00de2e4]
+    description: smooth yaw spin turning a full 360 degrees in place on flat ground like a turntable; skateboard rotates horizontally only; deck grip tape always faces up toward the camera; NEVER flip, NEVER show underside, NEVER invert the board; keep exactly two trucks and exactly four wheels under the deck; no extra wheels, no wheels on the grip-tape side; same scale and center every frame
+    directions: east, north, north-east, north-west, south, south-east, south-west, west (8/8)
+    frames: 9
+    east: https://backblaze.pixellab.ai/file/pixellab-characters/objects/04365e2f-1a02-45f9-951a-e225d637dcdb/4cee3c3b-bb9c-4805-b83b-e1e0ccb09e4d/animations/ce4c45af-b4fd-47ab-a223-43fa59472e31/east/{i}.png  (i=0..8)
+    north: https://backblaze.pixellab.ai/file/pixellab-characters/objects/04365e2f-1a02-45f9-951a-e225d637dcdb/4cee3c3b-bb9c-4805-b83b-e1e0ccb09e4d/animations/2cc11c52-e8ca-4ce0-b3b6-353e4918ec65/north/{i}.png  (i=0..8)
+    north-east: https://backblaze.pixellab.ai/file/pixellab-characters/objects/04365e2f-1a02-45f9-951a-e225d637dcdb/4cee3c3b-bb9c-4805-b83b-e1e0ccb09e4d/animations/a023cb4b-8a86-463e-aea0-1c99fff43759/north-east/{i}.png  (i=0..8)
+    north-west: https://backblaze.pixellab.ai/file/pixellab-characters/objects/04365e2f-1a02-45f9-951a-e225d637dcdb/4cee3c3b-bb9c-4805-b83b-e1e0ccb09e4d/animations/22cea24a-e8d3-4c73-92ea-7f76842b322c/north-west/{i}.png  (i=0..8)
+    south: https://backblaze.pixellab.ai/file/pixellab-characters/objects/04365e2f-1a02-45f9-951a-e225d637dcdb/4cee3c3b-bb9c-4805-b83b-e1e0ccb09e4d/animations/0134a489-d7be-4183-b509-d8ba548b5a5c/south/{i}.png  (i=0..8)
+    south-east: https://backblaze.pixellab.ai/file/pixellab-characters/objects/04365e2f-1a02-45f9-951a-e225d637dcdb/4cee3c3b-bb9c-4805-b83b-e1e0ccb09e4d/animations/75b68106-9d19-48c5-a85c-0b5a54f48002/south-east/{i}.png  (i=0..8)
+    south-west: https://backblaze.pixellab.ai/file/pixellab-characters/objects/04365e2f-1a02-45f9-951a-e225d637dcdb/4cee3c3b-bb9c-4805-b83b-e1e0ccb09e4d/animations/5ac108bf-74b3-4ce7-ae87-ee30f8583abe/south-west/{i}.png  (i=0..8)
+    west: https://backblaze.pixellab.ai/file/pixellab-characters/objects/04365e2f-1a02-45f9-951a-e225d637dcdb/4cee3c3b-bb9c-4805-b83b-e1e0ccb09e4d/animations/71ce5b95-cfc1-42b0-8d54-684bfd8ec696/west/{i}.png  (i=0..8)
+
+download: https://api.pixellab.ai/mcp/objects/4cee3c3b-bb9c-4805-b83b-e1e0ccb09e4d/download
+spritesheet: https://api.pixellab.ai/mcp/objects/4cee3c3b-bb9c-4805-b83b-e1e0ccb09e4d/spritesheet (one uniform-grid sheet PNG + layout JSON, zipped)
+
+actions: animate_object(object_id="4cee3c3b-bb9c-4805-b83b-e1e0ccb09e4d", ...) | create_object_state(object_id="4cee3c3b-bb9c-4805-b83b-e1e0ccb09e4d", ...) | delete_object(object_id="4cee3c3b-bb9c-4805-b83b-e1e0ccb09e4d")
