@@ -22,7 +22,8 @@
     "template": "crouched-walking",
     "animation_group_id": "4e7f1ef6-92a5-4859-8816-e51c401000bf",
     "directions": 8,
-    "frames": 6
+    "frames": 6,
+    "resync_note": "Pulled latest crouch walk from PixelLab after manual edits"
   },
   "note": "crouch idle + crouch walk"
 }
