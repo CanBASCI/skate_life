@@ -1,0 +1,26 @@
+status: completed
+id: 4cee3c3b-bb9c-4805-b83b-e1e0ccb09e4d
+name: Main Skateboard 80 High Top-Down
+state_name: base
+directions: 8
+size: 80x80px
+view: high top-down
+group: d339dc9e-6c99-461d-8e37-0c582c9a97ed
+
+rotations:
+  east: https://backblaze.pixellab.ai/file/pixellab-characters/objects/04365e2f-1a02-45f9-951a-e225d637dcdb/4cee3c3b-bb9c-4805-b83b-e1e0ccb09e4d/rotations/east.png
+  west: https://backblaze.pixellab.ai/file/pixellab-characters/objects/04365e2f-1a02-45f9-951a-e225d637dcdb/4cee3c3b-bb9c-4805-b83b-e1e0ccb09e4d/rotations/west.png
+  north: https://backblaze.pixellab.ai/file/pixellab-characters/objects/04365e2f-1a02-45f9-951a-e225d637dcdb/4cee3c3b-bb9c-4805-b83b-e1e0ccb09e4d/rotations/north.png
+  south: https://backblaze.pixellab.ai/file/pixellab-characters/objects/04365e2f-1a02-45f9-951a-e225d637dcdb/4cee3c3b-bb9c-4805-b83b-e1e0ccb09e4d/rotations/south.png
+  north-east: https://backblaze.pixellab.ai/file/pixellab-characters/objects/04365e2f-1a02-45f9-951a-e225d637dcdb/4cee3c3b-bb9c-4805-b83b-e1e0ccb09e4d/rotations/north-east.png
+  north-west: https://backblaze.pixellab.ai/file/pixellab-characters/objects/04365e2f-1a02-45f9-951a-e225d637dcdb/4cee3c3b-bb9c-4805-b83b-e1e0ccb09e4d/rotations/north-west.png
+  south-east: https://backblaze.pixellab.ai/file/pixellab-characters/objects/04365e2f-1a02-45f9-951a-e225d637dcdb/4cee3c3b-bb9c-4805-b83b-e1e0ccb09e4d/rotations/south-east.png
+  south-west: https://backblaze.pixellab.ai/file/pixellab-characters/objects/04365e2f-1a02-45f9-951a-e225d637dcdb/4cee3c3b-bb9c-4805-b83b-e1e0ccb09e4d/rotations/south-west.png
+
+animations: none
+
+download: https://api.pixellab.ai/mcp/objects/4cee3c3b-bb9c-4805-b83b-e1e0ccb09e4d/download
+spritesheet: https://api.pixellab.ai/mcp/objects/4cee3c3b-bb9c-4805-b83b-e1e0ccb09e4d/spritesheet (one uniform-grid sheet PNG + layout JSON, zipped)
+
+actions: animate_object(object_id="4cee3c3b-bb9c-4805-b83b-e1e0ccb09e4d", ...) | create_object_state(object_id="4cee3c3b-bb9c-4805-b83b-e1e0ccb09e4d", ...) | delete_object(object_id="4cee3c3b-bb9c-4805-b83b-e1e0ccb09e4d")
+hint: animate_object(object_id="4cee3c3b-bb9c-4805-b83b-e1e0ccb09e4d", animation_description="...")

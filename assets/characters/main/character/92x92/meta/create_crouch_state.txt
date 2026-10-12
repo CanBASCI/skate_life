@@ -1,0 +1,14 @@
+state_name: crouch
+from: main 37ad4d45-4dfd-442e-ace5-f38ec3c83706
+NO animations yet — wait for user
+edit:
+deep game crouch pose held low: knees bent deeply, hips dropped, body height clearly shorter than standing, slight forward hunch, head readable, arms near knees, empty hands, same clothes, no skateboard
+
+id: 12076436-e27d-4015-98b9-5875c3ecf071
+source: 37ad4d45-4dfd-442e-ace5-f38ec3c83706
+edit: deep game crouch pose held low: knees bent deeply, hips dropped, body height clearly shorter than standing, slight forward hunch, head readable, arms near knees, empty hands, same clothes, no skateboard
+cost: ~20-40 generations (Gemini tier by canvas size)
+status: processing (~30-90s)
+note: linked via group_id, inherits skeleton for animations
+
+hint: get_character(character_id="12076436-e27d-4015-98b9-5875c3ecf071")

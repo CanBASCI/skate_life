@@ -1,0 +1,15 @@
+{
+  "character_id": "25c95faa-03fb-4cdf-808c-031c97dba441",
+  "name": "Main Student 64 High Top-Down",
+  "mode": "v3",
+  "view": "high top-down",
+  "requested_size": 64,
+  "n_directions": 8,
+  "style_reference_character_id": "37ad4d45-4dfd-442e-ace5-f38ec3c83706",
+  "style_reference_path": "assets/characters/main/character/92x92/south.png",
+  "role": "Game-size main character (64). Master/reference remains 92x92.",
+  "animations": [
+    "walk",
+    "idle"
+  ]
+}
