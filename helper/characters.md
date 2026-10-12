@@ -61,3 +61,10 @@ assets/characters/main/character/
 - **idle:** pose-frozen v3 breathing (`animations/idle/`) — do **not** use `breathing-idle` template (stands them up)
 - **walk:** `crouched-walking` (`animations/walk/`) — stays low while stepping
 
+### sit state (no bench)
+
+- **state:** `sit` — `assets/characters/main/character/92x92/states/sit/`
+- **character_id:** `82a5ecf5-0b39-4edb-a260-1f84ec18dfa1`
+- **pose:** sitting with knees bent / hips lowered; hands on thighs; **no bench, chair, or props**
+- **idle:** pose-frozen v3 breathing (`animations/idle/`) — do **not** use `breathing-idle` template (stands them up)
+
