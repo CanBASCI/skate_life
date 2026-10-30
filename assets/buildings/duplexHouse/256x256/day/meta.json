@@ -1,0 +1,23 @@
+{
+  "id": "2fed03e6-e1f5-4b1d-8425-768bc9da3feb",
+  "kind": "object",
+  "w": 256,
+  "h": 256,
+  "state": "day",
+  "name": "duplexHouse",
+  "path": "assets/buildings/duplexHouse/256x256/day",
+  "canvasBeforeTrim": [
+    256,
+    256
+  ],
+  "canvasTrimmed": [
+    235,
+    212
+  ],
+  "trimBox": [
+    10,
+    26,
+    245,
+    238
+  ]
+}

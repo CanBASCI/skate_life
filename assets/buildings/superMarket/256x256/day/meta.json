@@ -1,0 +1,23 @@
+{
+  "id": "f8481f4a-0a7a-4fb6-aae6-300dcda9c4a4",
+  "kind": "object",
+  "w": 256,
+  "h": 256,
+  "state": "day",
+  "name": "superMarket",
+  "path": "assets/buildings/superMarket/256x256/day",
+  "canvasBeforeTrim": [
+    256,
+    256
+  ],
+  "canvasTrimmed": [
+    251,
+    199
+  ],
+  "trimBox": [
+    2,
+    34,
+    253,
+    233
+  ]
+}

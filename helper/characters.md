@@ -68,3 +68,20 @@ assets/characters/main/character/
 - **pose:** sitting with knees bent / hips lowered; hands on thighs; **no bench, chair, or props**
 - **idle:** pose-frozen v3 breathing (`animations/idle/`) — do **not** use `breathing-idle` template (stands them up)
 
+### Outfit / gear states (synced rotations)
+
+Synced under `assets/characters/main/states/<name>/92x92/` (south + 8 rotations):
+
+| state | character_id |
+|-------|--------------|
+| `footballOutfit` | `83a05bc7-454f-45ee-895e-170b2f44eb63` |
+| `playFootballOutfit` | `8e201d38-94e6-4fc1-b196-0d04f51a3046` |
+| `blueDenimJacket` | `2ac4b002-ac42-4e12-b468-5171ed206b65` |
+| `nbaOutfit` | `490532ad-4201-4d13-8039-228d98491c98` |
+| `holding the skateboa` → folder `holdingSkateboard` | `2db7225c-9c99-4041-9420-b4a9cb7d1492` |
+| `backpackOnBackside` | `5e7e61bc-1b2a-4ebf-85f4-162c4a1193dd` |
+
+### Scale rule
+
+Canvas size **matters** when assets share a scene. Game reference is **92×92** main. Vehicles in this project are mostly **168×168**, buildings **256×256**, small props/animals **32–96**. Preview: `preview/` (`python3 -m http.server` from repo root → `/preview/`).
+

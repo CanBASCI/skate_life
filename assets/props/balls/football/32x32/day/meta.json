@@ -1,0 +1,23 @@
+{
+  "id": "bc9c4190-994f-4710-9061-2e97aea39d23",
+  "kind": "object",
+  "w": 32,
+  "h": 32,
+  "state": "football_Day",
+  "name": "balls",
+  "path": "assets/props/balls/football/32x32/day",
+  "canvasBeforeTrim": [
+    32,
+    32
+  ],
+  "canvasTrimmed": [
+    20,
+    20
+  ],
+  "trimBox": [
+    6,
+    6,
+    26,
+    26
+  ]
+}

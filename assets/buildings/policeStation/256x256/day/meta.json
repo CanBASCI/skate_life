@@ -1,0 +1,23 @@
+{
+  "id": "9c8cbd08-8ae0-44b3-a6b7-ce732a51bb78",
+  "kind": "object",
+  "w": 256,
+  "h": 256,
+  "state": "day",
+  "name": "Isometric police station building with patrol cars",
+  "path": "assets/buildings/policeStation/256x256/day",
+  "canvasBeforeTrim": [
+    256,
+    256
+  ],
+  "canvasTrimmed": [
+    241,
+    200
+  ],
+  "trimBox": [
+    8,
+    30,
+    249,
+    230
+  ]
+}

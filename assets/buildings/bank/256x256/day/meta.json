@@ -1,0 +1,23 @@
+{
+  "id": "0406ea49-229e-4946-8418-3a3ddbfc8f25",
+  "kind": "object",
+  "w": 256,
+  "h": 256,
+  "state": "day",
+  "name": "bank",
+  "path": "assets/buildings/bank/256x256/day",
+  "canvasBeforeTrim": [
+    256,
+    256
+  ],
+  "canvasTrimmed": [
+    206,
+    204
+  ],
+  "trimBox": [
+    24,
+    26,
+    230,
+    230
+  ]
+}

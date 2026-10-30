@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>skate_life — pixel scale preview</title>
+    <link rel="stylesheet" href="./style.css" />
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+          "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+        }
+      }
+    </script>
+  </head>
+  <body>
+    <div id="app">
+      <div id="hud">
+        <h1>Pixel scale yard</h1>
+        <p>
+          High top-down angle (not flattened). Sprites face camera — art stays upright.
+        </p>
+        <p>
+          <kbd>WASD</kbd> <kbd>Shift</kbd> run · <kbd>Space</kbd> jump · <kbd>C</kbd> crouch ·
+          <kbd>V</kbd> vault · <kbd>drag</kbd> props · <kbd>scroll</kbd> zoom
+        </p>
+        <div id="selected">Click any asset…</div>
+      </div>
+    </div>
+    <script type="module" src="./main.js"></script>
+  </body>
+</html>

@@ -1,0 +1,24 @@
+{
+  "id": "5df31d10-1d62-4c62-ba7a-e786797aaea0",
+  "kind": "object",
+  "w": 168,
+  "h": 168,
+  "state": "pickup_Day",
+  "name": "vehicles",
+  "path": "assets/vehicles/pickup/168x168/day",
+  "canvasBeforeTrim": [
+    168,
+    168
+  ],
+  "canvasTrimmed": [
+    87,
+    114
+  ],
+  "trimBox": [
+    10,
+    24,
+    156,
+    143
+  ],
+  "trimMode": "per-frame-tight"
+}

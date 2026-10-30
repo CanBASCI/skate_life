@@ -1,0 +1,23 @@
+{
+  "id": "468b842d-e086-4352-866e-50288fc0b035",
+  "kind": "object",
+  "w": 96,
+  "h": 96,
+  "state": "bench_Day",
+  "name": "outdoorPark",
+  "path": "assets/props/outdoorPark/bench/96x96/day",
+  "canvasBeforeTrim": [
+    96,
+    96
+  ],
+  "canvasTrimmed": [
+    88,
+    83
+  ],
+  "trimBox": [
+    4,
+    7,
+    92,
+    90
+  ]
+}

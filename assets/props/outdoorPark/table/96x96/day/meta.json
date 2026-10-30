@@ -1,0 +1,23 @@
+{
+  "id": "fddfeb71-0299-4ed1-8581-eb5da7545b49",
+  "kind": "object",
+  "w": 96,
+  "h": 96,
+  "state": "table_Day",
+  "name": "outdoorPark",
+  "path": "assets/props/outdoorPark/table/96x96/day",
+  "canvasBeforeTrim": [
+    96,
+    96
+  ],
+  "canvasTrimmed": [
+    87,
+    83
+  ],
+  "trimBox": [
+    5,
+    7,
+    92,
+    90
+  ]
+}
