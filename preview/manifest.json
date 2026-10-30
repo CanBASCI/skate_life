@@ -98,50 +98,50 @@
     },
     {
       "id": "jeep",
-      "src": "assets/vehicles/jeep/168x168/day/south.png",
+      "src": "assets/vehicles/jeep/168x168/day/south.png?v=trim3",
       "x": -220,
       "z": 60,
-      "label": "jeep 168",
+      "label": "jeep",
       "trim": "tight"
     },
     {
       "id": "policeCar",
-      "src": "assets/vehicles/police/168x168/day/south.png",
+      "src": "assets/vehicles/police/168x168/day/south.png?v=trim3",
       "x": -40,
       "z": 70,
-      "label": "police 168",
+      "label": "police",
       "trim": "tight"
     },
     {
       "id": "car",
-      "src": "assets/vehicles/car/168x168/day/south.png",
+      "src": "assets/vehicles/car/168x168/day/south.png?v=trim3",
       "x": 140,
       "z": 55,
-      "label": "car 168",
+      "label": "car",
       "trim": "tight"
     },
     {
       "id": "pickup",
-      "src": "assets/vehicles/pickup/168x168/day/south.png",
+      "src": "assets/vehicles/pickup/168x168/day/south.png?v=trim3",
       "x": 320,
       "z": 65,
-      "label": "pickup 168",
+      "label": "pickup",
       "trim": "tight"
     },
     {
       "id": "schoolBus",
-      "src": "assets/vehicles/schoolBus/168x168/day/south.png",
+      "src": "assets/vehicles/schoolBus/168x168/day/south.png?v=trim3",
       "x": -400,
       "z": 50,
-      "label": "bus 168",
+      "label": "bus",
       "trim": "tight"
     },
     {
       "id": "ambulance",
-      "src": "assets/vehicles/ambulance/168x168/day/south.png",
+      "src": "assets/vehicles/ambulance/168x168/day/south.png?v=trim3",
       "x": 480,
       "z": 50,
-      "label": "ambulance 168",
+      "label": "ambulance",
       "trim": "tight"
     },
     {
