@@ -1,0 +1,9 @@
+{
+  "id": "855407f6-1092-4800-af78-9f1dead2af55",
+  "kind": "object",
+  "w": 256,
+  "h": 256,
+  "state": "road_Day",
+  "name": "road",
+  "path": "assets/props/road/road/256x256/day"
+}

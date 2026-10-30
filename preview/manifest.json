@@ -1,0 +1,268 @@
+{
+  "referenceCharacterPx": 92,
+  "unit": "1 world unit = 1 sprite canvas pixel",
+  "note": "Placements use native canvas sizes so scale mismatches are visible.",
+  "items": [
+    {
+      "id": "road",
+      "src": "assets/props/road/road/256x256/day/south.png",
+      "x": 0,
+      "z": 40,
+      "label": "road 256",
+      "layer": "ground"
+    },
+    {
+      "id": "highSchool",
+      "src": "assets/buildings/highSchool/256x256/day/south.png",
+      "x": -40,
+      "z": -420,
+      "label": "highSchool 256"
+    },
+    {
+      "id": "library",
+      "src": "assets/buildings/library/256x256/day/south.png",
+      "x": -360,
+      "z": -380,
+      "label": "library 256"
+    },
+    {
+      "id": "hospital",
+      "src": "assets/buildings/hospital/256x256/day/south.png",
+      "x": 320,
+      "z": -380,
+      "label": "hospital 256"
+    },
+    {
+      "id": "bank",
+      "src": "assets/buildings/bank/256x256/day/south.png",
+      "x": -520,
+      "z": -80,
+      "label": "bank 256"
+    },
+    {
+      "id": "cafe",
+      "src": "assets/buildings/cafe/256x256/day/south.png",
+      "x": -240,
+      "z": -40,
+      "label": "cafe 256"
+    },
+    {
+      "id": "thePub",
+      "src": "assets/buildings/thePub/256x256/day/south.png",
+      "x": 40,
+      "z": -60,
+      "label": "pub 256"
+    },
+    {
+      "id": "superMarket",
+      "src": "assets/buildings/superMarket/256x256/day/south.png",
+      "x": 360,
+      "z": -40,
+      "label": "market 256"
+    },
+    {
+      "id": "policeStation",
+      "src": "assets/buildings/policeStation/256x256/day/south.png",
+      "x": -480,
+      "z": 280,
+      "label": "police 256"
+    },
+    {
+      "id": "fireStation",
+      "src": "assets/buildings/fireStation/256x256/day/south.png",
+      "x": 480,
+      "z": 280,
+      "label": "fire 256"
+    },
+    {
+      "id": "singleHouse",
+      "src": "assets/buildings/singleHouse/256x256/day/south.png",
+      "x": -200,
+      "z": 320,
+      "label": "house 256"
+    },
+    {
+      "id": "duplexHouse",
+      "src": "assets/buildings/duplexHouse/256x256/day/south.png",
+      "x": 160,
+      "z": 340,
+      "label": "duplex 256"
+    },
+    {
+      "id": "gasStation",
+      "src": "assets/buildings/gasStation/256x256/day/south.png",
+      "x": 0,
+      "z": 520,
+      "label": "gas 256"
+    },
+    {
+      "id": "jeep",
+      "src": "assets/vehicles/jeep/168x168/day/south.png",
+      "x": -220,
+      "z": 60,
+      "label": "jeep 168"
+    },
+    {
+      "id": "policeCar",
+      "src": "assets/vehicles/police/168x168/day/south.png",
+      "x": -40,
+      "z": 70,
+      "label": "police 168"
+    },
+    {
+      "id": "car",
+      "src": "assets/vehicles/car/168x168/day/south.png",
+      "x": 140,
+      "z": 55,
+      "label": "car 168"
+    },
+    {
+      "id": "pickup",
+      "src": "assets/vehicles/pickup/168x168/day/south.png",
+      "x": 320,
+      "z": 65,
+      "label": "pickup 168"
+    },
+    {
+      "id": "schoolBus",
+      "src": "assets/vehicles/schoolBus/168x168/day/south.png",
+      "x": -400,
+      "z": 50,
+      "label": "bus 168"
+    },
+    {
+      "id": "ambulance",
+      "src": "assets/vehicles/ambulance/168x168/day/south.png",
+      "x": 480,
+      "z": 50,
+      "label": "ambulance 168"
+    },
+    {
+      "id": "trafficLight",
+      "src": "assets/props/lights/trafficLight/128x128/day/south.png",
+      "x": 80,
+      "z": 160,
+      "label": "light 128"
+    },
+    {
+      "id": "bench",
+      "src": "assets/props/outdoorPark/bench/96x96/day/south.png",
+      "x": -120,
+      "z": 180,
+      "label": "bench 96"
+    },
+    {
+      "id": "table",
+      "src": "assets/props/outdoorPark/table/96x96/day/south.png",
+      "x": -40,
+      "z": 190,
+      "label": "table 96"
+    },
+    {
+      "id": "dog",
+      "src": "assets/props/smallAnimals/dog/32x32/day/south.png",
+      "x": -90,
+      "z": 210,
+      "label": "dog 32"
+    },
+    {
+      "id": "cat",
+      "src": "assets/props/smallAnimals/cat/32x32/day/south.png",
+      "x": -60,
+      "z": 220,
+      "label": "cat 32"
+    },
+    {
+      "id": "bird",
+      "src": "assets/props/smallAnimals/bird/32x32/day/south.png",
+      "x": -20,
+      "z": 200,
+      "label": "bird 32"
+    },
+    {
+      "id": "football",
+      "src": "assets/props/balls/football/32x32/day/south.png",
+      "x": 40,
+      "z": 210,
+      "label": "football 32"
+    },
+    {
+      "id": "basketball",
+      "src": "assets/props/balls/basketball/32x32/day/south.png",
+      "x": 70,
+      "z": 215,
+      "label": "basketball 32"
+    },
+    {
+      "id": "main",
+      "src": "assets/characters/main/character/92x92/south.png",
+      "x": 0,
+      "z": 200,
+      "label": "main 92",
+      "highlight": true
+    },
+    {
+      "id": "skateboard",
+      "src": "assets/objects/skateboard/80x80/south.png",
+      "x": 0,
+      "z": 230,
+      "label": "board 80"
+    },
+    {
+      "id": "outfitFootball",
+      "src": "assets/characters/main/states/footballOutfit/92x92/south.png",
+      "x": -280,
+      "z": 200,
+      "label": "footballOutfit 92"
+    },
+    {
+      "id": "outfitNba",
+      "src": "assets/characters/main/states/nbaOutfit/92x92/south.png",
+      "x": -200,
+      "z": 200,
+      "label": "nba 92"
+    },
+    {
+      "id": "outfitDenim",
+      "src": "assets/characters/main/states/blueDenimJacket/92x92/south.png",
+      "x": 200,
+      "z": 200,
+      "label": "denim 92"
+    },
+    {
+      "id": "outfitBackpack",
+      "src": "assets/characters/main/states/backpackOnBackside/92x92/south.png",
+      "x": 280,
+      "z": 200,
+      "label": "backpack 92"
+    },
+    {
+      "id": "outfitHoldBoard",
+      "src": "assets/characters/main/states/holdingSkateboard/92x92/south.png",
+      "x": 360,
+      "z": 200,
+      "label": "holding board 92"
+    },
+    {
+      "id": "outfitPlayFootball",
+      "src": "assets/characters/main/states/playFootballOutfit/92x92/south.png",
+      "x": -360,
+      "z": 200,
+      "label": "play football 92"
+    },
+    {
+      "id": "crouch",
+      "src": "assets/characters/main/character/92x92/states/crouch/south.png",
+      "x": 100,
+      "z": 240,
+      "label": "crouch 92"
+    },
+    {
+      "id": "sit",
+      "src": "assets/characters/main/character/92x92/states/sit/south.png",
+      "x": -160,
+      "z": 175,
+      "label": "sit 92"
+    }
+  ]
+}

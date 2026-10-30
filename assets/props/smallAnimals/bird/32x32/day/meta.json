@@ -1,0 +1,9 @@
+{
+  "id": "db23110f-481a-4f79-9a7c-98a6b99ddb5e",
+  "kind": "object",
+  "w": 32,
+  "h": 32,
+  "state": "bird_Day",
+  "name": "smallAnimals",
+  "path": "assets/props/smallAnimals/bird/32x32/day"
+}

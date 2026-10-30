@@ -16,3 +16,17 @@ Separate prop (not pre-mounted under the character). Game scale follows the **92
 - **files:** `south.png` … `south-west.png`, plus `rotations/` and `animations/spin-360/{dir}/frame_XXX.png`
 
 Keep board and character separate in assets; mounting/offset happens in game code.
+
+## World props (synced day set)
+
+Native canvas sizes — place at 1:1 px in engine (see `preview/`).
+
+| Kind | Canvas | Path pattern |
+|------|--------|--------------|
+| Buildings (day) | 256×256 | `assets/buildings/<name>/256x256/day/` |
+| Vehicles (day) | 168×168 | `assets/vehicles/<name>/168x168/day/` |
+| Park / lights / road / animals / balls | 32–256 | `assets/props/...` |
+
+Buildings synced (day): singleHouse, duplexHouse, cafe, bank, hospital, gasStation, highSchool, policeStation, superMarket, library, fireStation, thePub.
+
+Vehicles synced (day): jeep, police, car, schoolBus, pickup, ambulance.

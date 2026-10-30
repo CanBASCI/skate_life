@@ -4,3 +4,4 @@
 assets/**/_archive_*/
 assets/characters/_archive_*/
 assets/objects/_archive_*/
+__pycache__/

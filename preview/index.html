@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>skate_life — pixel scale preview</title>
+    <link rel="stylesheet" href="./style.css" />
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+          "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+        }
+      }
+    </script>
+  </head>
+  <body>
+    <div id="app">
+      <div id="hud">
+        <h1>Pixel scale yard</h1>
+        <p>
+          High top-down sprites on a flat ground. <span class="scale">1 world unit = 1 canvas pixel</span>
+          so 92 / 168 / 256 sizes sit next to each other as they really are.
+        </p>
+        <p>
+          <kbd>drag</kbd> orbit · <kbd>scroll</kbd> zoom · <kbd>right-drag</kbd> pan · click a sprite for size
+        </p>
+        <div id="selected">Click any asset…</div>
+      </div>
+    </div>
+    <script type="module" src="./main.js"></script>
+  </body>
+</html>

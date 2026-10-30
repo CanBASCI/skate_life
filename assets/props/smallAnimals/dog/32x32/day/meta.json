@@ -1,0 +1,9 @@
+{
+  "id": "86dc40d3-5d28-4c56-812a-e9bb26e8a159",
+  "kind": "object",
+  "w": 32,
+  "h": 32,
+  "state": "dog_Day",
+  "name": "smallAnimals",
+  "path": "assets/props/smallAnimals/dog/32x32/day"
+}
