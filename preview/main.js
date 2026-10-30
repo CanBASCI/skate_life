@@ -312,9 +312,10 @@ function onPointerDown(event) {
   if (event.button !== 0) return;
   setPointerFromEvent(event);
   raycaster.setFromCamera(pointer, camera);
+  raycaster.camera = camera; // required for Sprite raycast + uv
   const hits = opaqueHits(raycaster.intersectObjects(pickables, false));
   if (!hits.length) {
-    selectedEl.textContent = "Click / drag an asset…";
+    selectedEl.textContent = "Empty padding ignored — click the art itself";
     return;
   }
   const obj = hits[0].object;
@@ -370,7 +371,8 @@ async function boot() {
   const jobs = manifest.items
     .filter((item) => !SKIP_STATIC_IDS.has(item.id))
     .map(async (item) => {
-      const url = new URL(`../${item.src}`, import.meta.url).href;
+      const url = new URL(`../${item.src.split("?")[0]}`, import.meta.url).href +
+        (item.src.includes("?") ? `?${item.src.split("?")[1]}` : `?v=1`);
       try {
         addSprite(item, await pixelTexture(url));
       } catch (err) {

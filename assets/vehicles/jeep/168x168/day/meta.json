@@ -11,13 +11,14 @@
     168
   ],
   "canvasTrimmed": [
-    147,
-    127
+    83,
+    119
   ],
   "trimBox": [
     10,
     21,
     157,
     148
-  ]
+  ],
+  "trimMode": "per-frame-tight"
 }
