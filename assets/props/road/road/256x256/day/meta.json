@@ -5,5 +5,19 @@
   "h": 256,
   "state": "road_Day",
   "name": "road",
-  "path": "assets/props/road/road/256x256/day"
+  "path": "assets/props/road/road/256x256/day",
+  "canvasBeforeTrim": [
+    256,
+    256
+  ],
+  "canvasTrimmed": [
+    256,
+    205
+  ],
+  "trimBox": [
+    0,
+    22,
+    256,
+    227
+  ]
 }

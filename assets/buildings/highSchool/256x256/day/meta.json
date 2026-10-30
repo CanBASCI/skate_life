@@ -5,5 +5,19 @@
   "h": 256,
   "state": "day",
   "name": "Isometric high school building with yellow school",
-  "path": "assets/buildings/highSchool/256x256/day"
+  "path": "assets/buildings/highSchool/256x256/day",
+  "canvasBeforeTrim": [
+    256,
+    256
+  ],
+  "canvasTrimmed": [
+    234,
+    199
+  ],
+  "trimBox": [
+    11,
+    34,
+    245,
+    233
+  ]
 }

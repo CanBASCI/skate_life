@@ -5,5 +5,19 @@
   "h": 168,
   "state": "ambulance_Day",
   "name": "vehicles",
-  "path": "assets/vehicles/ambulance/168x168/day"
+  "path": "assets/vehicles/ambulance/168x168/day",
+  "canvasBeforeTrim": [
+    168,
+    168
+  ],
+  "canvasTrimmed": [
+    162,
+    138
+  ],
+  "trimBox": [
+    2,
+    11,
+    164,
+    149
+  ]
 }

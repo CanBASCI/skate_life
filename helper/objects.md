@@ -19,13 +19,13 @@ Keep board and character separate in assets; mounting/offset happens in game cod
 
 ## World props (synced day set)
 
-Native canvas sizes — place at 1:1 px in engine (see `preview/`).
+| Kind | Source canvas | Path pattern |
+|------|---------------|--------------|
+| Buildings (day) | 256×256 → **trimmed** | `assets/buildings/<name>/256x256/day/` |
+| Vehicles (day) | 168×168 → **trimmed** | `assets/vehicles/<name>/168x168/day/` |
+| Park / lights / road / animals / balls | varies → **trimmed** | `assets/props/...` |
 
-| Kind | Canvas | Path pattern |
-|------|--------|--------------|
-| Buildings (day) | 256×256 | `assets/buildings/<name>/256x256/day/` |
-| Vehicles (day) | 168×168 | `assets/vehicles/<name>/168x168/day/` |
-| Park / lights / road / animals / balls | 32–256 | `assets/props/...` |
+Transparent PixelLab padding is cropped with a **shared bbox across all 8 rotations** (so dirs stay aligned). `meta.json` keeps `canvasBeforeTrim` / `trimBox`. **Do not trim character animation canvases** the same way — foot/pivot alignment needs a fixed frame size.
 
 Buildings synced (day): singleHouse, duplexHouse, cafe, bank, hospital, gasStation, highSchool, policeStation, superMarket, library, fireStation, thePub.
 

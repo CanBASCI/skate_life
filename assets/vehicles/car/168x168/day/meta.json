@@ -5,5 +5,19 @@
   "h": 168,
   "state": "car_Day",
   "name": "vehicles",
-  "path": "assets/vehicles/car/168x168/day"
+  "path": "assets/vehicles/car/168x168/day",
+  "canvasBeforeTrim": [
+    168,
+    168
+  ],
+  "canvasTrimmed": [
+    147,
+    121
+  ],
+  "trimBox": [
+    10,
+    24,
+    157,
+    145
+  ]
 }

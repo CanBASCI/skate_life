@@ -5,5 +5,19 @@
   "h": 168,
   "state": "police_Day",
   "name": "vehicles",
-  "path": "assets/vehicles/police/168x168/day"
+  "path": "assets/vehicles/police/168x168/day",
+  "canvasBeforeTrim": [
+    168,
+    168
+  ],
+  "canvasTrimmed": [
+    147,
+    121
+  ],
+  "trimBox": [
+    7,
+    20,
+    154,
+    141
+  ]
 }

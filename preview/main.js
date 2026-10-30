@@ -113,6 +113,17 @@ const loader = new THREE.TextureLoader();
 const pickables = [];
 const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
 
+function cacheAlpha(tex) {
+  const img = tex.image;
+  const c = document.createElement("canvas");
+  c.width = img.width;
+  c.height = img.height;
+  const g = c.getContext("2d", { willReadFrequently: true });
+  g.drawImage(img, 0, 0);
+  tex.userData = tex.userData || {};
+  tex.userData.alpha = g.getImageData(0, 0, c.width, c.height);
+}
+
 function pixelTexture(url) {
   return new Promise((resolve, reject) => {
     loader.load(
@@ -122,12 +133,38 @@ function pixelTexture(url) {
         tex.minFilter = THREE.NearestFilter;
         tex.generateMipmaps = false;
         tex.colorSpace = THREE.SRGBColorSpace;
+        try {
+          cacheAlpha(tex);
+        } catch {
+          /* ignore */
+        }
         resolve(tex);
       },
       undefined,
       reject,
     );
   });
+}
+
+/** Ignore transparent padding when picking/dragging sprites. */
+function opaqueHits(hits, alphaThr = 16) {
+  const out = [];
+  for (const hit of hits) {
+    const map = hit.object.material?.map;
+    const data = map?.userData?.alpha;
+    if (!hit.uv || !data) {
+      out.push(hit);
+      continue;
+    }
+    const x = Math.min(data.width - 1, Math.max(0, Math.floor(hit.uv.x * data.width)));
+    const y = Math.min(
+      data.height - 1,
+      Math.max(0, Math.floor((1 - hit.uv.y) * data.height)),
+    );
+    const a = data.data[(y * data.width + x) * 4 + 3];
+    if (a > alphaThr) out.push(hit);
+  }
+  return out;
 }
 
 /** +Z (south / screen-lower with our camera) draws in front. */

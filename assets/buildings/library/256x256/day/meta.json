@@ -5,5 +5,19 @@
   "h": 256,
   "state": "day",
   "name": "library",
-  "path": "assets/buildings/library/256x256/day"
+  "path": "assets/buildings/library/256x256/day",
+  "canvasBeforeTrim": [
+    256,
+    256
+  ],
+  "canvasTrimmed": [
+    179,
+    189
+  ],
+  "trimBox": [
+    38,
+    33,
+    217,
+    222
+  ]
 }

@@ -5,5 +5,19 @@
   "h": 256,
   "state": "day",
   "name": "thePub",
-  "path": "assets/buildings/thePub/256x256/day"
+  "path": "assets/buildings/thePub/256x256/day",
+  "canvasBeforeTrim": [
+    256,
+    256
+  ],
+  "canvasTrimmed": [
+    224,
+    214
+  ],
+  "trimBox": [
+    16,
+    20,
+    240,
+    234
+  ]
 }

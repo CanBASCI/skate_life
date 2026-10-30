@@ -5,5 +5,19 @@
   "h": 168,
   "state": "jeep_Day",
   "name": "vehicles",
-  "path": "assets/vehicles/jeep/168x168/day"
+  "path": "assets/vehicles/jeep/168x168/day",
+  "canvasBeforeTrim": [
+    168,
+    168
+  ],
+  "canvasTrimmed": [
+    147,
+    127
+  ],
+  "trimBox": [
+    10,
+    21,
+    157,
+    148
+  ]
 }

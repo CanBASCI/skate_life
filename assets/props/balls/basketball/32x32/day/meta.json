@@ -5,5 +5,19 @@
   "h": 32,
   "state": "basketball_Day",
   "name": "balls",
-  "path": "assets/props/balls/basketball/32x32/day"
+  "path": "assets/props/balls/basketball/32x32/day",
+  "canvasBeforeTrim": [
+    32,
+    32
+  ],
+  "canvasTrimmed": [
+    22,
+    22
+  ],
+  "trimBox": [
+    5,
+    6,
+    27,
+    28
+  ]
 }

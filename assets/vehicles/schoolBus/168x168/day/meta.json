@@ -5,5 +5,19 @@
   "h": 168,
   "state": "americanSchoolBus_Day",
   "name": "vehicles",
-  "path": "assets/vehicles/schoolBus/168x168/day"
+  "path": "assets/vehicles/schoolBus/168x168/day",
+  "canvasBeforeTrim": [
+    168,
+    168
+  ],
+  "canvasTrimmed": [
+    155,
+    135
+  ],
+  "trimBox": [
+    5,
+    12,
+    160,
+    147
+  ]
 }

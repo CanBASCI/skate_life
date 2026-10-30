@@ -5,5 +5,19 @@
   "h": 128,
   "state": "trafficLight_Day",
   "name": "lights",
-  "path": "assets/props/lights/trafficLight/128x128/day"
+  "path": "assets/props/lights/trafficLight/128x128/day",
+  "canvasBeforeTrim": [
+    128,
+    128
+  ],
+  "canvasTrimmed": [
+    31,
+    107
+  ],
+  "trimBox": [
+    48,
+    10,
+    79,
+    117
+  ]
 }
