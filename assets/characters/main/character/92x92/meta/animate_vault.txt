@@ -1,0 +1,16 @@
+mode: v3
+animation_name: vault
+frame_count: 8
+prompt:
+vault over a low obstacle: approach, reach forward and place one hand on the obstacle edge, swing both legs over the top, body clears the barrier, release the hand, land on the other side, empty hands, no skateboard, athletic parkour vault motion
+
+character: 37ad4d45-4dfd-442e-ace5-f38ec3c83706
+animation: v3 custom (vault over a low obstacle: approach, reach forward and place one hand on the obstacle edge, swing both legs over the top, body clears the barrier, release the hand, land on the other side, empty hands, no skateboard, athletic parkour vault motion)
+directions: south, south-east, east, north-east, north, north-west, west, south-west (8 jobs)
+group: 85f4d598-a5f8-44d3-82e6-e2fee0331e7e
+frames: 9 (1 reference + 8 animated)
+cost: 16 generations (2/dir x 8)
+eta: ~30-60s/direction
+
+hint: get_character(character_id="37ad4d45-4dfd-442e-ace5-f38ec3c83706")
+add more directions to this group: animate_character(character_id="37ad4d45-4dfd-442e-ace5-f38ec3c83706", action_description="vault over a low obstacle: approach, reach forward and place one hand on the obstacle edge, swing both legs over the top, body clears the barrier, release the hand, land on the other side, empty hands, no skateboard, athletic parkour vault motion", animation_group_id="85f4d598-a5f8-44d3-82e6-e2fee0331e7e", directions=[...])

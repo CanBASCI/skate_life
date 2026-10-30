@@ -1,0 +1,51 @@
+status: completed
+id: 82a5ecf5-0b39-4edb-a260-1f84ec18dfa1
+name: Main Character High Top-Down 92x92
+state_name: sit
+directions: 8 (south, east, north, west, south-east, north-east, north-west, south-west)
+size: 92x92px
+view: high top-down
+style: basic shading, single color black outline, medium detail
+group: ceb4a56a-a8cc-4a3a-b485-e13b010421ba (10 states)
+  state: main (completed) — 37ad4d45-4dfd-442e-ace5-f38ec3c83706
+  state: skate (completed) — 2be6dc14-97ed-493e-b32c-3f9d26ac1d5c
+  state: crouch (completed) — 12076436-e27d-4015-98b9-5875c3ecf071
+  state: backpackOnBackside (completed) — 5e7e61bc-1b2a-4ebf-85f4-162c4a1193dd
+  state: holding the skateboa (completed) — 2db7225c-9c99-4041-9420-b4a9cb7d1492
+  state: nbaOutfit (completed) — 490532ad-4201-4d13-8039-228d98491c98
+  state: blueDenimJacket (completed) — 2ac4b002-ac42-4e12-b468-5171ed206b65
+  state: playFootballOutfit (completed) — 8e201d38-94e6-4fc1-b196-0d04f51a3046
+  state: footballOutfit (completed) — 83a05bc7-454f-45ee-895e-170b2f44eb63
+
+rotations:
+  south: https://backblaze.pixellab.ai/file/pixellab-characters/04365e2f-1a02-45f9-951a-e225d637dcdb/82a5ecf5-0b39-4edb-a260-1f84ec18dfa1/rotations/south.png?t=1790969856
+  east: https://backblaze.pixellab.ai/file/pixellab-characters/04365e2f-1a02-45f9-951a-e225d637dcdb/82a5ecf5-0b39-4edb-a260-1f84ec18dfa1/rotations/east.png?t=1790969856
+  north: https://backblaze.pixellab.ai/file/pixellab-characters/04365e2f-1a02-45f9-951a-e225d637dcdb/82a5ecf5-0b39-4edb-a260-1f84ec18dfa1/rotations/north.png?t=1790969856
+  west: https://backblaze.pixellab.ai/file/pixellab-characters/04365e2f-1a02-45f9-951a-e225d637dcdb/82a5ecf5-0b39-4edb-a260-1f84ec18dfa1/rotations/west.png?t=1790969856
+  south-east: https://backblaze.pixellab.ai/file/pixellab-characters/04365e2f-1a02-45f9-951a-e225d637dcdb/82a5ecf5-0b39-4edb-a260-1f84ec18dfa1/rotations/south-east.png?t=1790969856
+  north-east: https://backblaze.pixellab.ai/file/pixellab-characters/04365e2f-1a02-45f9-951a-e225d637dcdb/82a5ecf5-0b39-4edb-a260-1f84ec18dfa1/rotations/north-east.png?t=1790969856
+  north-west: https://backblaze.pixellab.ai/file/pixellab-characters/04365e2f-1a02-45f9-951a-e225d637dcdb/82a5ecf5-0b39-4edb-a260-1f84ec18dfa1/rotations/north-west.png?t=1790969856
+  south-west: https://backblaze.pixellab.ai/file/pixellab-characters/04365e2f-1a02-45f9-951a-e225d637dcdb/82a5ecf5-0b39-4edb-a260-1f84ec18dfa1/rotations/south-west.png?t=1790969856
+
+animations (1 group, 11 total):
+  idle — 11 dir (west, south-west, north, south-west, south-west, west, north-west, south-east, north-east, east, south), 5f 2026-10-02 [type=custom-idle breathing only while froz] [group: 25fd5b1f-e493-427e-8c8d-0ef6c2b0f11e]
+    west: https://backblaze.pixellab.ai/file/pixellab-characters/04365e2f-1a02-45f9-951a-e225d637dcdb/82a5ecf5-0b39-4edb-a260-1f84ec18dfa1/animations/ceba629e-c84f-453b-80ff-99ade12d1434/west/{i}.png?t=1790970076575 (i=0..4)
+    south-west: https://backblaze.pixellab.ai/file/pixellab-characters/04365e2f-1a02-45f9-951a-e225d637dcdb/82a5ecf5-0b39-4edb-a260-1f84ec18dfa1/animations/5da63e91-6049-4c86-bf82-3ef5d07939c2/south-west/{i}.png?t=1790970074484 (i=0..4)
+    north: https://backblaze.pixellab.ai/file/pixellab-characters/04365e2f-1a02-45f9-951a-e225d637dcdb/82a5ecf5-0b39-4edb-a260-1f84ec18dfa1/animations/65321177-34b4-41ad-911b-77f56abdb6a4/north/{i}.png?t=1790969995293 (i=0..4)
+    south-west: https://backblaze.pixellab.ai/file/pixellab-characters/04365e2f-1a02-45f9-951a-e225d637dcdb/82a5ecf5-0b39-4edb-a260-1f84ec18dfa1/animations/0854aa3b-0b9c-4497-9cdd-dc48c60be434/south-west/{i}.png?t=1790969906120 (i=0..4)
+    south-west: https://backblaze.pixellab.ai/file/pixellab-characters/04365e2f-1a02-45f9-951a-e225d637dcdb/82a5ecf5-0b39-4edb-a260-1f84ec18dfa1/animations/e21ba159-7538-4fca-b0d5-3775daf2bfa0/south-west/{i}.png?t=1790969856467 (i=0..4)
+    west: https://backblaze.pixellab.ai/file/pixellab-characters/04365e2f-1a02-45f9-951a-e225d637dcdb/82a5ecf5-0b39-4edb-a260-1f84ec18dfa1/animations/af01648b-cc8b-4075-9149-8e2b38093e81/west/{i}.png?t=1790969854411 (i=0..4)
+    north-west: https://backblaze.pixellab.ai/file/pixellab-characters/04365e2f-1a02-45f9-951a-e225d637dcdb/82a5ecf5-0b39-4edb-a260-1f84ec18dfa1/animations/93ed4aa7-fe8d-44a1-ba7b-db345e56e95e/north-west/{i}.png?t=1790969312563 (i=0..4)
+    south-east: https://backblaze.pixellab.ai/file/pixellab-characters/04365e2f-1a02-45f9-951a-e225d637dcdb/82a5ecf5-0b39-4edb-a260-1f84ec18dfa1/animations/fa5a65b1-1818-4134-9a5c-2bd7a8b4a477/south-east/{i}.png?t=1790969180322 (i=0..4)
+    north-east: https://backblaze.pixellab.ai/file/pixellab-characters/04365e2f-1a02-45f9-951a-e225d637dcdb/82a5ecf5-0b39-4edb-a260-1f84ec18dfa1/animations/9068d798-8db6-46e2-a663-47988e451fbf/north-east/{i}.png?t=1790969116301 (i=0..4)
+    east: https://backblaze.pixellab.ai/file/pixellab-characters/04365e2f-1a02-45f9-951a-e225d637dcdb/82a5ecf5-0b39-4edb-a260-1f84ec18dfa1/animations/0813b643-a0a3-478c-b06d-bc658601c03e/east/{i}.png?t=1790969096795 (i=0..4)
+    south: https://backblaze.pixellab.ai/file/pixellab-characters/04365e2f-1a02-45f9-951a-e225d637dcdb/82a5ecf5-0b39-4edb-a260-1f84ec18dfa1/animations/18e97dd5-b4b3-4d7b-a04e-c9d174266ce3/south/{i}.png?t=1790969012770 (i=0..4)
+
+download: https://api.pixellab.ai/mcp/characters/82a5ecf5-0b39-4edb-a260-1f84ec18dfa1/download
+  (bundles all 10 states in the group, one <state-name>/ folder each — this one is 'sit/')
+spritesheet: https://api.pixellab.ai/mcp/characters/82a5ecf5-0b39-4edb-a260-1f84ec18dfa1/spritesheet (this state only — one uniform-grid sheet PNG + layout JSON, zipped; cells pivot-centred)
+
+available_animations: backflip, breathing-idle, cross-punch, crouched-walking, crouching, drinking, falling-back-death, fight-stance-idle-8-frames, fireball, flying-kick, front-flip, getting-up, high-kick, hurricane-kick, jumping-1, jumping-2, lead-jab, leg-sweep, picking-up, pull-heavy-object, pushing, roundhouse-kick, running-4-frames, running-6-frames, running-8-frames, running-jump, running-slide, sad-walk, scary-walk, surprise-uppercut, taking-punch, throw-object, two-footed-jump, walk, walk-1, walk-2, walking, walking-10, walking-2, walking-3, walking-4, walking-4-frames, walking-5, walking-6, walking-6-frames, walking-7, walking-8, walking-8-frames, walking-9
+
+actions: animate_character(character_id="82a5ecf5-0b39-4edb-a260-1f84ec18dfa1", ...) | create_character_state(character_id="82a5ecf5-0b39-4edb-a260-1f84ec18dfa1", ...) | delete_animation(character_id="82a5ecf5-0b39-4edb-a260-1f84ec18dfa1", animation_group_id="<group>") | delete_character(character_id="82a5ecf5-0b39-4edb-a260-1f84ec18dfa1")
+hint: get_character(character_id="37ad4d45-4dfd-442e-ace5-f38ec3c83706") to view sibling state

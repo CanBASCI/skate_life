@@ -1,0 +1,13 @@
+{
+  "background_job_id": "59beedbd-3bdf-4a14-addb-6276fd9af998",
+  "object_id": "4cee3c3b-bb9c-4805-b83b-e1e0ccb09e4d",
+  "status": "processing",
+  "first_direction_generated": true,
+  "estimated_generations": 6,
+  "job_id": "59beedbd-3bdf-4a14-addb-6276fd9af998",
+  "n_directions": 8,
+  "poll_tool": "get_object",
+  "status_path": "/v2/background-jobs/59beedbd-3bdf-4a14-addb-6276fd9af998",
+  "download_path": "/mcp/objects/4cee3c3b-bb9c-4805-b83b-e1e0ccb09e4d/download"
+}
+Poll get_object(object_id="4cee3c3b-bb9c-4805-b83b-e1e0ccb09e4d") or /v2/background-jobs/59beedbd-3bdf-4a14-addb-6276fd9af998; wait for the outer job to complete before downloading or animating. First-direction generation is included; actual image and rotation usage is reported in billing_stages.
