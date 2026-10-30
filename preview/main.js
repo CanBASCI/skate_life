@@ -29,15 +29,17 @@ const camera = new THREE.OrthographicCamera(
   0.1,
   5000,
 );
-camera.position.set(0, 720, 620);
+// High top-down: nearly straight above (sprites already bake perspective).
+camera.position.set(0, 1000, 0.01);
+camera.up.set(0, 0, -1);
 camera.lookAt(0, 0, 80);
 
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
 controls.dampingFactor = 0.08;
 controls.target.set(0, 0, 80);
-controls.maxPolarAngle = Math.PI * 0.48;
-controls.minPolarAngle = 0.15;
+controls.minPolarAngle = 0;
+controls.maxPolarAngle = Math.PI * 0.12; // ~0–22° tilt only
 controls.minZoom = 0.25;
 controls.maxZoom = 6;
 controls.update();
