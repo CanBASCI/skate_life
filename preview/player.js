@@ -59,10 +59,10 @@ function loadTexture(loader, url) {
   });
 }
 
-/** Map move vector (x,z) → PixelLab 8-dir. +Z = south (screen bottom). */
+/** +Z = south (toward camera / screen-bottom with high top-down cam). */
 export function dirFromVector(dx, dz) {
   if (dx === 0 && dz === 0) return null;
-  const ang = Math.atan2(-dz, dx); // 0 = east, + = CCW toward north
+  const ang = Math.atan2(-dz, dx);
   const oct = Math.round((ang / Math.PI) * 4);
   const idx = ((oct % 8) + 8) % 8;
   return DIRS[idx];
@@ -77,8 +77,8 @@ export class Player {
     this.anim = "idle";
     this.frame = 0;
     this.accum = 0;
-    this.busy = null; // 'jump' | 'vault' | null
-    this.textures = {}; // anim -> dir -> Texture[]
+    this.busy = null;
+    this.textures = {};
     this.mesh = null;
     this.ring = null;
     this.spawn = { x, z };
@@ -108,15 +108,16 @@ export class Player {
     const first = this.textures.idle.south[0];
     const w = first.image.width;
     const h = first.image.height;
-    const mat = new THREE.MeshBasicMaterial({
+    const mat = new THREE.SpriteMaterial({
       map: first,
       transparent: true,
       alphaTest: 0.05,
       depthWrite: false,
     });
-    this.mesh = new THREE.Mesh(new THREE.PlaneGeometry(w, h), mat);
-    this.mesh.rotation.x = -Math.PI / 2;
-    this.mesh.position.set(this.spawn.x, 0.6, this.spawn.z);
+    this.mesh = new THREE.Sprite(mat);
+    this.mesh.center.set(0.5, 0);
+    this.mesh.scale.set(w, h, 1);
+    this.mesh.position.set(this.spawn.x, 0, this.spawn.z);
     this.mesh.userData = {
       id: "player",
       label: "player (WASD)",
@@ -130,7 +131,7 @@ export class Player {
       new THREE.MeshBasicMaterial({ color: 0xc6e86b, transparent: true, opacity: 0.75 }),
     );
     this.ring.rotation.x = -Math.PI / 2;
-    this.ring.position.set(this.spawn.x, 0.35, this.spawn.z);
+    this.ring.position.set(this.spawn.x, 0.2, this.spawn.z);
     this.scene.add(this.ring);
 
     window.addEventListener("keydown", this._boundKeyDown);
@@ -195,7 +196,8 @@ export class Player {
   update(dt) {
     if (!this.mesh) return;
 
-    const crouch = this.keys.has("KeyC") || this.keys.has("ControlLeft") || this.keys.has("ControlRight");
+    const crouch =
+      this.keys.has("KeyC") || this.keys.has("ControlLeft") || this.keys.has("ControlRight");
     const run = this.keys.has("ShiftLeft") || this.keys.has("ShiftRight");
     const { dx, dz } = this.inputVector();
     const moving = dx !== 0 || dz !== 0;
@@ -206,13 +208,9 @@ export class Player {
     }
 
     if (!this.busy) {
-      if (crouch) {
-        this.anim = moving ? "crouchWalk" : "crouchIdle";
-      } else if (moving) {
-        this.anim = run ? "run" : "walk";
-      } else {
-        this.anim = "idle";
-      }
+      if (crouch) this.anim = moving ? "crouchWalk" : "crouchIdle";
+      else if (moving) this.anim = run ? "run" : "walk";
+      else this.anim = "idle";
     }
 
     let speed = 0;
@@ -224,7 +222,6 @@ export class Player {
       speed = moving ? WALK_SPEED * 0.85 : 0;
     } else if (this.busy === "vault") {
       speed = moving ? WALK_SPEED * 1.1 : WALK_SPEED * 0.7;
-      // vault drifts in facing direction if no input
       if (!moving) {
         const drift = {
           east: [1, 0],
@@ -256,21 +253,23 @@ export class Player {
       this.accum -= frameDur;
       this.frame += 1;
       if (this.frame >= cfg.frames) {
-        if (cfg.loop) {
-          this.frame = 0;
-        } else {
-          this.frame = cfg.frames - 1;
+        if (cfg.loop) this.frame = 0;
+        else {
           this.busy = null;
-          this.anim = crouch ? (moving ? "crouchWalk" : "crouchIdle") : moving ? (run ? "run" : "walk") : "idle";
+          this.anim = crouch
+            ? moving
+              ? "crouchWalk"
+              : "crouchIdle"
+            : moving
+              ? run
+                ? "run"
+                : "walk"
+              : "idle";
           this.frame = 0;
         }
       }
     }
     this.applyFrame();
     if (this.syncDepth) this.syncDepth(this.mesh);
-  }
-
-  statusLine() {
-    return `player · <strong>${this.anim}</strong> · <strong>${this.facing}</strong>`;
   }
 }

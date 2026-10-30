@@ -3,16 +3,16 @@ import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { Player } from "./player.js";
 
 const REF = 92;
-/** Buildings are already max PixelLab canvas (256); enlarge in-scene vs char/vehicles. */
 const BUILDING_SCALE = 1.85;
-/** Static manifest ids replaced by the controllable animated player. */
 const SKIP_STATIC_IDS = new Set(["main", "crouch"]);
+/** High top-down: elevated + south offset — not flattened straight-down. */
+const CAM_OFFSET = new THREE.Vector3(0, 620, 520);
 
 const selectedEl = document.getElementById("selected");
 const app = document.getElementById("app");
 let player = null;
 let lastTs = performance.now();
-let followPlayer = true;
+const followPlayer = true;
 
 const renderer = new THREE.WebGLRenderer({
   antialias: false,
@@ -26,10 +26,10 @@ renderer.outputColorSpace = THREE.SRGBColorSpace;
 app.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
-scene.fog = new THREE.Fog(0x1a2220, 900, 2200);
+scene.fog = new THREE.Fog(0x1a2220, 1100, 2600);
 
 const aspect = window.innerWidth / window.innerHeight;
-const frustum = 520;
+const frustum = 420;
 const camera = new THREE.OrthographicCamera(
   -frustum * aspect,
   frustum * aspect,
@@ -38,34 +38,37 @@ const camera = new THREE.OrthographicCamera(
   0.1,
   5000,
 );
-// High top-down. camera.up -Z => +Z is toward bottom of screen (= "front").
-camera.position.set(0, 1000, 0.01);
-camera.up.set(0, 0, -1);
-camera.lookAt(0, 0, 80);
 
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
 controls.dampingFactor = 0.08;
-controls.target.set(0, 0, 80);
-controls.minPolarAngle = 0;
-controls.maxPolarAngle = Math.PI * 0.12;
-controls.minZoom = 0.2;
-controls.maxZoom = 6;
+controls.target.set(0, 0, 120);
+controls.minPolarAngle = Math.PI * 0.28; // ~50° from horizon — high top-down
+controls.maxPolarAngle = Math.PI * 0.42; // don't go flat side-view or nadir
+controls.minZoom = 0.25;
+controls.maxZoom = 5;
 controls.mouseButtons = {
   LEFT: THREE.MOUSE.PAN,
   MIDDLE: THREE.MOUSE.DOLLY,
-  RIGHT: THREE.MOUSE.PAN,
+  RIGHT: THREE.MOUSE.ROTATE,
 };
 controls.touches = {
   ONE: THREE.TOUCH.PAN,
   TWO: THREE.TOUCH.DOLLY_PAN,
 };
-controls.update();
 
-scene.add(new THREE.AmbientLight(0xffffff, 0.95));
-const sun = new THREE.DirectionalLight(0xfff2d6, 0.35);
-sun.position.set(200, 400, 100);
-scene.add(sun);
+function placeCamera(target = controls.target) {
+  camera.position.set(
+    target.x + CAM_OFFSET.x,
+    target.y + CAM_OFFSET.y,
+    target.z + CAM_OFFSET.z,
+  );
+  camera.lookAt(target);
+  controls.update();
+}
+placeCamera();
+
+scene.add(new THREE.AmbientLight(0xffffff, 1));
 
 function makeGroundTexture() {
   const size = 128;
@@ -73,34 +76,29 @@ function makeGroundTexture() {
   c.width = size;
   c.height = size;
   const g = c.getContext("2d");
-  const a = "#2a3830";
-  const b = "#24312a";
   const tile = 8;
   for (let y = 0; y < size; y += tile) {
     for (let x = 0; x < size; x += tile) {
-      g.fillStyle = ((x + y) / tile) % 2 === 0 ? a : b;
+      g.fillStyle = ((x + y) / tile) % 2 === 0 ? "#2a3830" : "#24312a";
       g.fillRect(x, y, tile, tile);
     }
   }
-  g.strokeStyle = "#334439";
-  g.lineWidth = 1;
-  g.strokeRect(0.5, 0.5, size - 1, size - 1);
   const tex = new THREE.CanvasTexture(c);
   tex.magFilter = THREE.NearestFilter;
   tex.minFilter = THREE.NearestFilter;
   tex.wrapS = THREE.RepeatWrapping;
   tex.wrapT = THREE.RepeatWrapping;
-  tex.repeat.set(24, 24);
+  tex.repeat.set(28, 28);
   tex.colorSpace = THREE.SRGBColorSpace;
   return tex;
 }
 
 const ground = new THREE.Mesh(
-  new THREE.PlaneGeometry(3200, 3200),
+  new THREE.PlaneGeometry(3600, 3600),
   new THREE.MeshBasicMaterial({ map: makeGroundTexture() }),
 );
 ground.rotation.x = -Math.PI / 2;
-ground.position.y = -0.5;
+ground.position.y = 0;
 scene.add(ground);
 
 const plaza = new THREE.Mesh(
@@ -108,7 +106,7 @@ const plaza = new THREE.Mesh(
   new THREE.MeshBasicMaterial({ color: 0x3a4a3c }),
 );
 plaza.rotation.x = -Math.PI / 2;
-plaza.position.set(0, -0.2, 200);
+plaza.position.set(0, 0.05, 200);
 scene.add(plaza);
 
 const loader = new THREE.TextureLoader();
@@ -132,15 +130,11 @@ function pixelTexture(url) {
   });
 }
 
-/** Screen-bottom (+Z) draws in front of screen-top (−Z). */
-function syncDepth(mesh) {
-  const z = mesh.position.z;
-  const layerBias = mesh.userData.layer === "ground" ? -10000 : 0;
-  mesh.renderOrder = Math.round(z * 10 + layerBias);
-  // Tiny Y lift by Z so overlaps resolve consistently if depthWrite on later
-  if (mesh.userData.layer !== "ground") {
-    mesh.position.y = 0.5 + z * 0.0001;
-  }
+/** +Z (south / screen-lower with our camera) draws in front. */
+function syncDepth(obj) {
+  const z = obj.position.z;
+  const layerBias = obj.userData.layer === "ground" ? -10000 : 0;
+  obj.renderOrder = Math.round(z * 10 + layerBias);
 }
 
 function defaultScale(item) {
@@ -154,45 +148,74 @@ function addSprite(item, tex) {
   const w = img.width;
   const h = img.height;
   const scale = defaultScale(item);
-  const geo = new THREE.PlaneGeometry(w * scale, h * scale);
-  const mat = new THREE.MeshBasicMaterial({
+  const displayW = w * scale;
+  const displayH = h * scale;
+
+  // Ground decals (road) stay flat on the floor.
+  if (item.layer === "ground") {
+    const mesh = new THREE.Mesh(
+      new THREE.PlaneGeometry(displayW, displayH),
+      new THREE.MeshBasicMaterial({
+        map: tex,
+        transparent: true,
+        alphaTest: 0.05,
+        depthWrite: false,
+      }),
+    );
+    mesh.rotation.x = -Math.PI / 2;
+    mesh.position.set(item.x, 0.08, item.z);
+    mesh.userData = {
+      id: item.id,
+      label: item.label || item.id,
+      w,
+      h,
+      scale,
+      src: item.src,
+      layer: "ground",
+      vsRef: +(displayW / REF).toFixed(2),
+    };
+    syncDepth(mesh);
+    scene.add(mesh);
+    pickables.push(mesh);
+    return mesh;
+  }
+
+  // High top-down art: camera-facing billboards (not floor pancakes).
+  const mat = new THREE.SpriteMaterial({
     map: tex,
     transparent: true,
     alphaTest: 0.05,
     depthWrite: false,
   });
-  const mesh = new THREE.Mesh(geo, mat);
-  mesh.rotation.x = -Math.PI / 2;
-  const y = item.layer === "ground" ? 0.05 : 0.5;
-  mesh.position.set(item.x, y, item.z);
-  mesh.userData = {
+  const sprite = new THREE.Sprite(mat);
+  sprite.center.set(0.5, 0); // feet / base on ground
+  sprite.scale.set(displayW, displayH, 1);
+  sprite.position.set(item.x, 0, item.z);
+  sprite.userData = {
     id: item.id,
     label: item.label || item.id,
     w,
     h,
     scale,
     src: item.src,
-    layer: item.layer || "sprite",
-    vsRef: +((w * scale) / REF).toFixed(2),
-    ring: null,
+    layer: "sprite",
+    vsRef: +(displayW / REF).toFixed(2),
   };
-  syncDepth(mesh);
-
-  scene.add(mesh);
-  pickables.push(mesh);
-  return mesh;
+  syncDepth(sprite);
+  scene.add(sprite);
+  pickables.push(sprite);
+  return sprite;
 }
 
-function showSelection(mesh) {
-  const d = mesh.userData;
+function showSelection(obj) {
+  const d = obj.userData;
   const scaleNote =
     d.scale !== 1
       ? ` · display <strong>×${d.scale}</strong> → <strong>${Math.round(d.w * d.scale)}×${Math.round(d.h * d.scale)}</strong>`
       : "";
   selectedEl.innerHTML =
     `<strong>${d.label}</strong> · canvas <strong>${d.w}×${d.h}</strong>${scaleNote}` +
-    `<br/>pos <strong>x=${mesh.position.x.toFixed(0)} z=${mesh.position.z.toFixed(0)}</strong>` +
-    `<br/><span style="color:#9bb09a">drag to move · lower on screen = in front</span>`;
+    `<br/>pos <strong>x=${obj.position.x.toFixed(0)} z=${obj.position.z.toFixed(0)}</strong>`;
 }
 
 const raycaster = new THREE.Raycaster();
@@ -220,16 +243,13 @@ function onPointerDown(event) {
     selectedEl.textContent = "Click / drag an asset…";
     return;
   }
-  const mesh = hits[0].object;
-  dragging = mesh;
+  const obj = hits[0].object;
+  dragging = obj;
   controls.enabled = false;
   const gp = groundHit();
-  if (gp) {
-    dragOffset.set(mesh.position.x - gp.x, 0, mesh.position.z - gp.z);
-  } else {
-    dragOffset.set(0, 0, 0);
-  }
-  showSelection(mesh);
+  if (gp) dragOffset.set(obj.position.x - gp.x, 0, obj.position.z - gp.z);
+  else dragOffset.set(0, 0, 0);
+  showSelection(obj);
   renderer.domElement.setPointerCapture(event.pointerId);
 }
 
@@ -240,10 +260,6 @@ function onPointerMove(event) {
   if (!gp) return;
   dragging.position.x = gp.x + dragOffset.x;
   dragging.position.z = gp.z + dragOffset.z;
-  if (dragging.userData.ring) {
-    dragging.userData.ring.position.x = dragging.position.x;
-    dragging.userData.ring.position.z = dragging.position.z;
-  }
   syncDepth(dragging);
   showSelection(dragging);
 }
@@ -282,8 +298,7 @@ async function boot() {
     .map(async (item) => {
       const url = new URL(`../${item.src}`, import.meta.url).href;
       try {
-        const tex = await pixelTexture(url);
-        addSprite(item, tex);
+        addSprite(item, await pixelTexture(url));
       } catch (err) {
         console.warn("failed", item.id, url, err);
       }
@@ -292,12 +307,11 @@ async function boot() {
 
   selectedEl.innerHTML = `Loading player animations…`;
   player = await new Player(scene, { x: 0, z: 200, syncDepth }).load();
-  controls.target.copy(player.mesh.position);
-  camera.position.set(player.mesh.position.x, 1000, player.mesh.position.z + 0.01);
+  controls.target.set(player.mesh.position.x, 0, player.mesh.position.z);
+  placeCamera(controls.target);
 
   selectedEl.innerHTML =
-    `Ready · <kbd>WASD</kbd> move · <kbd>Shift</kbd> run · <kbd>Space</kbd> jump · ` +
-    `<kbd>C</kbd> crouch · <kbd>V</kbd> vault · drag props to rearrange`;
+    `Ready · high top-down · <kbd>WASD</kbd> <kbd>Shift</kbd> <kbd>Space</kbd> <kbd>C</kbd> <kbd>V</kbd>`;
 }
 
 boot();
@@ -309,9 +323,12 @@ function tick(now) {
     player.update(dt);
     if (followPlayer && !dragging) {
       const p = player.mesh.position;
-      controls.target.lerp(new THREE.Vector3(p.x, 0, p.z), 1 - Math.pow(0.001, dt));
-      camera.position.x = controls.target.x;
-      camera.position.z = controls.target.z + 0.01;
+      const t = 1 - Math.pow(0.0008, dt);
+      controls.target.x += (p.x - controls.target.x) * t;
+      controls.target.z += (p.z - controls.target.z) * t;
+      camera.position.x = controls.target.x + CAM_OFFSET.x;
+      camera.position.y = controls.target.y + CAM_OFFSET.y;
+      camera.position.z = controls.target.z + CAM_OFFSET.z;
     }
   }
   controls.update();
