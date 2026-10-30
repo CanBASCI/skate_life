@@ -2,6 +2,9 @@ import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 
 const REF = 92;
+/** Buildings are already max PixelLab canvas (256); enlarge in-scene vs char/vehicles. */
+const BUILDING_SCALE = 1.85;
+
 const selectedEl = document.getElementById("selected");
 const app = document.getElementById("app");
 
@@ -20,7 +23,7 @@ const scene = new THREE.Scene();
 scene.fog = new THREE.Fog(0x1a2220, 900, 2200);
 
 const aspect = window.innerWidth / window.innerHeight;
-const frustum = 420;
+const frustum = 520;
 const camera = new THREE.OrthographicCamera(
   -frustum * aspect,
   frustum * aspect,
@@ -29,7 +32,7 @@ const camera = new THREE.OrthographicCamera(
   0.1,
   5000,
 );
-// High top-down: nearly straight above (sprites already bake perspective).
+// High top-down. camera.up -Z => +Z is toward bottom of screen (= "front").
 camera.position.set(0, 1000, 0.01);
 camera.up.set(0, 0, -1);
 camera.lookAt(0, 0, 80);
@@ -39,9 +42,18 @@ controls.enableDamping = true;
 controls.dampingFactor = 0.08;
 controls.target.set(0, 0, 80);
 controls.minPolarAngle = 0;
-controls.maxPolarAngle = Math.PI * 0.12; // ~0–22° tilt only
-controls.minZoom = 0.25;
+controls.maxPolarAngle = Math.PI * 0.12;
+controls.minZoom = 0.2;
 controls.maxZoom = 6;
+controls.mouseButtons = {
+  LEFT: THREE.MOUSE.PAN,
+  MIDDLE: THREE.MOUSE.DOLLY,
+  RIGHT: THREE.MOUSE.PAN,
+};
+controls.touches = {
+  ONE: THREE.TOUCH.PAN,
+  TWO: THREE.TOUCH.DOLLY_PAN,
+};
 controls.update();
 
 scene.add(new THREE.AmbientLight(0xffffff, 0.95));
@@ -78,15 +90,13 @@ function makeGroundTexture() {
 }
 
 const ground = new THREE.Mesh(
-  new THREE.PlaneGeometry(2400, 2400),
+  new THREE.PlaneGeometry(3200, 3200),
   new THREE.MeshBasicMaterial({ map: makeGroundTexture() }),
 );
 ground.rotation.x = -Math.PI / 2;
 ground.position.y = -0.5;
-ground.receiveShadow = false;
 scene.add(ground);
 
-// Soft plaza under characters
 const plaza = new THREE.Mesh(
   new THREE.PlaneGeometry(520, 220),
   new THREE.MeshBasicMaterial({ color: 0x3a4a3c }),
@@ -97,7 +107,7 @@ scene.add(plaza);
 
 const loader = new THREE.TextureLoader();
 const pickables = [];
-const byId = new Map();
+const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
 
 function pixelTexture(url) {
   return new Promise((resolve, reject) => {
@@ -116,11 +126,29 @@ function pixelTexture(url) {
   });
 }
 
+/** Screen-bottom (+Z) draws in front of screen-top (−Z). */
+function syncDepth(mesh) {
+  const z = mesh.position.z;
+  const layerBias = mesh.userData.layer === "ground" ? -10000 : 0;
+  mesh.renderOrder = Math.round(z * 10 + layerBias);
+  // Tiny Y lift by Z so overlaps resolve consistently if depthWrite on later
+  if (mesh.userData.layer !== "ground") {
+    mesh.position.y = 0.5 + z * 0.0001;
+  }
+}
+
+function defaultScale(item) {
+  if (item.scale != null) return item.scale;
+  if (item.src.includes("/buildings/")) return BUILDING_SCALE;
+  return 1;
+}
+
 function addSprite(item, tex) {
   const img = tex.image;
   const w = img.width;
   const h = img.height;
-  const geo = new THREE.PlaneGeometry(w, h);
+  const scale = defaultScale(item);
+  const geo = new THREE.PlaneGeometry(w * scale, h * scale);
   const mat = new THREE.MeshBasicMaterial({
     map: tex,
     transparent: true,
@@ -131,15 +159,19 @@ function addSprite(item, tex) {
   mesh.rotation.x = -Math.PI / 2;
   const y = item.layer === "ground" ? 0.05 : 0.5;
   mesh.position.set(item.x, y, item.z);
-  mesh.renderOrder = Math.round(1000 - item.z + (item.layer === "ground" ? -500 : 0));
   mesh.userData = {
     id: item.id,
     label: item.label || item.id,
     w,
     h,
+    scale,
     src: item.src,
-    vsRef: +(w / REF).toFixed(2),
+    layer: item.layer || "sprite",
+    vsRef: +((w * scale) / REF).toFixed(2),
+    ring: null,
   };
+  syncDepth(mesh);
+
   if (item.highlight) {
     const ring = new THREE.Mesh(
       new THREE.RingGeometry(REF * 0.55, REF * 0.62, 32),
@@ -147,31 +179,95 @@ function addSprite(item, tex) {
     );
     ring.rotation.x = -Math.PI / 2;
     ring.position.set(item.x, 0.3, item.z);
+    mesh.userData.ring = ring;
     scene.add(ring);
   }
+
   scene.add(mesh);
   pickables.push(mesh);
-  byId.set(item.id, mesh);
   return mesh;
+}
+
+function showSelection(mesh) {
+  const d = mesh.userData;
+  const scaleNote =
+    d.scale !== 1
+      ? ` · display <strong>×${d.scale}</strong> → <strong>${Math.round(d.w * d.scale)}×${Math.round(d.h * d.scale)}</strong>`
+      : "";
+  selectedEl.innerHTML =
+    `<strong>${d.label}</strong> · canvas <strong>${d.w}×${d.h}</strong>${scaleNote}` +
+    `<br/>pos <strong>x=${mesh.position.x.toFixed(0)} z=${mesh.position.z.toFixed(0)}</strong>` +
+    `<br/><span style="color:#9bb09a">drag to move · lower on screen = in front</span>`;
 }
 
 const raycaster = new THREE.Raycaster();
 const pointer = new THREE.Vector2();
+const hitPoint = new THREE.Vector3();
+let dragging = null;
+let dragOffset = new THREE.Vector3();
 
-function onPointer(event) {
+function setPointerFromEvent(event) {
   pointer.x = (event.clientX / window.innerWidth) * 2 - 1;
   pointer.y = -(event.clientY / window.innerHeight) * 2 + 1;
+}
+
+function groundHit() {
+  raycaster.setFromCamera(pointer, camera);
+  return raycaster.ray.intersectPlane(groundPlane, hitPoint) ? hitPoint : null;
+}
+
+function onPointerDown(event) {
+  if (event.button !== 0) return;
+  setPointerFromEvent(event);
   raycaster.setFromCamera(pointer, camera);
   const hits = raycaster.intersectObjects(pickables, false);
   if (!hits.length) {
-    selectedEl.textContent = "Click any asset…";
+    selectedEl.textContent = "Click / drag an asset…";
     return;
   }
-  const d = hits[0].object.userData;
-  selectedEl.innerHTML = `<strong>${d.label}</strong> · canvas <strong>${d.w}×${d.h}</strong> · vs main 92 → <strong>${d.vsRef}×</strong><br/><span style="color:#9bb09a">${d.src}</span>`;
+  const mesh = hits[0].object;
+  dragging = mesh;
+  controls.enabled = false;
+  const gp = groundHit();
+  if (gp) {
+    dragOffset.set(mesh.position.x - gp.x, 0, mesh.position.z - gp.z);
+  } else {
+    dragOffset.set(0, 0, 0);
+  }
+  showSelection(mesh);
+  renderer.domElement.setPointerCapture(event.pointerId);
 }
 
-renderer.domElement.addEventListener("pointerdown", onPointer);
+function onPointerMove(event) {
+  if (!dragging) return;
+  setPointerFromEvent(event);
+  const gp = groundHit();
+  if (!gp) return;
+  dragging.position.x = gp.x + dragOffset.x;
+  dragging.position.z = gp.z + dragOffset.z;
+  if (dragging.userData.ring) {
+    dragging.userData.ring.position.x = dragging.position.x;
+    dragging.userData.ring.position.z = dragging.position.z;
+  }
+  syncDepth(dragging);
+  showSelection(dragging);
+}
+
+function onPointerUp(event) {
+  if (!dragging) return;
+  dragging = null;
+  controls.enabled = true;
+  try {
+    renderer.domElement.releasePointerCapture(event.pointerId);
+  } catch {
+    /* ignore */
+  }
+}
+
+renderer.domElement.addEventListener("pointerdown", onPointerDown);
+renderer.domElement.addEventListener("pointermove", onPointerMove);
+renderer.domElement.addEventListener("pointerup", onPointerUp);
+renderer.domElement.addEventListener("pointercancel", onPointerUp);
 
 function onResize() {
   const a = window.innerWidth / window.innerHeight;
@@ -186,7 +282,6 @@ window.addEventListener("resize", onResize);
 
 async function boot() {
   const manifest = await fetch("./manifest.json").then((r) => r.json());
-  const root = new URL("..", import.meta.url);
   const jobs = manifest.items.map(async (item) => {
     const url = new URL(`../${item.src}`, import.meta.url).href;
     try {
@@ -197,9 +292,9 @@ async function boot() {
     }
   });
   await Promise.all(jobs);
-  selectedEl.innerHTML = `Loaded <strong>${pickables.length}</strong> sprites · reference main = <strong>${REF}px</strong>`;
-  // keep root referenced for debugging paths
-  void root;
+  selectedEl.innerHTML =
+    `Loaded <strong>${pickables.length}</strong> · buildings ×<strong>${BUILDING_SCALE}</strong> · ` +
+    `<strong>drag</strong> to move · screen-bottom draws in front`;
 }
 
 boot();

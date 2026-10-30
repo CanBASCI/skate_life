@@ -1,7 +1,8 @@
 {
   "referenceCharacterPx": 92,
-  "unit": "1 world unit = 1 sprite canvas pixel",
-  "note": "Placements use native canvas sizes so scale mismatches are visible.",
+  "unit": "1 world unit = 1 sprite canvas pixel (buildings get display scale in preview)",
+  "buildingDisplayScale": 1.85,
+  "note": "Buildings stay 256px files; preview enlarges them. Drag in preview to rearrange; screen-bottom (+Z) draws in front.",
   "items": [
     {
       "id": "road",
