@@ -113,15 +113,53 @@ const loader = new THREE.TextureLoader();
 const pickables = [];
 const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
 
-function cacheAlpha(tex) {
+/** Crop remaining transparent margin at load (handles CDN/cache + union pads). */
+function tightTrimTexture(tex, thr = 1) {
   const img = tex.image;
-  const c = document.createElement("canvas");
-  c.width = img.width;
-  c.height = img.height;
-  const g = c.getContext("2d", { willReadFrequently: true });
-  g.drawImage(img, 0, 0);
-  tex.userData = tex.userData || {};
-  tex.userData.alpha = g.getImageData(0, 0, c.width, c.height);
+  const src = document.createElement("canvas");
+  src.width = img.width;
+  src.height = img.height;
+  const sg = src.getContext("2d", { willReadFrequently: true });
+  sg.drawImage(img, 0, 0);
+  const { data, width: w, height: h } = sg.getImageData(0, 0, src.width, src.height);
+  let minx = w;
+  let miny = h;
+  let maxx = -1;
+  let maxy = -1;
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      if (data[(y * w + x) * 4 + 3] > thr) {
+        if (x < minx) minx = x;
+        if (y < miny) miny = y;
+        if (x > maxx) maxx = x;
+        if (y > maxy) maxy = y;
+      }
+    }
+  }
+  if (maxx < 0) return tex;
+  minx = Math.max(0, minx - 1);
+  miny = Math.max(0, miny - 1);
+  maxx = Math.min(w - 1, maxx + 1);
+  maxy = Math.min(h - 1, maxy + 1);
+  const tw = maxx - minx + 1;
+  const th = maxy - miny + 1;
+  if (tw === w && th === h && minx === 0 && miny === 0) {
+    tex.userData = { alpha: sg.getImageData(0, 0, w, h) };
+    return tex;
+  }
+  const out = document.createElement("canvas");
+  out.width = tw;
+  out.height = th;
+  const og = out.getContext("2d", { willReadFrequently: true });
+  og.drawImage(src, minx, miny, tw, th, 0, 0, tw, th);
+  const trimmed = new THREE.CanvasTexture(out);
+  trimmed.magFilter = THREE.NearestFilter;
+  trimmed.minFilter = THREE.NearestFilter;
+  trimmed.generateMipmaps = false;
+  trimmed.colorSpace = THREE.SRGBColorSpace;
+  trimmed.userData = { alpha: og.getImageData(0, 0, tw, th) };
+  tex.dispose();
+  return trimmed;
 }
 
 function pixelTexture(url) {
@@ -134,11 +172,11 @@ function pixelTexture(url) {
         tex.generateMipmaps = false;
         tex.colorSpace = THREE.SRGBColorSpace;
         try {
-          cacheAlpha(tex);
-        } catch {
-          /* ignore */
+          resolve(tightTrimTexture(tex));
+        } catch (err) {
+          console.warn("trim failed", url, err);
+          resolve(tex);
         }
-        resolve(tex);
       },
       undefined,
       reject,
@@ -146,17 +184,16 @@ function pixelTexture(url) {
   });
 }
 
-/** Ignore transparent padding when picking/dragging sprites. */
-function opaqueHits(hits, alphaThr = 16) {
+/** Only solid pixels count — never fall back to full quad. */
+function opaqueHits(hits, alphaThr = 8) {
   const out = [];
   for (const hit of hits) {
+    if (!hit.uv) continue;
     const map = hit.object.material?.map;
     const data = map?.userData?.alpha;
-    if (!hit.uv || !data) {
-      out.push(hit);
-      continue;
-    }
+    if (!data) continue;
     const x = Math.min(data.width - 1, Math.max(0, Math.floor(hit.uv.x * data.width)));
+    // Sprite/Mesh UV v=0 at bottom; canvas y=0 at top
     const y = Math.min(
       data.height - 1,
       Math.max(0, Math.floor((1 - hit.uv.y) * data.height)),
@@ -275,7 +312,7 @@ function onPointerDown(event) {
   if (event.button !== 0) return;
   setPointerFromEvent(event);
   raycaster.setFromCamera(pointer, camera);
-  const hits = raycaster.intersectObjects(pickables, false);
+  const hits = opaqueHits(raycaster.intersectObjects(pickables, false));
   if (!hits.length) {
     selectedEl.textContent = "Click / drag an asset…";
     return;

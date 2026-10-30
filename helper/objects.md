@@ -25,7 +25,7 @@ Keep board and character separate in assets; mounting/offset happens in game cod
 | Vehicles (day) | 168×168 → **trimmed** | `assets/vehicles/<name>/168x168/day/` |
 | Park / lights / road / animals / balls | varies → **trimmed** | `assets/props/...` |
 
-Transparent PixelLab padding is cropped with a **shared bbox across all 8 rotations** (so dirs stay aligned). `meta.json` keeps `canvasBeforeTrim` / `trimBox`. **Do not trim character animation canvases** the same way — foot/pivot alignment needs a fixed frame size.
+Transparent PixelLab padding is **tight-trimmed per rotation frame** (empty margin removed). Preview also re-trims on load and ignores transparent pixels when dragging. **Do not trim character animation canvases** the same way — foot/pivot alignment needs a fixed frame size.
 
 Buildings synced (day): singleHouse, duplexHouse, cafe, bank, hospital, gasStation, highSchool, policeStation, superMarket, library, fireStation, thePub.
 
