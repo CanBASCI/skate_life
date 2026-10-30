@@ -14,7 +14,7 @@ const DIRS = [
 const ANIM_ROOT = "../assets/characters/main/character/92x92";
 
 const SETS = {
-  idle: { base: `${ANIM_ROOT}/main/animations/idle`, frames: 4, fps: 6, loop: true },
+  idle: { base: `${ANIM_ROOT}/main/animations/idle`, frames: 4, fps: 3.5, loop: true },
   walk: { base: `${ANIM_ROOT}/main/animations/walk`, frames: 6, fps: 10, loop: true },
   run: { base: `${ANIM_ROOT}/main/animations/run`, frames: 6, fps: 12, loop: true },
   jump: { base: `${ANIM_ROOT}/main/animations/jump`, frames: 9, fps: 14, loop: false },
@@ -22,7 +22,7 @@ const SETS = {
   crouchIdle: {
     base: `${ANIM_ROOT}/states/crouch/animations/idle`,
     frames: 5,
-    fps: 6,
+    fps: 3.5,
     loop: true,
   },
   crouchWalk: {
