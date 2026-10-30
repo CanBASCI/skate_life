@@ -1,12 +1,18 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+import { Player } from "./player.js";
 
 const REF = 92;
 /** Buildings are already max PixelLab canvas (256); enlarge in-scene vs char/vehicles. */
 const BUILDING_SCALE = 1.85;
+/** Static manifest ids replaced by the controllable animated player. */
+const SKIP_STATIC_IDS = new Set(["main", "crouch"]);
 
 const selectedEl = document.getElementById("selected");
 const app = document.getElementById("app");
+let player = null;
+let lastTs = performance.now();
+let followPlayer = true;
 
 const renderer = new THREE.WebGLRenderer({
   antialias: false,
@@ -172,17 +178,6 @@ function addSprite(item, tex) {
   };
   syncDepth(mesh);
 
-  if (item.highlight) {
-    const ring = new THREE.Mesh(
-      new THREE.RingGeometry(REF * 0.55, REF * 0.62, 32),
-      new THREE.MeshBasicMaterial({ color: 0xc6e86b, transparent: true, opacity: 0.7 }),
-    );
-    ring.rotation.x = -Math.PI / 2;
-    ring.position.set(item.x, 0.3, item.z);
-    mesh.userData.ring = ring;
-    scene.add(ring);
-  }
-
   scene.add(mesh);
   pickables.push(mesh);
   return mesh;
@@ -282,26 +277,45 @@ window.addEventListener("resize", onResize);
 
 async function boot() {
   const manifest = await fetch("./manifest.json").then((r) => r.json());
-  const jobs = manifest.items.map(async (item) => {
-    const url = new URL(`../${item.src}`, import.meta.url).href;
-    try {
-      const tex = await pixelTexture(url);
-      addSprite(item, tex);
-    } catch (err) {
-      console.warn("failed", item.id, url, err);
-    }
-  });
+  const jobs = manifest.items
+    .filter((item) => !SKIP_STATIC_IDS.has(item.id))
+    .map(async (item) => {
+      const url = new URL(`../${item.src}`, import.meta.url).href;
+      try {
+        const tex = await pixelTexture(url);
+        addSprite(item, tex);
+      } catch (err) {
+        console.warn("failed", item.id, url, err);
+      }
+    });
   await Promise.all(jobs);
+
+  selectedEl.innerHTML = `Loading player animations…`;
+  player = await new Player(scene, { x: 0, z: 200, syncDepth }).load();
+  controls.target.copy(player.mesh.position);
+  camera.position.set(player.mesh.position.x, 1000, player.mesh.position.z + 0.01);
+
   selectedEl.innerHTML =
-    `Loaded <strong>${pickables.length}</strong> · buildings ×<strong>${BUILDING_SCALE}</strong> · ` +
-    `<strong>drag</strong> to move · screen-bottom draws in front`;
+    `Ready · <kbd>WASD</kbd> move · <kbd>Shift</kbd> run · <kbd>Space</kbd> jump · ` +
+    `<kbd>C</kbd> crouch · <kbd>V</kbd> vault · drag props to rearrange`;
 }
 
 boot();
 
-function tick() {
+function tick(now) {
+  const dt = Math.min(0.05, (now - lastTs) / 1000);
+  lastTs = now;
+  if (player) {
+    player.update(dt);
+    if (followPlayer && !dragging) {
+      const p = player.mesh.position;
+      controls.target.lerp(new THREE.Vector3(p.x, 0, p.z), 1 - Math.pow(0.001, dt));
+      camera.position.x = controls.target.x;
+      camera.position.z = controls.target.z + 0.01;
+    }
+  }
   controls.update();
   renderer.render(scene, camera);
   requestAnimationFrame(tick);
 }
-tick();
+requestAnimationFrame(tick);
