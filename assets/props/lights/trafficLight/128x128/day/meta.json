@@ -1,0 +1,23 @@
+{
+  "id": "2e1456d8-375f-48c0-8a95-225304148120",
+  "kind": "object",
+  "w": 128,
+  "h": 128,
+  "state": "trafficLight_Day",
+  "name": "lights",
+  "path": "assets/props/lights/trafficLight/128x128/day",
+  "canvasBeforeTrim": [
+    128,
+    128
+  ],
+  "canvasTrimmed": [
+    31,
+    107
+  ],
+  "trimBox": [
+    48,
+    10,
+    79,
+    117
+  ]
+}

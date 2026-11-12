@@ -1,0 +1,23 @@
+{
+  "id": "be0390ec-42ce-4a93-a002-4ea8c34532b2",
+  "kind": "object",
+  "w": 256,
+  "h": 256,
+  "state": "day",
+  "name": "singleHouse",
+  "path": "assets/buildings/singleHouse/256x256/day",
+  "canvasBeforeTrim": [
+    256,
+    256
+  ],
+  "canvasTrimmed": [
+    244,
+    226
+  ],
+  "trimBox": [
+    5,
+    11,
+    249,
+    237
+  ]
+}

@@ -1,0 +1,23 @@
+{
+  "id": "b0922e88-e0f0-4a16-ad16-aea1387d7bbe",
+  "kind": "object",
+  "w": 256,
+  "h": 256,
+  "state": "day",
+  "name": "Isometric high school building with yellow school",
+  "path": "assets/buildings/highSchool/256x256/day",
+  "canvasBeforeTrim": [
+    256,
+    256
+  ],
+  "canvasTrimmed": [
+    234,
+    199
+  ],
+  "trimBox": [
+    11,
+    34,
+    245,
+    233
+  ]
+}

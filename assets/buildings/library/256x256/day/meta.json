@@ -1,0 +1,23 @@
+{
+  "id": "e2af539f-1d7c-4a2e-9a61-da491b8a3e45",
+  "kind": "object",
+  "w": 256,
+  "h": 256,
+  "state": "day",
+  "name": "library",
+  "path": "assets/buildings/library/256x256/day",
+  "canvasBeforeTrim": [
+    256,
+    256
+  ],
+  "canvasTrimmed": [
+    179,
+    189
+  ],
+  "trimBox": [
+    38,
+    33,
+    217,
+    222
+  ]
+}

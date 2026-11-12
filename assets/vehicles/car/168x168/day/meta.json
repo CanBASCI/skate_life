@@ -1,0 +1,24 @@
+{
+  "id": "2537df49-4251-430c-bc7e-1f1857e6e814",
+  "kind": "object",
+  "w": 168,
+  "h": 168,
+  "state": "car_Day",
+  "name": "vehicles",
+  "path": "assets/vehicles/car/168x168/day",
+  "canvasBeforeTrim": [
+    168,
+    168
+  ],
+  "canvasTrimmed": [
+    96,
+    116
+  ],
+  "trimBox": [
+    10,
+    24,
+    157,
+    145
+  ],
+  "trimMode": "per-frame-tight"
+}
