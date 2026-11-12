@@ -1,0 +1,13 @@
+{
+  "id": "65c1cc89-05d4-4bba-8870-0cc801f83767",
+  "name": "Boy_4",
+  "state": "Sit",
+  "size": "96x96",
+  "animations": [
+    "idle"
+  ],
+  "animation_raw_names": [
+    "idle"
+  ],
+  "path": "assets/characters/boy_4/96x96/states/sit"
+}

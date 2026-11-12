@@ -1,0 +1,21 @@
+{
+  "id": "8517063e-4b34-48cf-87e7-81ef15db8499",
+  "name": "Girl_1",
+  "state": "pinkDress_Stand",
+  "size": "96x96",
+  "animations": [
+    "custom-dancing",
+    "idle",
+    "jump",
+    "run",
+    "walk"
+  ],
+  "animation_raw_names": [
+    "custom-dancing",
+    "idle",
+    "jump",
+    "running-6-frames",
+    "walking-6-frames"
+  ],
+  "path": "assets/characters/girl_1/96x96/states/pinkdress_stand"
+}

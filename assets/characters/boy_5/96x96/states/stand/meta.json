@@ -1,0 +1,21 @@
+{
+  "id": "8ac122ee-9c52-4f78-8ff3-9fcbbbe51d1a",
+  "name": "Boy_5",
+  "state": "stand",
+  "size": "96x96",
+  "animations": [
+    "custom-dancing",
+    "idle",
+    "run",
+    "two-footed-jump",
+    "walk"
+  ],
+  "animation_raw_names": [
+    "custom-dancing",
+    "idle",
+    "run",
+    "two-footed-jump",
+    "walking-6-frames"
+  ],
+  "path": "assets/characters/boy_5/96x96/states/stand"
+}

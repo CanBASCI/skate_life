@@ -1,0 +1,13 @@
+{
+  "id": "2d938614-9488-412b-af1a-bea93f38a488",
+  "name": "Girl_2",
+  "state": "sit_onGround",
+  "size": "96x96",
+  "animations": [
+    "custom-full_body_sitting_pose_on_a_ch"
+  ],
+  "animation_raw_names": [
+    "custom-full body sitting pose on a ch"
+  ],
+  "path": "assets/characters/girl_2/96x96/states/sit_onground"
+}

@@ -1,0 +1,13 @@
+{
+  "id": "130a6279-e354-4be1-9ee8-6c0f96a810ad",
+  "name": "Girl_1",
+  "state": "tenisOutfit_Sit_onGround",
+  "size": "96x96",
+  "animations": [
+    "idle"
+  ],
+  "animation_raw_names": [
+    "breathing-idle"
+  ],
+  "path": "assets/characters/girl_1/96x96/states/tenisoutfit_sit_onground"
+}

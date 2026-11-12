@@ -1,0 +1,21 @@
+{
+  "id": "41167768-8635-4bec-85b0-52e49b08910d",
+  "name": "Girl_3",
+  "state": "stand",
+  "size": "96x96",
+  "animations": [
+    "custom-dancing",
+    "idle",
+    "run",
+    "two-footed-jump",
+    "walk"
+  ],
+  "animation_raw_names": [
+    "custom-dancing",
+    "idle",
+    "run",
+    "two-footed-jump",
+    "walk"
+  ],
+  "path": "assets/characters/girl_3/96x96/states/stand"
+}

@@ -1,0 +1,13 @@
+{
+  "id": "fe050d0e-60c5-475f-8b46-db5b7357ccb6",
+  "name": "Boy_1",
+  "state": "sit chair position w",
+  "size": "96x96",
+  "animations": [
+    "idle"
+  ],
+  "animation_raw_names": [
+    "breathing-idle"
+  ],
+  "path": "assets/characters/boy_1/96x96/states/sit_chair_position_w"
+}

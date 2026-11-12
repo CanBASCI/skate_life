@@ -1,0 +1,21 @@
+{
+  "id": "7a518006-754c-4aa4-b8ad-421cca2ea331",
+  "name": "Girl_1",
+  "state": "schoolOutfit_Stand",
+  "size": "96x96",
+  "animations": [
+    "custom-dancing",
+    "idle",
+    "jump",
+    "run",
+    "walk"
+  ],
+  "animation_raw_names": [
+    "custom-dancing",
+    "idle",
+    "jump",
+    "run",
+    "walk"
+  ],
+  "path": "assets/characters/girl_1/96x96/states/schooloutfit_stand"
+}

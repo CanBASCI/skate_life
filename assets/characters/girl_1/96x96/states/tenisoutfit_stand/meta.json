@@ -1,0 +1,21 @@
+{
+  "id": "fc032c06-b493-4428-8410-fe7f2a8b1d16",
+  "name": "Girl_1",
+  "state": "tenisOutfit_Stand",
+  "size": "96x96",
+  "animations": [
+    "dance",
+    "idle",
+    "jump",
+    "run",
+    "walk"
+  ],
+  "animation_raw_names": [
+    "dance",
+    "idle",
+    "jump",
+    "running-6-frames",
+    "walk"
+  ],
+  "path": "assets/characters/girl_1/96x96/states/tenisoutfit_stand"
+}

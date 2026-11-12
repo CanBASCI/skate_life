@@ -1,0 +1,21 @@
+{
+  "id": "46c3a785-73ce-41e0-a2c9-a52438a916e8",
+  "name": "Boy_3",
+  "state": "Stand",
+  "size": "96x96",
+  "animations": [
+    "dance",
+    "idle",
+    "run",
+    "two-footed-jump",
+    "walk"
+  ],
+  "animation_raw_names": [
+    "dance",
+    "idle",
+    "run",
+    "two-footed-jump",
+    "walk"
+  ],
+  "path": "assets/characters/boy_3/96x96/states/stand"
+}

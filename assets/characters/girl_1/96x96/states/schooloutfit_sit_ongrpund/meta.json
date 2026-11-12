@@ -1,0 +1,13 @@
+{
+  "id": "dfd307b9-0fd0-4b44-8452-a7dcf07705b3",
+  "name": "Girl_1",
+  "state": "schoolOutfit_Sit_onGrpund",
+  "size": "96x96",
+  "animations": [
+    "idle"
+  ],
+  "animation_raw_names": [
+    "breathing-idle"
+  ],
+  "path": "assets/characters/girl_1/96x96/states/schooloutfit_sit_ongrpund"
+}

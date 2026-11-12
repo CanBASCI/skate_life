@@ -1,0 +1,13 @@
+{
+  "id": "1dcbdf77-7ef8-4d7f-b1ae-840bd5b29b13",
+  "name": "Girl_5",
+  "state": "Sitting on chair pos",
+  "size": "96x96",
+  "animations": [
+    "custom-sitting_on_chair_position_with"
+  ],
+  "animation_raw_names": [
+    "custom-Sitting on chair position with"
+  ],
+  "path": "assets/characters/girl_5/96x96/states/sitting_on_chair_pos"
+}

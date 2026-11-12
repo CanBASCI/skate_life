@@ -1,0 +1,13 @@
+{
+  "id": "5de7b0cf-0ddd-4eff-a5d5-99e6a75d9fd5",
+  "name": "Girl_3",
+  "state": "sit_onGround",
+  "size": "96x96",
+  "animations": [
+    "sit"
+  ],
+  "animation_raw_names": [
+    "sit"
+  ],
+  "path": "assets/characters/girl_3/96x96/states/sit_onground"
+}

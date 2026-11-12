@@ -1,7 +1,11 @@
 .env
 !.env.example
 *.pem
+.DS_Store
+.venv/
 assets/**/_archive_*/
 assets/characters/_archive_*/
 assets/objects/_archive_*/
+helper/_inventory_raw.txt
 __pycache__/
+*.pyc

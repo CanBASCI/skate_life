@@ -1,0 +1,13 @@
+{
+  "id": "fdd2f914-9a69-4bc9-939f-d61f40fc7b7c",
+  "name": "Boy_3",
+  "state": "Sit",
+  "size": "96x96",
+  "animations": [
+    "idle"
+  ],
+  "animation_raw_names": [
+    "breathing-idle"
+  ],
+  "path": "assets/characters/boy_3/96x96/states/sit"
+}

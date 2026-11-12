@@ -1,0 +1,1717 @@
+{
+  "characters": [
+    {
+      "id": "fe050d0e-60c5-475f-8b46-db5b7357ccb6",
+      "name": "Boy_1",
+      "state": "sit chair position w",
+      "size": "96x96",
+      "animations": [
+        "idle"
+      ],
+      "animation_raw_names": [
+        "breathing-idle"
+      ],
+      "path": "assets/characters/boy_1/96x96/states/sit_chair_position_w"
+    },
+    {
+      "id": "b3002319-0e25-4105-918a-09faad61493c",
+      "name": "Boy_1",
+      "state": "stand",
+      "size": "96x96",
+      "animations": [
+        "custom-dancing",
+        "idle",
+        "jump",
+        "run",
+        "walk"
+      ],
+      "animation_raw_names": [
+        "breathing-idle",
+        "custom-dancing",
+        "jump",
+        "running-6-frames",
+        "walking-6-frames"
+      ],
+      "path": "assets/characters/boy_1/96x96/states/stand"
+    },
+    {
+      "id": "fdd2f914-9a69-4bc9-939f-d61f40fc7b7c",
+      "name": "Boy_3",
+      "state": "Sit",
+      "size": "96x96",
+      "animations": [
+        "idle"
+      ],
+      "animation_raw_names": [
+        "breathing-idle"
+      ],
+      "path": "assets/characters/boy_3/96x96/states/sit"
+    },
+    {
+      "id": "46c3a785-73ce-41e0-a2c9-a52438a916e8",
+      "name": "Boy_3",
+      "state": "Stand",
+      "size": "96x96",
+      "animations": [
+        "dance",
+        "idle",
+        "run",
+        "two-footed-jump",
+        "walk"
+      ],
+      "animation_raw_names": [
+        "dance",
+        "idle",
+        "run",
+        "two-footed-jump",
+        "walk"
+      ],
+      "path": "assets/characters/boy_3/96x96/states/stand"
+    },
+    {
+      "id": "65c1cc89-05d4-4bba-8870-0cc801f83767",
+      "name": "Boy_4",
+      "state": "Sit",
+      "size": "96x96",
+      "animations": [
+        "idle"
+      ],
+      "animation_raw_names": [
+        "idle"
+      ],
+      "path": "assets/characters/boy_4/96x96/states/sit"
+    },
+    {
+      "id": "b622ad43-7fb4-4795-b6b8-454af8658003",
+      "name": "Boy_4",
+      "state": "Stand",
+      "size": "96x96",
+      "animations": [
+        "custom-dancing",
+        "idle",
+        "run",
+        "two-footed-jump",
+        "walk"
+      ],
+      "animation_raw_names": [
+        "custom-dancing",
+        "idle",
+        "run",
+        "two-footed-jump",
+        "walk"
+      ],
+      "path": "assets/characters/boy_4/96x96/states/stand"
+    },
+    {
+      "id": "ec3844b0-74cc-40ed-a067-b3c7e5c378e2",
+      "name": "Boy_5",
+      "state": "sit",
+      "size": "96x96",
+      "animations": [
+        "idle"
+      ],
+      "animation_raw_names": [
+        "idle"
+      ],
+      "path": "assets/characters/boy_5/96x96/states/sit"
+    },
+    {
+      "id": "8ac122ee-9c52-4f78-8ff3-9fcbbbe51d1a",
+      "name": "Boy_5",
+      "state": "stand",
+      "size": "96x96",
+      "animations": [
+        "custom-dancing",
+        "idle",
+        "run",
+        "two-footed-jump",
+        "walk"
+      ],
+      "animation_raw_names": [
+        "custom-dancing",
+        "idle",
+        "run",
+        "two-footed-jump",
+        "walking-6-frames"
+      ],
+      "path": "assets/characters/boy_5/96x96/states/stand"
+    },
+    {
+      "id": "3c93fe49-e329-4c29-a715-356aced9e6ae",
+      "name": "Girl_1",
+      "state": "pinkDress_Sit_onGround",
+      "size": "96x96",
+      "animations": [
+        "idle"
+      ],
+      "animation_raw_names": [
+        "idle"
+      ],
+      "path": "assets/characters/girl_1/96x96/states/pinkdress_sit_onground"
+    },
+    {
+      "id": "8517063e-4b34-48cf-87e7-81ef15db8499",
+      "name": "Girl_1",
+      "state": "pinkDress_Stand",
+      "size": "96x96",
+      "animations": [
+        "custom-dancing",
+        "idle",
+        "jump",
+        "run",
+        "walk"
+      ],
+      "animation_raw_names": [
+        "custom-dancing",
+        "idle",
+        "jump",
+        "running-6-frames",
+        "walking-6-frames"
+      ],
+      "path": "assets/characters/girl_1/96x96/states/pinkdress_stand"
+    },
+    {
+      "id": "dfd307b9-0fd0-4b44-8452-a7dcf07705b3",
+      "name": "Girl_1",
+      "state": "schoolOutfit_Sit_onGrpund",
+      "size": "96x96",
+      "animations": [
+        "idle"
+      ],
+      "animation_raw_names": [
+        "breathing-idle"
+      ],
+      "path": "assets/characters/girl_1/96x96/states/schooloutfit_sit_ongrpund"
+    },
+    {
+      "id": "7a518006-754c-4aa4-b8ad-421cca2ea331",
+      "name": "Girl_1",
+      "state": "schoolOutfit_Stand",
+      "size": "96x96",
+      "animations": [
+        "custom-dancing",
+        "idle",
+        "jump",
+        "run",
+        "walk"
+      ],
+      "animation_raw_names": [
+        "custom-dancing",
+        "idle",
+        "jump",
+        "run",
+        "walk"
+      ],
+      "path": "assets/characters/girl_1/96x96/states/schooloutfit_stand"
+    },
+    {
+      "id": "130a6279-e354-4be1-9ee8-6c0f96a810ad",
+      "name": "Girl_1",
+      "state": "tenisOutfit_Sit_onGround",
+      "size": "96x96",
+      "animations": [
+        "idle"
+      ],
+      "animation_raw_names": [
+        "breathing-idle"
+      ],
+      "path": "assets/characters/girl_1/96x96/states/tenisoutfit_sit_onground"
+    },
+    {
+      "id": "fc032c06-b493-4428-8410-fe7f2a8b1d16",
+      "name": "Girl_1",
+      "state": "tenisOutfit_Stand",
+      "size": "96x96",
+      "animations": [
+        "dance",
+        "idle",
+        "jump",
+        "run",
+        "walk"
+      ],
+      "animation_raw_names": [
+        "dance",
+        "idle",
+        "jump",
+        "running-6-frames",
+        "walk"
+      ],
+      "path": "assets/characters/girl_1/96x96/states/tenisoutfit_stand"
+    },
+    {
+      "id": "2d938614-9488-412b-af1a-bea93f38a488",
+      "name": "Girl_2",
+      "state": "sit_onGround",
+      "size": "96x96",
+      "animations": [
+        "custom-full_body_sitting_pose_on_a_ch"
+      ],
+      "animation_raw_names": [
+        "custom-full body sitting pose on a ch"
+      ],
+      "path": "assets/characters/girl_2/96x96/states/sit_onground"
+    },
+    {
+      "id": "e4b23bda-f209-4aa4-89a8-3d3b3e53f008",
+      "name": "Girl_2",
+      "state": "stand",
+      "size": "96x96",
+      "animations": [
+        "custom-dancing",
+        "idle",
+        "run",
+        "two-footed-jump",
+        "walk"
+      ],
+      "animation_raw_names": [
+        "custom-dancing",
+        "idle",
+        "run",
+        "two-footed-jump",
+        "walk"
+      ],
+      "path": "assets/characters/girl_2/96x96/states/stand"
+    },
+    {
+      "id": "5de7b0cf-0ddd-4eff-a5d5-99e6a75d9fd5",
+      "name": "Girl_3",
+      "state": "sit_onGround",
+      "size": "96x96",
+      "animations": [
+        "sit"
+      ],
+      "animation_raw_names": [
+        "sit"
+      ],
+      "path": "assets/characters/girl_3/96x96/states/sit_onground"
+    },
+    {
+      "id": "41167768-8635-4bec-85b0-52e49b08910d",
+      "name": "Girl_3",
+      "state": "stand",
+      "size": "96x96",
+      "animations": [
+        "custom-dancing",
+        "idle",
+        "run",
+        "two-footed-jump",
+        "walk"
+      ],
+      "animation_raw_names": [
+        "custom-dancing",
+        "idle",
+        "run",
+        "two-footed-jump",
+        "walk"
+      ],
+      "path": "assets/characters/girl_3/96x96/states/stand"
+    },
+    {
+      "id": "c6396571-f6dd-4062-aa13-a591aadfd9a1",
+      "name": "Girl_4",
+      "state": "sit",
+      "size": "92x92",
+      "animations": [
+        "idle"
+      ],
+      "animation_raw_names": [
+        "idle"
+      ],
+      "path": "assets/characters/girl_4/92x92/states/sit"
+    },
+    {
+      "id": "35d95c86-9637-4adc-9970-276a06657972",
+      "name": "Girl_4",
+      "state": "stand",
+      "size": "96x96",
+      "animations": [
+        "dance",
+        "idle",
+        "jump",
+        "run",
+        "walk"
+      ],
+      "animation_raw_names": [
+        "breathing-idle",
+        "dance",
+        "jump",
+        "run",
+        "walk"
+      ],
+      "path": "assets/characters/girl_4/96x96/states/stand"
+    },
+    {
+      "id": "1dcbdf77-7ef8-4d7f-b1ae-840bd5b29b13",
+      "name": "Girl_5",
+      "state": "Sitting on chair pos",
+      "size": "96x96",
+      "animations": [
+        "custom-sitting_on_chair_position_with"
+      ],
+      "animation_raw_names": [
+        "custom-Sitting on chair position with"
+      ],
+      "path": "assets/characters/girl_5/96x96/states/sitting_on_chair_pos"
+    },
+    {
+      "id": "3db79b25-5ddc-4cde-b94b-5b9cd21ef18f",
+      "name": "Girl_5",
+      "state": "stand",
+      "size": "96x96",
+      "animations": [
+        "dance",
+        "idle",
+        "jump",
+        "run",
+        "walk"
+      ],
+      "animation_raw_names": [
+        "dance",
+        "idle",
+        "jump",
+        "run",
+        "walk"
+      ],
+      "path": "assets/characters/girl_5/96x96/states/stand"
+    },
+    {
+      "id": "37ad4d45-4dfd-442e-ace5-f38ec3c83706",
+      "name": "Main Character High Top-Down 92x92",
+      "state": "main",
+      "size": "92x92",
+      "animations": [
+        "dance",
+        "idle",
+        "jump",
+        "run",
+        "vault",
+        "walk"
+      ],
+      "animation_raw_names": [
+        "dance",
+        "idle",
+        "jump",
+        "run",
+        "vault",
+        "walk"
+      ],
+      "path": "assets/characters/main/92x92/states/main"
+    },
+    {
+      "id": "5e7e61bc-1b2a-4ebf-85f4-162c4a1193dd",
+      "name": "Main Character High Top-Down 92x92",
+      "state": "main_backpackOnBackside",
+      "size": "92x92",
+      "animations": [],
+      "animation_raw_names": [],
+      "path": "assets/characters/main/92x92/states/main_backpackonbackside"
+    },
+    {
+      "id": "2ac4b002-ac42-4e12-b468-5171ed206b65",
+      "name": "Main Character High Top-Down 92x92",
+      "state": "main_blueDenimJacket_with_skateboard",
+      "size": "92x92",
+      "animations": [],
+      "animation_raw_names": [],
+      "path": "assets/characters/main/92x92/states/main_bluedenimjacket_with_skateboard"
+    },
+    {
+      "id": "12076436-e27d-4015-98b9-5875c3ecf071",
+      "name": "Main Character High Top-Down 92x92",
+      "state": "main_crouch",
+      "size": "92x92",
+      "animations": [
+        "idle",
+        "walk"
+      ],
+      "animation_raw_names": [
+        "idle",
+        "walk"
+      ],
+      "path": "assets/characters/main/92x92/states/main_crouch"
+    },
+    {
+      "id": "83a05bc7-454f-45ee-895e-170b2f44eb63",
+      "name": "Main Character High Top-Down 92x92",
+      "state": "main_footballOutfit_with_skateboard",
+      "size": "92x92",
+      "animations": [],
+      "animation_raw_names": [],
+      "path": "assets/characters/main/92x92/states/main_footballoutfit_with_skateboard"
+    },
+    {
+      "id": "2db7225c-9c99-4041-9420-b4a9cb7d1492",
+      "name": "Main Character High Top-Down 92x92",
+      "state": "main_holding the skateboa_with_skateboard",
+      "size": "92x92",
+      "animations": [],
+      "animation_raw_names": [],
+      "path": "assets/characters/main/92x92/states/main_holding_the_skateboa_with_skateboard"
+    },
+    {
+      "id": "490532ad-4201-4d13-8039-228d98491c98",
+      "name": "Main Character High Top-Down 92x92",
+      "state": "main_nbaOutfit_with_skateboard",
+      "size": "92x92",
+      "animations": [],
+      "animation_raw_names": [],
+      "path": "assets/characters/main/92x92/states/main_nbaoutfit_with_skateboard"
+    },
+    {
+      "id": "8e201d38-94e6-4fc1-b196-0d04f51a3046",
+      "name": "Main Character High Top-Down 92x92",
+      "state": "main_playFootballOutfit",
+      "size": "92x92",
+      "animations": [],
+      "animation_raw_names": [],
+      "path": "assets/characters/main/92x92/states/main_playfootballoutfit"
+    },
+    {
+      "id": "82a5ecf5-0b39-4edb-a260-1f84ec18dfa1",
+      "name": "Main Character High Top-Down 92x92",
+      "state": "main_sit",
+      "size": "92x92",
+      "animations": [
+        "idle"
+      ],
+      "animation_raw_names": [
+        "idle"
+      ],
+      "path": "assets/characters/main/92x92/states/main_sit"
+    },
+    {
+      "id": "2be6dc14-97ed-493e-b32c-3f9d26ac1d5c",
+      "name": "Main Character High Top-Down 92x92",
+      "state": "main_skate",
+      "size": "92x92",
+      "animations": [
+        "skate-idle"
+      ],
+      "animation_raw_names": [
+        "skate-idle"
+      ],
+      "path": "assets/characters/main/92x92/states/main_skate"
+    }
+  ],
+  "objects": [
+    {
+      "id": "df82558b-9c85-4598-95df-3f2223d94ca0",
+      "name": "5floorBuilding",
+      "state": "day",
+      "size": "256x256",
+      "path": "assets/buildings/5floorbuilding/256x256/day"
+    },
+    {
+      "id": "0b7c59bf-bfd0-4336-9190-0d680b8e38f4",
+      "name": "5floorBuilding",
+      "state": "night",
+      "size": "256x256",
+      "path": "assets/buildings/5floorbuilding/256x256/night"
+    },
+    {
+      "id": "e7f357cb-164e-4142-8939-18e76f6bd19d",
+      "name": "Isometric high school bui...",
+      "state": "night",
+      "size": "256x256",
+      "path": "assets/buildings/highSchool/256x256/night"
+    },
+    {
+      "id": "b0922e88-e0f0-4a16-ad16-aea1387d7bbe",
+      "kind": "object",
+      "w": 256,
+      "h": 256,
+      "state": "day",
+      "name": "Isometric high school building with yellow school",
+      "path": "assets/buildings/highSchool/256x256/day",
+      "canvasBeforeTrim": [
+        256,
+        256
+      ],
+      "canvasTrimmed": [
+        234,
+        199
+      ],
+      "trimBox": [
+        11,
+        34,
+        245,
+        233
+      ]
+    },
+    {
+      "id": "81afdafa-e299-423d-ba43-372176109707",
+      "name": "Isometric police station ...",
+      "state": "night",
+      "size": "256x256",
+      "path": "assets/buildings/policeStation/256x256/night"
+    },
+    {
+      "id": "9c8cbd08-8ae0-44b3-a6b7-ce732a51bb78",
+      "kind": "object",
+      "w": 256,
+      "h": 256,
+      "state": "day",
+      "name": "Isometric police station building with patrol cars",
+      "path": "assets/buildings/policeStation/256x256/day",
+      "canvasBeforeTrim": [
+        256,
+        256
+      ],
+      "canvasTrimmed": [
+        241,
+        200
+      ],
+      "trimBox": [
+        8,
+        30,
+        249,
+        230
+      ]
+    },
+    {
+      "id": "1bd2c765-5ffd-41db-adcd-fce626c69078",
+      "name": "Isometric university camp...",
+      "state": "day",
+      "size": "256x256",
+      "path": "assets/buildings/university/256x256/day"
+    },
+    {
+      "id": "8867bae4-5617-477a-8671-661e20e29879",
+      "name": "Isometric university camp...",
+      "state": "night",
+      "size": "256x256",
+      "path": "assets/buildings/university/256x256/night"
+    },
+    {
+      "id": "8a4c6583-69fc-4dec-937d-de0a5655415d",
+      "name": "airport",
+      "state": "day",
+      "size": "256x256",
+      "path": "assets/buildings/airport/256x256/day"
+    },
+    {
+      "id": "9bf60b9e-bd2e-4371-aa4e-d4ac48a947fd",
+      "name": "airport",
+      "state": "night",
+      "size": "256x256",
+      "path": "assets/buildings/airport/256x256/night"
+    },
+    {
+      "id": "da2228e3-2441-4187-9f89-2c8fd1c46d14",
+      "name": "amusementPark",
+      "state": "day",
+      "size": "256x256",
+      "path": "assets/buildings/amusementpark/256x256/day"
+    },
+    {
+      "id": "a6d52778-0bac-4fb5-91b2-229084f0f78f",
+      "name": "amusementPark",
+      "state": "night",
+      "size": "256x256",
+      "path": "assets/buildings/amusementpark/256x256/night"
+    },
+    {
+      "id": "a141d75e-bf04-42f9-88e8-d94a70cde90e",
+      "name": "balls",
+      "state": "baskerball_Night",
+      "size": "32x32",
+      "path": "assets/props/balls/baskerball/32x32/night"
+    },
+    {
+      "id": "0c185fd2-fd73-45b5-9215-dc0ef23c3381",
+      "kind": "object",
+      "w": 32,
+      "h": 32,
+      "state": "basketball_Day",
+      "name": "balls",
+      "path": "assets/props/balls/basketball/32x32/day",
+      "canvasBeforeTrim": [
+        32,
+        32
+      ],
+      "canvasTrimmed": [
+        22,
+        22
+      ],
+      "trimBox": [
+        5,
+        6,
+        27,
+        28
+      ]
+    },
+    {
+      "id": "bc9c4190-994f-4710-9061-2e97aea39d23",
+      "kind": "object",
+      "w": 32,
+      "h": 32,
+      "state": "football_Day",
+      "name": "balls",
+      "path": "assets/props/balls/football/32x32/day",
+      "canvasBeforeTrim": [
+        32,
+        32
+      ],
+      "canvasTrimmed": [
+        20,
+        20
+      ],
+      "trimBox": [
+        6,
+        6,
+        26,
+        26
+      ]
+    },
+    {
+      "id": "2b29e57c-be2f-4672-aaa1-49495f6e997a",
+      "name": "balls",
+      "state": "football_Night",
+      "size": "32x32",
+      "path": "assets/props/balls/football/32x32/night"
+    },
+    {
+      "id": "0406ea49-229e-4946-8418-3a3ddbfc8f25",
+      "kind": "object",
+      "w": 256,
+      "h": 256,
+      "state": "day",
+      "name": "bank",
+      "path": "assets/buildings/bank/256x256/day",
+      "canvasBeforeTrim": [
+        256,
+        256
+      ],
+      "canvasTrimmed": [
+        206,
+        204
+      ],
+      "trimBox": [
+        24,
+        26,
+        230,
+        230
+      ]
+    },
+    {
+      "id": "98837aee-b928-4621-9a7b-79fefa67f7e8",
+      "name": "bank",
+      "state": "night",
+      "size": "256x256",
+      "path": "assets/buildings/bank/256x256/night"
+    },
+    {
+      "id": "9dd50541-5bbf-4d82-89b5-1f1363aa08ab",
+      "name": "basketballCourt",
+      "state": "day",
+      "size": "256x256",
+      "path": "assets/buildings/basketballcourt/256x256/day"
+    },
+    {
+      "id": "1ff23ac0-3c26-4ecc-bb47-b0503077cc2c",
+      "name": "basketballCourt",
+      "state": "night",
+      "size": "256x256",
+      "path": "assets/buildings/basketballcourt/256x256/night"
+    },
+    {
+      "id": "44027b94-9b54-411b-a1b4-5bc5f4876033",
+      "kind": "object",
+      "w": 256,
+      "h": 256,
+      "state": "day",
+      "name": "cafe",
+      "path": "assets/buildings/cafe/256x256/day",
+      "canvasBeforeTrim": [
+        256,
+        256
+      ],
+      "canvasTrimmed": [
+        212,
+        203
+      ],
+      "trimBox": [
+        19,
+        28,
+        231,
+        231
+      ]
+    },
+    {
+      "id": "25cf0eac-7509-431d-a1b7-42d4e8820505",
+      "name": "cafe",
+      "state": "night",
+      "size": "256x256",
+      "path": "assets/buildings/cafe/256x256/night"
+    },
+    {
+      "id": "2f9331ed-8788-4e18-bd34-96edb8a79a7b",
+      "name": "casino",
+      "state": "day",
+      "size": "256x256",
+      "path": "assets/buildings/casino/256x256/day"
+    },
+    {
+      "id": "f1563910-3916-4f82-8d9f-b309aa0139d9",
+      "name": "casino",
+      "state": "night",
+      "size": "256x256",
+      "path": "assets/buildings/casino/256x256/night"
+    },
+    {
+      "id": "b1586fdd-981a-4030-942a-8524e2a1b05e",
+      "name": "cinema",
+      "state": "day",
+      "size": "256x256",
+      "path": "assets/buildings/cinema/256x256/day"
+    },
+    {
+      "id": "1968dcca-f551-48cc-b6c7-124433e0efeb",
+      "name": "cinema",
+      "state": "night",
+      "size": "256x256",
+      "path": "assets/buildings/cinema/256x256/night"
+    },
+    {
+      "id": "699a9d54-013d-4c50-b532-5fd3fa9dcbd3",
+      "name": "courthouse",
+      "state": "day",
+      "size": "256x256",
+      "path": "assets/buildings/courthouse/256x256/day"
+    },
+    {
+      "id": "137ca006-7015-4bec-9e7b-cac27a52b93a",
+      "name": "courthouse",
+      "state": "night",
+      "size": "256x256",
+      "path": "assets/buildings/courthouse/256x256/night"
+    },
+    {
+      "id": "2fed03e6-e1f5-4b1d-8425-768bc9da3feb",
+      "kind": "object",
+      "w": 256,
+      "h": 256,
+      "state": "day",
+      "name": "duplexHouse",
+      "path": "assets/buildings/duplexHouse/256x256/day",
+      "canvasBeforeTrim": [
+        256,
+        256
+      ],
+      "canvasTrimmed": [
+        235,
+        212
+      ],
+      "trimBox": [
+        10,
+        26,
+        245,
+        238
+      ]
+    },
+    {
+      "id": "983a3d39-1403-4701-828f-7c4afb5c7243",
+      "name": "duplexHouse",
+      "state": "night",
+      "size": "256x256",
+      "path": "assets/buildings/duplexhouse/256x256/night"
+    },
+    {
+      "id": "91b402ff-921d-4b42-8ad4-d29fea8e3bce",
+      "kind": "object",
+      "w": 256,
+      "h": 256,
+      "state": "day",
+      "name": "fireStation",
+      "path": "assets/buildings/fireStation/256x256/day",
+      "canvasBeforeTrim": [
+        256,
+        256
+      ],
+      "canvasTrimmed": [
+        202,
+        213
+      ],
+      "trimBox": [
+        26,
+        23,
+        228,
+        236
+      ]
+    },
+    {
+      "id": "7fbcd512-e4de-4e8f-932c-068d1bf0ff6f",
+      "name": "fireStation",
+      "state": "night",
+      "size": "256x256",
+      "path": "assets/buildings/firestation/256x256/night"
+    },
+    {
+      "id": "dff92434-3ba0-4d93-b684-aac6889cd611",
+      "name": "footballStadium",
+      "state": "day",
+      "size": "256x256",
+      "path": "assets/buildings/footballstadium/256x256/day"
+    },
+    {
+      "id": "c369eff4-41c6-4779-8fdd-252df4f16dce",
+      "name": "footballStadium",
+      "state": "night",
+      "size": "256x256",
+      "path": "assets/buildings/footballstadium/256x256/night"
+    },
+    {
+      "id": "bb449830-8304-4d45-991f-b44212e02644",
+      "name": "gas station, vibrant vivi...",
+      "state": null,
+      "size": "256x256",
+      "path": "assets/objects/misc/gas_station_vibrant_vivi/256x256/default"
+    },
+    {
+      "id": "d0a4ec51-8dae-4fbf-a6f1-6e3e57b60ce6",
+      "kind": "object",
+      "w": 256,
+      "h": 256,
+      "state": "day",
+      "name": "gasStation",
+      "path": "assets/buildings/gasStation/256x256/day",
+      "canvasBeforeTrim": [
+        256,
+        256
+      ],
+      "canvasTrimmed": [
+        243,
+        201
+      ],
+      "trimBox": [
+        6,
+        31,
+        249,
+        232
+      ]
+    },
+    {
+      "id": "3a709fdf-b58a-4f2c-a8cd-3544f199e04e",
+      "name": "gasStation",
+      "state": "night",
+      "size": "256x256",
+      "path": "assets/buildings/gasstation/256x256/night"
+    },
+    {
+      "id": "6a1d396b-14c8-4d76-9cb1-29a2a5e661c3",
+      "name": "gasStation2",
+      "state": "day",
+      "size": "256x256",
+      "path": "assets/buildings/gasstation2/256x256/day"
+    },
+    {
+      "id": "e80576b0-544f-4d5b-b625-2d2d7eaa3e95",
+      "name": "gasStation2",
+      "state": "night",
+      "size": "256x256",
+      "path": "assets/buildings/gasstation2/256x256/night"
+    },
+    {
+      "id": "f7a5e41f-1703-4bdc-8e88-1f7b39cdb19b",
+      "name": "gasStation3",
+      "state": "day",
+      "size": "256x256",
+      "path": "assets/buildings/gasstation3/256x256/day"
+    },
+    {
+      "id": "de175ded-0dbf-4034-bd5e-8bd35f8d9492",
+      "name": "gasStation3",
+      "state": "night",
+      "size": "256x256",
+      "path": "assets/buildings/gasstation3/256x256/night"
+    },
+    {
+      "id": "1274521f-d03d-4dbb-9706-0ccfa317a3b1",
+      "name": "gothicChurch",
+      "state": "day",
+      "size": "256x256",
+      "path": "assets/buildings/gothicchurch/256x256/day"
+    },
+    {
+      "id": "1bf0bbb9-4988-44d1-9419-5b72f7b686f2",
+      "name": "gothicChurch",
+      "state": "night",
+      "size": "256x256",
+      "path": "assets/buildings/gothicchurch/256x256/night"
+    },
+    {
+      "id": "456f3674-01d2-4c94-b66f-0dff2a4af083",
+      "kind": "object",
+      "w": 256,
+      "h": 256,
+      "state": "day",
+      "name": "hospital",
+      "path": "assets/buildings/hospital/256x256/day",
+      "canvasBeforeTrim": [
+        256,
+        256
+      ],
+      "canvasTrimmed": [
+        213,
+        199
+      ],
+      "trimBox": [
+        24,
+        30,
+        237,
+        229
+      ]
+    },
+    {
+      "id": "e7e0ff0e-b43f-4060-8ef3-09386f906827",
+      "name": "hospital",
+      "state": "night",
+      "size": "256x256",
+      "path": "assets/buildings/hospital/256x256/night"
+    },
+    {
+      "id": "e47fe1f5-6b5f-4e20-9574-a23858a749e7",
+      "name": "inside",
+      "state": null,
+      "size": "256x256",
+      "path": "assets/interiors/inside/256x256/default"
+    },
+    {
+      "id": "e2af539f-1d7c-4a2e-9a61-da491b8a3e45",
+      "kind": "object",
+      "w": 256,
+      "h": 256,
+      "state": "day",
+      "name": "library",
+      "path": "assets/buildings/library/256x256/day",
+      "canvasBeforeTrim": [
+        256,
+        256
+      ],
+      "canvasTrimmed": [
+        179,
+        189
+      ],
+      "trimBox": [
+        38,
+        33,
+        217,
+        222
+      ]
+    },
+    {
+      "id": "b757e05b-710c-4e24-a4be-a2d40801e415",
+      "name": "library",
+      "state": "night",
+      "size": "256x256",
+      "path": "assets/buildings/library/256x256/night"
+    },
+    {
+      "id": "2e1456d8-375f-48c0-8a95-225304148120",
+      "kind": "object",
+      "w": 128,
+      "h": 128,
+      "state": "trafficLight_Day",
+      "name": "lights",
+      "path": "assets/props/lights/trafficLight/128x128/day",
+      "canvasBeforeTrim": [
+        128,
+        128
+      ],
+      "canvasTrimmed": [
+        31,
+        107
+      ],
+      "trimBox": [
+        48,
+        10,
+        79,
+        117
+      ]
+    },
+    {
+      "id": "481512f5-24e6-4e36-afb3-cdc3d1656ea3",
+      "name": "lights",
+      "state": "trafficLight_Night",
+      "size": "128x128",
+      "path": "assets/props/lights/trafficlight/128x128/night"
+    },
+    {
+      "id": "7d3aa23b-e62d-46db-b65c-2d2aeae3be25",
+      "name": "modernLuxuryVilla",
+      "state": "day",
+      "size": "256x256",
+      "path": "assets/buildings/modernluxuryvilla/256x256/day"
+    },
+    {
+      "id": "2755816a-5ff8-4ff3-ba87-e228c33b8b81",
+      "name": "modernLuxuryVilla",
+      "state": "night",
+      "size": "256x256",
+      "path": "assets/buildings/modernluxuryvilla/256x256/night"
+    },
+    {
+      "id": "fc89964d-78d9-4d58-8cb1-178633ef63ca",
+      "name": "nightClub",
+      "state": "day",
+      "size": "256x256",
+      "path": "assets/buildings/nightclub/256x256/day"
+    },
+    {
+      "id": "3f2c9bc3-0e35-43d2-a829-b2d306108694",
+      "name": "nightClub",
+      "state": "night",
+      "size": "256x256",
+      "path": "assets/buildings/nightclub/256x256/night"
+    },
+    {
+      "id": "9031a7cf-e8bd-4f36-b6cf-4dce2129440a",
+      "name": "night_club_inside",
+      "state": null,
+      "size": "256x256",
+      "path": "assets/interiors/night_club_inside/256x256/default"
+    },
+    {
+      "id": "5e384d8a-a9ac-42c8-b27e-0165adc0d670",
+      "name": "nightclub interior, wide ...",
+      "state": null,
+      "size": "256x256",
+      "path": "assets/interiors/nightclub_interior_wide/256x256/default"
+    },
+    {
+      "id": "468b842d-e086-4352-866e-50288fc0b035",
+      "kind": "object",
+      "w": 96,
+      "h": 96,
+      "state": "bench_Day",
+      "name": "outdoorPark",
+      "path": "assets/props/outdoorPark/bench/96x96/day",
+      "canvasBeforeTrim": [
+        96,
+        96
+      ],
+      "canvasTrimmed": [
+        88,
+        83
+      ],
+      "trimBox": [
+        4,
+        7,
+        92,
+        90
+      ]
+    },
+    {
+      "id": "66b33123-ec87-4a5a-a7f3-315b4074d086",
+      "name": "outdoorPark",
+      "state": "bench_Night",
+      "size": "96x96",
+      "path": "assets/props/outdoorpark/bench/96x96/night"
+    },
+    {
+      "id": "fddfeb71-0299-4ed1-8581-eb5da7545b49",
+      "kind": "object",
+      "w": 96,
+      "h": 96,
+      "state": "table_Day",
+      "name": "outdoorPark",
+      "path": "assets/props/outdoorPark/table/96x96/day",
+      "canvasBeforeTrim": [
+        96,
+        96
+      ],
+      "canvasTrimmed": [
+        87,
+        83
+      ],
+      "trimBox": [
+        5,
+        7,
+        92,
+        90
+      ]
+    },
+    {
+      "id": "3f766d55-ce97-427e-8609-3b7cfab3d1f3",
+      "name": "outdoorPark",
+      "state": "table_Night",
+      "size": "96x96",
+      "path": "assets/props/outdoorpark/table/96x96/night"
+    },
+    {
+      "id": "bb3f3793-d960-4e7d-bb75-211cf6608ac1",
+      "name": "petShop",
+      "state": "day",
+      "size": "256x256",
+      "path": "assets/buildings/petshop/256x256/day"
+    },
+    {
+      "id": "32c529fe-02c6-4cb3-85b8-375470487ce0",
+      "name": "petShop",
+      "state": "night",
+      "size": "256x256",
+      "path": "assets/buildings/petshop/256x256/night"
+    },
+    {
+      "id": "0999ff4c-83b5-470b-9124-8dad14bace43",
+      "name": "postOffice",
+      "state": "day",
+      "size": "256x256",
+      "path": "assets/buildings/postoffice/256x256/day"
+    },
+    {
+      "id": "d0044132-7246-48c0-9216-3a604f3fda3f",
+      "name": "postOffice",
+      "state": "night",
+      "size": "256x256",
+      "path": "assets/buildings/postoffice/256x256/night"
+    },
+    {
+      "id": "487ec03a-3466-48fe-90c4-2b1c2ac5c35c",
+      "name": "road",
+      "state": "bridge_Day",
+      "size": "256x256",
+      "path": "assets/props/road/bridge/256x256/day"
+    },
+    {
+      "id": "38523cda-b29d-4d3d-9b50-66f2eb24b997",
+      "name": "road",
+      "state": "bridge_Night",
+      "size": "256x256",
+      "path": "assets/props/road/bridge/256x256/night"
+    },
+    {
+      "id": "855407f6-1092-4800-af78-9f1dead2af55",
+      "kind": "object",
+      "w": 256,
+      "h": 256,
+      "state": "road_Day",
+      "name": "road",
+      "path": "assets/props/road/road/256x256/day",
+      "canvasBeforeTrim": [
+        256,
+        256
+      ],
+      "canvasTrimmed": [
+        256,
+        205
+      ],
+      "trimBox": [
+        0,
+        22,
+        256,
+        227
+      ]
+    },
+    {
+      "id": "18eb27e9-632e-42db-a6a3-7efad873c2ed",
+      "name": "road",
+      "state": "road_Night",
+      "size": "256x256",
+      "path": "assets/props/road/road/256x256/night"
+    },
+    {
+      "id": "68e39e19-eb3e-4552-9a09-ddc77425e27d",
+      "name": "side view side-scroller n...",
+      "state": null,
+      "size": "256x256",
+      "path": "assets/interiors/side_view_side-scroller_n/256x256/default"
+    },
+    {
+      "id": "be0390ec-42ce-4a93-a002-4ea8c34532b2",
+      "kind": "object",
+      "w": 256,
+      "h": 256,
+      "state": "day",
+      "name": "singleHouse",
+      "path": "assets/buildings/singleHouse/256x256/day",
+      "canvasBeforeTrim": [
+        256,
+        256
+      ],
+      "canvasTrimmed": [
+        244,
+        226
+      ],
+      "trimBox": [
+        5,
+        11,
+        249,
+        237
+      ]
+    },
+    {
+      "id": "a8553739-adc7-4655-98c8-4991ed870989",
+      "name": "singleHouse",
+      "state": "night",
+      "size": "256x256",
+      "path": "assets/buildings/singlehouse/256x256/night"
+    },
+    {
+      "id": "aa7c55db-4c5b-4b90-919a-47d29833c336",
+      "name": "skateboard",
+      "state": null,
+      "size": "68x68",
+      "path": "assets/objects/skateboard/68x68/default"
+    },
+    {
+      "id": "abc05c2b-a10a-470f-9737-c55ad4abdb5e",
+      "name": "smallAnimals",
+      "state": "bird_2",
+      "size": "32x32",
+      "path": "assets/props/smallanimals/bird_2/32x32/default"
+    },
+    {
+      "id": "db23110f-481a-4f79-9a7c-98a6b99ddb5e",
+      "kind": "object",
+      "w": 32,
+      "h": 32,
+      "state": "bird_Day",
+      "name": "smallAnimals",
+      "path": "assets/props/smallAnimals/bird/32x32/day",
+      "canvasBeforeTrim": [
+        32,
+        32
+      ],
+      "canvasTrimmed": [
+        31,
+        30
+      ],
+      "trimBox": [
+        1,
+        1,
+        32,
+        31
+      ]
+    },
+    {
+      "id": "092ad00e-5a43-4e1c-9137-a539f68bfafd",
+      "name": "smallAnimals",
+      "state": "cat_2",
+      "size": "32x32",
+      "path": "assets/props/smallanimals/cat_2/32x32/default"
+    },
+    {
+      "id": "cd14dafa-9503-4a04-8d08-3dae5b794566",
+      "kind": "object",
+      "w": 32,
+      "h": 32,
+      "state": "cat_Day",
+      "name": "smallAnimals",
+      "path": "assets/props/smallAnimals/cat/32x32/day",
+      "canvasBeforeTrim": [
+        32,
+        32
+      ],
+      "canvasTrimmed": [
+        31,
+        30
+      ],
+      "trimBox": [
+        1,
+        1,
+        32,
+        31
+      ]
+    },
+    {
+      "id": "61e1b125-a232-426f-a44e-813b6637b383",
+      "name": "smallAnimals",
+      "state": "dog_2",
+      "size": "32x32",
+      "path": "assets/props/smallanimals/dog_2/32x32/default"
+    },
+    {
+      "id": "9729f0de-2b0b-413a-b3f6-d46ab6f543e9",
+      "name": "smallAnimals",
+      "state": "dog_3",
+      "size": "32x32",
+      "path": "assets/props/smallanimals/dog_3/32x32/default"
+    },
+    {
+      "id": "86dc40d3-5d28-4c56-812a-e9bb26e8a159",
+      "kind": "object",
+      "w": 32,
+      "h": 32,
+      "state": "dog_Day",
+      "name": "smallAnimals",
+      "path": "assets/props/smallAnimals/dog/32x32/day",
+      "canvasBeforeTrim": [
+        32,
+        32
+      ],
+      "canvasTrimmed": [
+        30,
+        30
+      ],
+      "trimBox": [
+        1,
+        1,
+        31,
+        31
+      ]
+    },
+    {
+      "id": "f8481f4a-0a7a-4fb6-aae6-300dcda9c4a4",
+      "kind": "object",
+      "w": 256,
+      "h": 256,
+      "state": "day",
+      "name": "superMarket",
+      "path": "assets/buildings/superMarket/256x256/day",
+      "canvasBeforeTrim": [
+        256,
+        256
+      ],
+      "canvasTrimmed": [
+        251,
+        199
+      ],
+      "trimBox": [
+        2,
+        34,
+        253,
+        233
+      ]
+    },
+    {
+      "id": "eb83f020-39e4-41e5-bb7c-b7280a1d95d4",
+      "name": "superMarket",
+      "state": "night",
+      "size": "256x256",
+      "path": "assets/buildings/supermarket/256x256/night"
+    },
+    {
+      "id": "eb6b77d9-67b3-4e7d-b5ca-6868349a0e6b",
+      "name": "tennisCourt",
+      "state": "day",
+      "size": "256x256",
+      "path": "assets/buildings/tenniscourt/256x256/day"
+    },
+    {
+      "id": "c6390431-8000-4e87-97ce-320ef04df261",
+      "name": "tennisCourt",
+      "state": "night",
+      "size": "256x256",
+      "path": "assets/buildings/tenniscourt/256x256/night"
+    },
+    {
+      "id": "e6ec0c81-340f-4ba5-8303-af38df5fc11e",
+      "kind": "object",
+      "w": 256,
+      "h": 256,
+      "state": "day",
+      "name": "thePub",
+      "path": "assets/buildings/thePub/256x256/day",
+      "canvasBeforeTrim": [
+        256,
+        256
+      ],
+      "canvasTrimmed": [
+        224,
+        214
+      ],
+      "trimBox": [
+        16,
+        20,
+        240,
+        234
+      ]
+    },
+    {
+      "id": "18f86e0a-45c3-4285-b7fb-6fbed72161a4",
+      "name": "thePub",
+      "state": "night",
+      "size": "256x256",
+      "path": "assets/buildings/thepub/256x256/night"
+    },
+    {
+      "id": "e1ae6852-b7ab-47ad-bf95-960faa850bd4",
+      "name": "theater",
+      "state": "day",
+      "size": "256x256",
+      "path": "assets/buildings/theater/256x256/day"
+    },
+    {
+      "id": "a379eb9b-16a0-40f0-b574-d55a58f18077",
+      "name": "theater",
+      "state": "night",
+      "size": "256x256",
+      "path": "assets/buildings/theater/256x256/night"
+    },
+    {
+      "id": "329fa067-eb56-491d-b470-1251fc17f03f",
+      "name": "vehicles",
+      "state": "amblance_Night",
+      "size": "168x168",
+      "path": "assets/vehicles/amblance/168x168/night"
+    },
+    {
+      "id": "7752487f-fd99-433c-abda-b15364885caa",
+      "kind": "object",
+      "w": 168,
+      "h": 168,
+      "state": "ambulance_Day",
+      "name": "vehicles",
+      "path": "assets/vehicles/ambulance/168x168/day",
+      "canvasBeforeTrim": [
+        168,
+        168
+      ],
+      "canvasTrimmed": [
+        74,
+        129
+      ],
+      "trimBox": [
+        2,
+        11,
+        164,
+        149
+      ],
+      "trimMode": "per-frame-tight"
+    },
+    {
+      "id": "38046849-2689-4e3a-aef3-f907b1603df5",
+      "name": "vehicles",
+      "state": "americanSchoolBus_Day",
+      "size": "168x168",
+      "path": "assets/vehicles/americanschoolbus/168x168/day"
+    },
+    {
+      "id": "0ec13038-daeb-4dbb-a1bd-999d1f3d6ea5",
+      "name": "vehicles",
+      "state": "americanSchoolBus_Night",
+      "size": "168x168",
+      "path": "assets/vehicles/americanschoolbus/168x168/night"
+    },
+    {
+      "id": "34ae5e0f-8af8-4469-872b-7589ecd483b3",
+      "name": "vehicles",
+      "state": "car_2_Day",
+      "size": "168x168",
+      "path": "assets/vehicles/car_2/168x168/day"
+    },
+    {
+      "id": "e3135b16-8670-49a6-af81-8c0d4da64f4d",
+      "name": "vehicles",
+      "state": "car_2_Night",
+      "size": "168x168",
+      "path": "assets/vehicles/car_2/168x168/night"
+    },
+    {
+      "id": "0e527171-dc2f-4862-8d17-61ecfedffb50",
+      "name": "vehicles",
+      "state": "car_3_Day",
+      "size": "168x168",
+      "path": "assets/vehicles/car_3/168x168/day"
+    },
+    {
+      "id": "7181a582-7a7a-4b48-8f3b-4c45eb57ee8c",
+      "name": "vehicles",
+      "state": "car_3_Night",
+      "size": "168x168",
+      "path": "assets/vehicles/car_3/168x168/night"
+    },
+    {
+      "id": "13c42195-bbfd-4cfe-bae3-f0849237fb24",
+      "name": "vehicles",
+      "state": "car_4_Day",
+      "size": "168x168",
+      "path": "assets/vehicles/car_4/168x168/day"
+    },
+    {
+      "id": "24022396-76ef-4eb7-8383-0344264c5714",
+      "name": "vehicles",
+      "state": "car_4_Night",
+      "size": "168x168",
+      "path": "assets/vehicles/car_4/168x168/night"
+    },
+    {
+      "id": "cca460f0-2ff7-4a21-8624-9b092347d504",
+      "name": "vehicles",
+      "state": "car_5_Day",
+      "size": "168x168",
+      "path": "assets/vehicles/car_5/168x168/day"
+    },
+    {
+      "id": "1b1b3d35-e352-409a-907a-dd94cdd13ef1",
+      "name": "vehicles",
+      "state": "car_5_Night",
+      "size": "168x168",
+      "path": "assets/vehicles/car_5/168x168/night"
+    },
+    {
+      "id": "2537df49-4251-430c-bc7e-1f1857e6e814",
+      "kind": "object",
+      "w": 168,
+      "h": 168,
+      "state": "car_Day",
+      "name": "vehicles",
+      "path": "assets/vehicles/car/168x168/day",
+      "canvasBeforeTrim": [
+        168,
+        168
+      ],
+      "canvasTrimmed": [
+        96,
+        116
+      ],
+      "trimBox": [
+        10,
+        24,
+        157,
+        145
+      ],
+      "trimMode": "per-frame-tight"
+    },
+    {
+      "id": "8e857539-f9ab-47c2-b0b8-a0c689f90948",
+      "name": "vehicles",
+      "state": "car_Night",
+      "size": "168x168",
+      "path": "assets/vehicles/car/168x168/night"
+    },
+    {
+      "id": "1c4eb834-aa56-4204-90fa-4d787de7efd6",
+      "name": "vehicles",
+      "state": "fishingBoat_Day",
+      "size": "168x168",
+      "path": "assets/vehicles/fishingboat/168x168/day"
+    },
+    {
+      "id": "40600f4f-4cc5-48d8-985d-a0c3538331c9",
+      "name": "vehicles",
+      "state": "fishingBoat_Night",
+      "size": "168x168",
+      "path": "assets/vehicles/fishingboat/168x168/night"
+    },
+    {
+      "id": "57887af1-6edf-40bb-8185-1d482694e894",
+      "kind": "object",
+      "w": 168,
+      "h": 168,
+      "state": "jeep_Day",
+      "name": "vehicles",
+      "path": "assets/vehicles/jeep/168x168/day",
+      "canvasBeforeTrim": [
+        168,
+        168
+      ],
+      "canvasTrimmed": [
+        83,
+        119
+      ],
+      "trimBox": [
+        10,
+        21,
+        157,
+        148
+      ],
+      "trimMode": "per-frame-tight"
+    },
+    {
+      "id": "3f418965-9f59-4e74-b717-d6c8fd1b9c4c",
+      "name": "vehicles",
+      "state": "motorboat_Day",
+      "size": "168x168",
+      "path": "assets/vehicles/motorboat/168x168/day"
+    },
+    {
+      "id": "e40aa23a-40e7-4ab7-9feb-6ab20affac1b",
+      "name": "vehicles",
+      "state": "motorboat_Night",
+      "size": "168x168",
+      "path": "assets/vehicles/motorboat/168x168/night"
+    },
+    {
+      "id": "135b524b-9c78-4076-9ad6-e5bf13c9c4f8",
+      "name": "vehicles",
+      "state": "passenger_ferry_Day",
+      "size": "168x168",
+      "path": "assets/vehicles/passenger_ferry/168x168/day"
+    },
+    {
+      "id": "0fae2a21-0f62-4509-97dd-8937c1df6f1a",
+      "name": "vehicles",
+      "state": "passenger_ferry_Night",
+      "size": "168x168",
+      "path": "assets/vehicles/passenger_ferry/168x168/night"
+    },
+    {
+      "id": "e66cc731-f6d0-4e5a-a1e8-60ab66fba3af",
+      "name": "vehicles",
+      "state": "pickup_2_Day",
+      "size": "168x168",
+      "path": "assets/vehicles/pickup_2/168x168/day"
+    },
+    {
+      "id": "dbd323d7-c4e2-4391-8546-3f14fe819539",
+      "name": "vehicles",
+      "state": "pickup_2_Night",
+      "size": "168x168",
+      "path": "assets/vehicles/pickup_2/168x168/night"
+    },
+    {
+      "id": "5df31d10-1d62-4c62-ba7a-e786797aaea0",
+      "kind": "object",
+      "w": 168,
+      "h": 168,
+      "state": "pickup_Day",
+      "name": "vehicles",
+      "path": "assets/vehicles/pickup/168x168/day",
+      "canvasBeforeTrim": [
+        168,
+        168
+      ],
+      "canvasTrimmed": [
+        87,
+        114
+      ],
+      "trimBox": [
+        10,
+        24,
+        156,
+        143
+      ],
+      "trimMode": "per-frame-tight"
+    },
+    {
+      "id": "161c25f4-a738-41f9-b5b9-9d23df16afcc",
+      "name": "vehicles",
+      "state": "pickup_Night",
+      "size": "168x168",
+      "path": "assets/vehicles/pickup/168x168/night"
+    },
+    {
+      "id": "7c2a0aec-06db-436e-babe-f22036c54450",
+      "kind": "object",
+      "w": 168,
+      "h": 168,
+      "state": "police_Day",
+      "name": "vehicles",
+      "path": "assets/vehicles/police/168x168/day",
+      "canvasBeforeTrim": [
+        168,
+        168
+      ],
+      "canvasTrimmed": [
+        87,
+        116
+      ],
+      "trimBox": [
+        7,
+        20,
+        154,
+        141
+      ],
+      "trimMode": "per-frame-tight"
+    },
+    {
+      "id": "61627e0d-c8a7-424e-93bd-fa2e4660a253",
+      "name": "vehicles",
+      "state": "police_Night",
+      "size": "168x168",
+      "path": "assets/vehicles/police/168x168/night"
+    }
+  ]
+}

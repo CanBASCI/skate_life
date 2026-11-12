@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="tr">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>skate_life — pixel scale preview</title>
+    <title>skate_life — editor</title>
     <link rel="stylesheet" href="./style.css" />
     <script type="importmap">
       {
@@ -15,19 +15,41 @@
     </script>
   </head>
   <body>
-    <div id="app">
-      <div id="hud">
-        <h1>Pixel scale yard</h1>
-        <p>
-          High top-down angle (not flattened). Sprites face camera — art stays upright.
-        </p>
-        <p>
-          <kbd>WASD</kbd> <kbd>Shift</kbd> run · <kbd>Space</kbd> jump · <kbd>C</kbd> crouch ·
-          <kbd>V</kbd> vault · <kbd>drag</kbd> props · <kbd>scroll</kbd> zoom
-        </p>
-        <div id="selected">Click any asset…</div>
-      </div>
+    <div id="layout">
+      <aside id="palette-left" class="palette">
+        <header>
+          <h1>Objects</h1>
+          <input id="obj-filter" type="search" placeholder="Ara…" autocomplete="off" />
+        </header>
+        <div id="obj-cats" class="palette-body"></div>
+      </aside>
+
+      <main id="stage">
+        <div id="hud">
+          <span><kbd>WASD</kbd> hareket · <kbd>Shift</kbd> koş · <kbd>Q</kbd>/<kbd>E</kbd> yön · sürükle yerleştir</span>
+          <span id="status">Yükleniyor…</span>
+        </div>
+        <div id="app"></div>
+        <div id="inspector" class="hidden">
+          <div class="insp-title" id="insp-label">—</div>
+          <label>X <input id="insp-x" type="number" step="1" /></label>
+          <label>Z <input id="insp-z" type="number" step="1" /></label>
+          <label>Boyut <input id="insp-scale" type="range" min="0.25" max="4" step="0.05" /><span id="insp-scale-val">1.00</span></label>
+          <div class="dirs" id="insp-dirs" title="Yön"></div>
+          <button type="button" id="insp-delete" class="danger">Sil</button>
+        </div>
+      </main>
+
+      <aside id="palette-right" class="palette">
+        <header>
+          <h1>Characters</h1>
+          <input id="char-filter" type="search" placeholder="Ara…" autocomplete="off" />
+        </header>
+        <div id="char-cats" class="palette-body"></div>
+      </aside>
     </div>
+
+    <div id="drag-ghost" class="hidden"></div>
     <script type="module" src="./main.js"></script>
   </body>
 </html>

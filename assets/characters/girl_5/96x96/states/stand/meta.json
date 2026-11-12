@@ -1,0 +1,21 @@
+{
+  "id": "3db79b25-5ddc-4cde-b94b-5b9cd21ef18f",
+  "name": "Girl_5",
+  "state": "stand",
+  "size": "96x96",
+  "animations": [
+    "dance",
+    "idle",
+    "jump",
+    "run",
+    "walk"
+  ],
+  "animation_raw_names": [
+    "dance",
+    "idle",
+    "jump",
+    "run",
+    "walk"
+  ],
+  "path": "assets/characters/girl_5/96x96/states/stand"
+}

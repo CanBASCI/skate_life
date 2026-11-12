@@ -1,0 +1,21 @@
+{
+  "id": "b3002319-0e25-4105-918a-09faad61493c",
+  "name": "Boy_1",
+  "state": "stand",
+  "size": "96x96",
+  "animations": [
+    "custom-dancing",
+    "idle",
+    "jump",
+    "run",
+    "walk"
+  ],
+  "animation_raw_names": [
+    "breathing-idle",
+    "custom-dancing",
+    "jump",
+    "running-6-frames",
+    "walking-6-frames"
+  ],
+  "path": "assets/characters/boy_1/96x96/states/stand"
+}

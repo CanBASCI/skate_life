@@ -1,0 +1,13 @@
+{
+  "id": "3c93fe49-e329-4c29-a715-356aced9e6ae",
+  "name": "Girl_1",
+  "state": "pinkDress_Sit_onGround",
+  "size": "96x96",
+  "animations": [
+    "idle"
+  ],
+  "animation_raw_names": [
+    "idle"
+  ],
+  "path": "assets/characters/girl_1/96x96/states/pinkdress_sit_onground"
+}
