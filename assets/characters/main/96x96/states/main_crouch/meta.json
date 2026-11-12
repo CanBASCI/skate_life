@@ -1,0 +1,15 @@
+{
+  "id": "12076436-e27d-4015-98b9-5875c3ecf071",
+  "name": "Main Character High Top-Down 92x92",
+  "state": "main_crouch",
+  "size": "96x96",
+  "animations": [
+    "idle",
+    "walk"
+  ],
+  "animation_raw_names": [
+    "idle",
+    "walk"
+  ],
+  "path": "assets/characters/main/96x96/states/main_crouch"
+}

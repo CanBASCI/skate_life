@@ -11,7 +11,7 @@ const DIRS = [
   "south-east",
 ];
 
-const ANIM_ROOT = "../assets/characters/main/character/92x92";
+const ANIM_ROOT = "../assets/characters/main/character/96x96";
 
 const SETS = {
   idle: { base: `${ANIM_ROOT}/main/animations/idle`, frames: 4, fps: 3.5, loop: true },

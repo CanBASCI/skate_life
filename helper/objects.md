@@ -2,7 +2,7 @@
 
 ## Main skateboard
 
-Separate prop (not pre-mounted under the character). Game scale follows the **92×92** main character.
+Separate prop (not pre-mounted under the character). Game scale follows the **96×96** main character.
 
 | Size | Path | object_id | Role |
 |------|------|-----------|------|

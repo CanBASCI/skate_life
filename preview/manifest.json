@@ -1,5 +1,5 @@
 {
-  "referenceCharacterPx": 92,
+  "referenceCharacterPx": 96,
   "unit": "1 world unit = 1 sprite canvas pixel (buildings get display scale in preview)",
   "buildingDisplayScale": 1.85,
   "note": "Buildings stay 256px files; preview enlarges them. Drag in preview to rearrange; screen-bottom (+Z) draws in front.",
@@ -202,10 +202,10 @@
     },
     {
       "id": "main",
-      "src": "assets/characters/main/character/92x92/south.png",
+      "src": "assets/characters/main/character/96x96/south.png",
       "x": 0,
       "z": 200,
-      "label": "main 92",
+      "label": "main 96",
       "highlight": true
     },
     {
@@ -217,59 +217,59 @@
     },
     {
       "id": "outfitFootball",
-      "src": "assets/characters/main/states/footballOutfit/92x92/south.png",
+      "src": "assets/characters/main/states/footballOutfit/96x96/south.png",
       "x": -280,
       "z": 200,
-      "label": "footballOutfit 92"
+      "label": "footballOutfit 96"
     },
     {
       "id": "outfitNba",
-      "src": "assets/characters/main/states/nbaOutfit/92x92/south.png",
+      "src": "assets/characters/main/states/nbaOutfit/96x96/south.png",
       "x": -200,
       "z": 200,
-      "label": "nba 92"
+      "label": "nba 96"
     },
     {
       "id": "outfitDenim",
-      "src": "assets/characters/main/states/blueDenimJacket/92x92/south.png",
+      "src": "assets/characters/main/states/blueDenimJacket/96x96/south.png",
       "x": 200,
       "z": 200,
-      "label": "denim 92"
+      "label": "denim 96"
     },
     {
       "id": "outfitBackpack",
-      "src": "assets/characters/main/states/backpackOnBackside/92x92/south.png",
+      "src": "assets/characters/main/states/backpackOnBackside/96x96/south.png",
       "x": 280,
       "z": 200,
-      "label": "backpack 92"
+      "label": "backpack 96"
     },
     {
       "id": "outfitHoldBoard",
-      "src": "assets/characters/main/states/holdingSkateboard/92x92/south.png",
+      "src": "assets/characters/main/states/holdingSkateboard/96x96/south.png",
       "x": 360,
       "z": 200,
-      "label": "holding board 92"
+      "label": "holding board 96"
     },
     {
       "id": "outfitPlayFootball",
-      "src": "assets/characters/main/states/playFootballOutfit/92x92/south.png",
+      "src": "assets/characters/main/states/playFootballOutfit/96x96/south.png",
       "x": -360,
       "z": 200,
-      "label": "play football 92"
+      "label": "play football 96"
     },
     {
       "id": "crouch",
-      "src": "assets/characters/main/character/92x92/states/crouch/south.png",
+      "src": "assets/characters/main/character/96x96/states/crouch/south.png",
       "x": 100,
       "z": 240,
-      "label": "crouch 92"
+      "label": "crouch 96"
     },
     {
       "id": "sit",
-      "src": "assets/characters/main/character/92x92/states/sit/south.png",
+      "src": "assets/characters/main/character/96x96/states/sit/south.png",
       "x": -160,
       "z": 175,
-      "label": "sit 92"
+      "label": "sit 96"
     }
   ]
 }

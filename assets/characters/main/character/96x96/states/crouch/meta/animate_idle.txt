@@ -1,0 +1,17 @@
+mode: v3
+animation_name: idle
+frame_count: 4
+note: pose-frozen like withSkate skate-idle — NOT breathing-idle template
+prompt:
+idle breathing only while frozen in this exact deep crouch pose, keep knees bent and hips low, do not stand up, do not straighten legs, do not change the crouch stance, tiny chest breathing only
+
+character: 12076436-e27d-4015-98b9-5875c3ecf071
+animation: v3 custom (idle breathing only while frozen in this exact deep crouch pose, keep knees bent and hips low, do not stand up, do not straighten legs, do not change the crouch stance, tiny chest breathing only)
+directions: south, south-east, east, north-east, north, north-west, west, south-west (8 jobs)
+group: 3adf2b74-b03e-40d0-ba64-84a784566632
+frames: 5 (1 reference + 4 animated)
+cost: 8 generations (1/dir x 8)
+eta: ~30-60s/direction
+
+hint: get_character(character_id="12076436-e27d-4015-98b9-5875c3ecf071")
+add more directions to this group: animate_character(character_id="12076436-e27d-4015-98b9-5875c3ecf071", action_description="idle breathing only while frozen in this exact deep crouch pose, keep knees bent and hips low, do not stand up, do not straighten legs, do not change the crouch stance, tiny chest breathing only", animation_group_id="3adf2b74-b03e-40d0-ba64-84a784566632", directions=[...])

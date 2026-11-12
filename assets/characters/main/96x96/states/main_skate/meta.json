@@ -1,0 +1,13 @@
+{
+  "id": "2be6dc14-97ed-493e-b32c-3f9d26ac1d5c",
+  "name": "Main Character High Top-Down 92x92",
+  "state": "main_skate",
+  "size": "96x96",
+  "animations": [
+    "skate-idle"
+  ],
+  "animation_raw_names": [
+    "skate-idle"
+  ],
+  "path": "assets/characters/main/96x96/states/main_skate"
+}

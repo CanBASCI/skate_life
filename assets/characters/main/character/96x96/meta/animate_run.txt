@@ -1,0 +1,9 @@
+character: 37ad4d45-4dfd-442e-ace5-f38ec3c83706
+animation: running-6-frames
+directions: south, south-east, east, north-east, north, north-west, west, south-west (8 jobs)
+group: 44b236d6-e64b-498e-bc0c-7c4937f80df9
+eta: ~2-4 min
+add more directions to this group: animate_character(character_id="37ad4d45-4dfd-442e-ace5-f38ec3c83706", template_animation_id="running-6-frames", animation_group_id="44b236d6-e64b-498e-bc0c-7c4937f80df9", directions=[...])
+
+hint: get_character(character_id="37ad4d45-4dfd-442e-ace5-f38ec3c83706")
+if poor: delete_animation(character_id="37ad4d45-4dfd-442e-ace5-f38ec3c83706", animation_type="...") then retry with mode="v3"

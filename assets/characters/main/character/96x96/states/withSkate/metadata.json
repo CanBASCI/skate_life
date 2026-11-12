@@ -1,0 +1,249 @@
+{
+  "group_id": "ceb4a56a-a8cc-4a3a-b485-e13b010421ba",
+  "states": [
+    {
+      "character": {
+        "id": "37ad4d45-4dfd-442e-ace5-f38ec3c83706",
+        "name": "main",
+        "prompt": "teenage high school male student for a mobile skate game, short dark hair tied back in a small ponytail / bun at the back, youthful face, casual school-street style: white hoodie, blue jeans, red sneakers, empty hands, no skateboard, no board, no props, clean readable pixel art",
+        "size": {
+          "width": 92,
+          "height": 92
+        },
+        "template_id": "mannequin",
+        "directions": 8,
+        "view": "high top-down",
+        "created_at": "2026-10-02T15:33:11.238382+00:00"
+      },
+      "folder": "main",
+      "frames": {
+        "rotations": {
+          "south": "main/rotations/south.png",
+          "south-east": "main/rotations/south-east.png",
+          "east": "main/rotations/east.png",
+          "north-east": "main/rotations/north-east.png",
+          "north": "main/rotations/north.png",
+          "north-west": "main/rotations/north-west.png",
+          "west": "main/rotations/west.png",
+          "south-west": "main/rotations/south-west.png"
+        },
+        "animations": {
+          "walk": {
+            "south-east": [
+              "main/animations/walk/south-east/frame_000.png",
+              "main/animations/walk/south-east/frame_001.png",
+              "main/animations/walk/south-east/frame_002.png",
+              "main/animations/walk/south-east/frame_003.png",
+              "main/animations/walk/south-east/frame_004.png",
+              "main/animations/walk/south-east/frame_005.png"
+            ],
+            "south-west": [
+              "main/animations/walk/south-west/frame_000.png",
+              "main/animations/walk/south-west/frame_001.png",
+              "main/animations/walk/south-west/frame_002.png",
+              "main/animations/walk/south-west/frame_003.png",
+              "main/animations/walk/south-west/frame_004.png",
+              "main/animations/walk/south-west/frame_005.png"
+            ],
+            "south-44d9369a": [
+              "main/animations/walk/south-44d9369a/frame_000.png",
+              "main/animations/walk/south-44d9369a/frame_001.png",
+              "main/animations/walk/south-44d9369a/frame_002.png",
+              "main/animations/walk/south-44d9369a/frame_003.png",
+              "main/animations/walk/south-44d9369a/frame_004.png",
+              "main/animations/walk/south-44d9369a/frame_005.png"
+            ],
+            "south-61a69bcc": [
+              "main/animations/walk/south-61a69bcc/frame_000.png",
+              "main/animations/walk/south-61a69bcc/frame_001.png",
+              "main/animations/walk/south-61a69bcc/frame_002.png",
+              "main/animations/walk/south-61a69bcc/frame_003.png",
+              "main/animations/walk/south-61a69bcc/frame_004.png",
+              "main/animations/walk/south-61a69bcc/frame_005.png"
+            ],
+            "north": [
+              "main/animations/walk/north/frame_000.png",
+              "main/animations/walk/north/frame_001.png",
+              "main/animations/walk/north/frame_002.png",
+              "main/animations/walk/north/frame_003.png",
+              "main/animations/walk/north/frame_004.png",
+              "main/animations/walk/north/frame_005.png"
+            ],
+            "east": [
+              "main/animations/walk/east/frame_000.png",
+              "main/animations/walk/east/frame_001.png",
+              "main/animations/walk/east/frame_002.png",
+              "main/animations/walk/east/frame_003.png",
+              "main/animations/walk/east/frame_004.png",
+              "main/animations/walk/east/frame_005.png"
+            ],
+            "north-east": [
+              "main/animations/walk/north-east/frame_000.png",
+              "main/animations/walk/north-east/frame_001.png",
+              "main/animations/walk/north-east/frame_002.png",
+              "main/animations/walk/north-east/frame_003.png",
+              "main/animations/walk/north-east/frame_004.png",
+              "main/animations/walk/north-east/frame_005.png"
+            ],
+            "north-west": [
+              "main/animations/walk/north-west/frame_000.png",
+              "main/animations/walk/north-west/frame_001.png",
+              "main/animations/walk/north-west/frame_002.png",
+              "main/animations/walk/north-west/frame_003.png",
+              "main/animations/walk/north-west/frame_004.png",
+              "main/animations/walk/north-west/frame_005.png"
+            ],
+            "west": [
+              "main/animations/walk/west/frame_000.png",
+              "main/animations/walk/west/frame_001.png",
+              "main/animations/walk/west/frame_002.png",
+              "main/animations/walk/west/frame_003.png",
+              "main/animations/walk/west/frame_004.png",
+              "main/animations/walk/west/frame_005.png"
+            ]
+          },
+          "idle": {
+            "east": [
+              "main/animations/idle/east/frame_000.png",
+              "main/animations/idle/east/frame_001.png",
+              "main/animations/idle/east/frame_002.png",
+              "main/animations/idle/east/frame_003.png"
+            ],
+            "north-west": [
+              "main/animations/idle/north-west/frame_000.png",
+              "main/animations/idle/north-west/frame_001.png",
+              "main/animations/idle/north-west/frame_002.png",
+              "main/animations/idle/north-west/frame_003.png"
+            ],
+            "north-east": [
+              "main/animations/idle/north-east/frame_000.png",
+              "main/animations/idle/north-east/frame_001.png",
+              "main/animations/idle/north-east/frame_002.png",
+              "main/animations/idle/north-east/frame_003.png"
+            ],
+            "south-east": [
+              "main/animations/idle/south-east/frame_000.png",
+              "main/animations/idle/south-east/frame_001.png",
+              "main/animations/idle/south-east/frame_002.png",
+              "main/animations/idle/south-east/frame_003.png"
+            ],
+            "north": [
+              "main/animations/idle/north/frame_000.png",
+              "main/animations/idle/north/frame_001.png",
+              "main/animations/idle/north/frame_002.png",
+              "main/animations/idle/north/frame_003.png"
+            ],
+            "south": [
+              "main/animations/idle/south/frame_000.png",
+              "main/animations/idle/south/frame_001.png",
+              "main/animations/idle/south/frame_002.png",
+              "main/animations/idle/south/frame_003.png"
+            ],
+            "south-west": [
+              "main/animations/idle/south-west/frame_000.png",
+              "main/animations/idle/south-west/frame_001.png",
+              "main/animations/idle/south-west/frame_002.png",
+              "main/animations/idle/south-west/frame_003.png"
+            ],
+            "west": [
+              "main/animations/idle/west/frame_000.png",
+              "main/animations/idle/west/frame_001.png",
+              "main/animations/idle/west/frame_002.png",
+              "main/animations/idle/west/frame_003.png"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "character": {
+        "id": "2be6dc14-97ed-493e-b32c-3f9d26ac1d5c",
+        "name": "withSkate",
+        "prompt": "teenage high school male student for a mobile skate game, short dark hair tied back in a small ponytail / bun at the back, youthful face, casual school-street style: white hoodie, blue jeans, red sneakers, empty hands, no skateboard, no board, no props, clean readable pixel art",
+        "size": {
+          "width": 92,
+          "height": 92
+        },
+        "template_id": "mannequin",
+        "directions": 8,
+        "view": "high top-down",
+        "created_at": "2026-10-02T16:36:19.660535+00:00"
+      },
+      "folder": "withSkate",
+      "frames": {
+        "rotations": {
+          "south": "withSkate/rotations/south.png",
+          "south-east": "withSkate/rotations/south-east.png",
+          "east": "withSkate/rotations/east.png",
+          "north-east": "withSkate/rotations/north-east.png",
+          "north": "withSkate/rotations/north.png",
+          "north-west": "withSkate/rotations/north-west.png",
+          "west": "withSkate/rotations/west.png",
+          "south-west": "withSkate/rotations/south-west.png"
+        },
+        "animations": {
+          "skate-idle": {
+            "north-east": [
+              "withSkate/animations/skate-idle/north-east/frame_000.png",
+              "withSkate/animations/skate-idle/north-east/frame_001.png",
+              "withSkate/animations/skate-idle/north-east/frame_002.png",
+              "withSkate/animations/skate-idle/north-east/frame_003.png",
+              "withSkate/animations/skate-idle/north-east/frame_004.png"
+            ],
+            "south-west": [
+              "withSkate/animations/skate-idle/south-west/frame_000.png",
+              "withSkate/animations/skate-idle/south-west/frame_001.png",
+              "withSkate/animations/skate-idle/south-west/frame_002.png",
+              "withSkate/animations/skate-idle/south-west/frame_003.png",
+              "withSkate/animations/skate-idle/south-west/frame_004.png"
+            ],
+            "south": [
+              "withSkate/animations/skate-idle/south/frame_000.png",
+              "withSkate/animations/skate-idle/south/frame_001.png",
+              "withSkate/animations/skate-idle/south/frame_002.png",
+              "withSkate/animations/skate-idle/south/frame_003.png",
+              "withSkate/animations/skate-idle/south/frame_004.png"
+            ],
+            "north": [
+              "withSkate/animations/skate-idle/north/frame_000.png",
+              "withSkate/animations/skate-idle/north/frame_001.png",
+              "withSkate/animations/skate-idle/north/frame_002.png",
+              "withSkate/animations/skate-idle/north/frame_003.png",
+              "withSkate/animations/skate-idle/north/frame_004.png"
+            ],
+            "south-east": [
+              "withSkate/animations/skate-idle/south-east/frame_000.png",
+              "withSkate/animations/skate-idle/south-east/frame_001.png",
+              "withSkate/animations/skate-idle/south-east/frame_002.png",
+              "withSkate/animations/skate-idle/south-east/frame_003.png",
+              "withSkate/animations/skate-idle/south-east/frame_004.png"
+            ],
+            "east": [
+              "withSkate/animations/skate-idle/east/frame_000.png",
+              "withSkate/animations/skate-idle/east/frame_001.png",
+              "withSkate/animations/skate-idle/east/frame_002.png",
+              "withSkate/animations/skate-idle/east/frame_003.png",
+              "withSkate/animations/skate-idle/east/frame_004.png"
+            ],
+            "north-west": [
+              "withSkate/animations/skate-idle/north-west/frame_000.png",
+              "withSkate/animations/skate-idle/north-west/frame_001.png",
+              "withSkate/animations/skate-idle/north-west/frame_002.png",
+              "withSkate/animations/skate-idle/north-west/frame_003.png",
+              "withSkate/animations/skate-idle/north-west/frame_004.png"
+            ],
+            "west": [
+              "withSkate/animations/skate-idle/west/frame_000.png",
+              "withSkate/animations/skate-idle/west/frame_001.png",
+              "withSkate/animations/skate-idle/west/frame_002.png",
+              "withSkate/animations/skate-idle/west/frame_003.png",
+              "withSkate/animations/skate-idle/west/frame_004.png"
+            ]
+          }
+        }
+      }
+    }
+  ],
+  "export_version": "3.1",
+  "export_date": "2026-10-02T17:02:26.093555"
+}

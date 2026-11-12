@@ -1,0 +1,23 @@
+{
+  "id": "37ad4d45-4dfd-442e-ace5-f38ec3c83706",
+  "name": "Main Character High Top-Down 92x92",
+  "state": "main",
+  "size": "96x96",
+  "animations": [
+    "dance",
+    "idle",
+    "jump",
+    "run",
+    "vault",
+    "walk"
+  ],
+  "animation_raw_names": [
+    "dance",
+    "idle",
+    "jump",
+    "run",
+    "vault",
+    "walk"
+  ],
+  "path": "assets/characters/main/96x96/states/main"
+}

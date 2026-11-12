@@ -1,0 +1,20 @@
+{
+  "character_id": "82a5ecf5-0b39-4edb-a260-1f84ec18dfa1",
+  "state_name": "sit",
+  "source_character_id": "37ad4d45-4dfd-442e-ace5-f38ec3c83706",
+  "view": "high top-down",
+  "size": 92,
+  "n_directions": 8,
+  "pose": "sitting with no bench/seat/props; knees bent, hips low, hands on thighs",
+  "animations": [
+    "idle"
+  ],
+  "idle": {
+    "mode": "v3",
+    "style": "pose-frozen breathing",
+    "animation_group_id": "25fd5b1f-e493-427e-8c8d-0ef6c2b0f11e",
+    "directions": 8,
+    "frames": 5
+  },
+  "path": "assets/characters/main/character/92x92/states/sit/"
+}

@@ -1,0 +1,17 @@
+{
+  "character_id": "2be6dc14-97ed-493e-b32c-3f9d26ac1d5c",
+  "state_name": "withSkate",
+  "source_character_id": "37ad4d45-4dfd-442e-ace5-f38ec3c83706",
+  "former_names": [
+    "SkateStance",
+    "skate-idle"
+  ],
+  "view": "high top-down",
+  "size": 92,
+  "n_directions": 8,
+  "pose": "knees bent crouch, head turned right, arms out to sides, no skateboard in sprite",
+  "animation": "skate-idle",
+  "no_skateboard_in_sprite": true,
+  "path": "assets/characters/main/character/92x92/states/withSkate/",
+  "pixellab_url": "https://www.pixellab.ai/create-character/2be6dc14-97ed-493e-b32c-3f9d26ac1d5c"
+}

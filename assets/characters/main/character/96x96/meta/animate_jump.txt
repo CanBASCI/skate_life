@@ -1,0 +1,9 @@
+character: 37ad4d45-4dfd-442e-ace5-f38ec3c83706
+animation: jumping-1
+directions: south, south-east, east, north-east, north, north-west, west, south-west (8 jobs)
+group: d4304d91-6f0c-4d69-9e5d-a2a64b8afa74
+eta: ~2-4 min
+add more directions to this group: animate_character(character_id="37ad4d45-4dfd-442e-ace5-f38ec3c83706", template_animation_id="jumping-1", animation_group_id="d4304d91-6f0c-4d69-9e5d-a2a64b8afa74", directions=[...])
+
+hint: get_character(character_id="37ad4d45-4dfd-442e-ace5-f38ec3c83706")
+if poor: delete_animation(character_id="37ad4d45-4dfd-442e-ace5-f38ec3c83706", animation_type="...") then retry with mode="v3"

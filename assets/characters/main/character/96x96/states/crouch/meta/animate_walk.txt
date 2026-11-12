@@ -1,0 +1,14 @@
+template: crouched-walking
+animation_name: walk
+prompt:
+crouch walk while frozen in this deep crouch stance: knees stay bent, hips stay low, body stays short, short crouched steps only, never stand upright, never straighten legs
+
+character: 12076436-e27d-4015-98b9-5875c3ecf071
+animation: crouch walk while frozen in this deep crouch stance: knees stay bent, hips stay low, body stays short, short crouched steps only, never stand upright, never straighten legs
+directions: south, south-east, east, north-east, north, north-west, west, south-west (8 jobs)
+group: 4e7f1ef6-92a5-4859-8816-e51c401000bf
+eta: ~2-4 min
+add more directions to this group: animate_character(character_id="12076436-e27d-4015-98b9-5875c3ecf071", template_animation_id="crouched-walking", animation_group_id="4e7f1ef6-92a5-4859-8816-e51c401000bf", directions=[...])
+
+hint: get_character(character_id="12076436-e27d-4015-98b9-5875c3ecf071")
+if poor: delete_animation(character_id="12076436-e27d-4015-98b9-5875c3ecf071", animation_type="...") then retry with mode="v3"

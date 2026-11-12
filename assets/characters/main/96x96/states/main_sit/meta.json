@@ -1,0 +1,13 @@
+{
+  "id": "82a5ecf5-0b39-4edb-a260-1f84ec18dfa1",
+  "name": "Main Character High Top-Down 92x92",
+  "state": "main_sit",
+  "size": "96x96",
+  "animations": [
+    "idle"
+  ],
+  "animation_raw_names": [
+    "idle"
+  ],
+  "path": "assets/characters/main/96x96/states/main_sit"
+}

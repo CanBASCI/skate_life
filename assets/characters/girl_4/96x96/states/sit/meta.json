@@ -1,0 +1,13 @@
+{
+  "id": "c6396571-f6dd-4062-aa13-a591aadfd9a1",
+  "name": "Girl_4",
+  "state": "sit",
+  "size": "96x96",
+  "animations": [
+    "idle"
+  ],
+  "animation_raw_names": [
+    "idle"
+  ],
+  "path": "assets/characters/girl_4/96x96/states/sit"
+}

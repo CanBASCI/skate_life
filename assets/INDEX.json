@@ -310,14 +310,14 @@
       "id": "c6396571-f6dd-4062-aa13-a591aadfd9a1",
       "name": "Girl_4",
       "state": "sit",
-      "size": "92x92",
+      "size": "96x96",
       "animations": [
         "idle"
       ],
       "animation_raw_names": [
         "idle"
       ],
-      "path": "assets/characters/girl_4/92x92/states/sit"
+      "path": "assets/characters/girl_4/96x96/states/sit"
     },
     {
       "id": "35d95c86-9637-4adc-9970-276a06657972",
@@ -378,7 +378,7 @@
       "id": "37ad4d45-4dfd-442e-ace5-f38ec3c83706",
       "name": "Main Character High Top-Down 92x92",
       "state": "main",
-      "size": "92x92",
+      "size": "96x96",
       "animations": [
         "dance",
         "idle",
@@ -395,31 +395,31 @@
         "vault",
         "walk"
       ],
-      "path": "assets/characters/main/92x92/states/main"
+      "path": "assets/characters/main/96x96/states/main"
     },
     {
       "id": "5e7e61bc-1b2a-4ebf-85f4-162c4a1193dd",
       "name": "Main Character High Top-Down 92x92",
       "state": "main_backpackOnBackside",
-      "size": "92x92",
+      "size": "96x96",
       "animations": [],
       "animation_raw_names": [],
-      "path": "assets/characters/main/92x92/states/main_backpackonbackside"
+      "path": "assets/characters/main/96x96/states/main_backpackonbackside"
     },
     {
       "id": "2ac4b002-ac42-4e12-b468-5171ed206b65",
       "name": "Main Character High Top-Down 92x92",
       "state": "main_blueDenimJacket_with_skateboard",
-      "size": "92x92",
+      "size": "96x96",
       "animations": [],
       "animation_raw_names": [],
-      "path": "assets/characters/main/92x92/states/main_bluedenimjacket_with_skateboard"
+      "path": "assets/characters/main/96x96/states/main_bluedenimjacket_with_skateboard"
     },
     {
       "id": "12076436-e27d-4015-98b9-5875c3ecf071",
       "name": "Main Character High Top-Down 92x92",
       "state": "main_crouch",
-      "size": "92x92",
+      "size": "96x96",
       "animations": [
         "idle",
         "walk"
@@ -428,69 +428,69 @@
         "idle",
         "walk"
       ],
-      "path": "assets/characters/main/92x92/states/main_crouch"
+      "path": "assets/characters/main/96x96/states/main_crouch"
     },
     {
       "id": "83a05bc7-454f-45ee-895e-170b2f44eb63",
       "name": "Main Character High Top-Down 92x92",
       "state": "main_footballOutfit_with_skateboard",
-      "size": "92x92",
+      "size": "96x96",
       "animations": [],
       "animation_raw_names": [],
-      "path": "assets/characters/main/92x92/states/main_footballoutfit_with_skateboard"
+      "path": "assets/characters/main/96x96/states/main_footballoutfit_with_skateboard"
     },
     {
       "id": "2db7225c-9c99-4041-9420-b4a9cb7d1492",
       "name": "Main Character High Top-Down 92x92",
       "state": "main_holding the skateboa_with_skateboard",
-      "size": "92x92",
+      "size": "96x96",
       "animations": [],
       "animation_raw_names": [],
-      "path": "assets/characters/main/92x92/states/main_holding_the_skateboa_with_skateboard"
+      "path": "assets/characters/main/96x96/states/main_holding_the_skateboa_with_skateboard"
     },
     {
       "id": "490532ad-4201-4d13-8039-228d98491c98",
       "name": "Main Character High Top-Down 92x92",
       "state": "main_nbaOutfit_with_skateboard",
-      "size": "92x92",
+      "size": "96x96",
       "animations": [],
       "animation_raw_names": [],
-      "path": "assets/characters/main/92x92/states/main_nbaoutfit_with_skateboard"
+      "path": "assets/characters/main/96x96/states/main_nbaoutfit_with_skateboard"
     },
     {
       "id": "8e201d38-94e6-4fc1-b196-0d04f51a3046",
       "name": "Main Character High Top-Down 92x92",
       "state": "main_playFootballOutfit",
-      "size": "92x92",
+      "size": "96x96",
       "animations": [],
       "animation_raw_names": [],
-      "path": "assets/characters/main/92x92/states/main_playfootballoutfit"
+      "path": "assets/characters/main/96x96/states/main_playfootballoutfit"
     },
     {
       "id": "82a5ecf5-0b39-4edb-a260-1f84ec18dfa1",
       "name": "Main Character High Top-Down 92x92",
       "state": "main_sit",
-      "size": "92x92",
+      "size": "96x96",
       "animations": [
         "idle"
       ],
       "animation_raw_names": [
         "idle"
       ],
-      "path": "assets/characters/main/92x92/states/main_sit"
+      "path": "assets/characters/main/96x96/states/main_sit"
     },
     {
       "id": "2be6dc14-97ed-493e-b32c-3f9d26ac1d5c",
       "name": "Main Character High Top-Down 92x92",
       "state": "main_skate",
-      "size": "92x92",
+      "size": "96x96",
       "animations": [
         "skate-idle"
       ],
       "animation_raw_names": [
         "skate-idle"
       ],
-      "path": "assets/characters/main/92x92/states/main_skate"
+      "path": "assets/characters/main/96x96/states/main_skate"
     }
   ],
   "objects": [

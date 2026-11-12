@@ -2,11 +2,12 @@
 
 ## HARD RULE — Main character reference
 
-**Canonical identity reference is the 92×92 high top-down character.**
+**Canonical gameplay size is 96×96** (nearest-neighbor upscale from PixelLab 92×92 source), matching Boy_/Girl_ canvases.
 
 | Size | Path | character_id | Role |
 |------|------|--------------|------|
-| **92×92** (game scale + master reference) | `assets/characters/main/character/92x92/` (state **`main`**) | `37ad4d45-4dfd-442e-ace5-f38ec3c83706` | **Active game size.** Walk/idle/run/jump/vault under `main/animations/`. |
+| **96×96** (game scale) | `assets/characters/main/character/96x96/` (state **`main`**) | `37ad4d45-4dfd-442e-ace5-f38ec3c83706` | **Active game size.** Walk/idle/run/jump/vault under `main/animations/`. |
+| **92×92** (PixelLab source) | `assets/characters/main/character/92x92/` | same | Kept on disk as source; not the gameplay target |
 | **64×64** (optional smaller variant) | `assets/characters/main/character/64x64/` | `25c95faa-03fb-4cdf-808c-031c97dba441` | Kept on disk; not the current gameplay target |
 
 - **view:** high top-down
@@ -16,9 +17,9 @@
 
 ### When adding clothes, bags, accessories, states, or variants
 
-1. Always use the **92×92** character as the identity/style reference.
+1. Always use the **96×96** gameplay character (or 92×92 source) as the identity/style reference.
 2. Prefer PixelLab `style_character_id=37ad4d45-4dfd-442e-ace5-f38ec3c83706` (or `create_character_state` from this id) when **size ≥ source content size**.
-3. Visual style reference file: `assets/characters/main/character/92x92/south.png`.
+3. Visual style reference file: `assets/characters/main/character/96x96/south.png` (source: `92x92/south.png`).
 4. Keep **high top-down**, **8 directions**, boardless character sprites unless explicitly requested otherwise.
 5. Do **not** composite the character onto the skateboard in asset files.
 
@@ -34,7 +35,8 @@
 
 ```
 assets/characters/main/character/
-  92x92/
+  96x96/                          # gameplay (NN from 92)
+  92x92/                          # PixelLab source
     main/                         # PixelLab state name
       rotations/
       animations/{walk,idle,run,jump,vault}/
@@ -47,7 +49,7 @@ assets/characters/main/character/
 
 ### withSkate stance idle (no board in sprite)
 
-- **state:** `withSkate` — `assets/characters/main/character/92x92/states/withSkate/`
+- **state:** `withSkate` — `assets/characters/main/character/96x96/states/withSkate/`
 - **character_id:** `2be6dc14-97ed-493e-b32c-3f9d26ac1d5c`
 - **pose:** knees bent, head turned right, arms slightly out; empty hands; **no skateboard drawn**
 - **animation:** under `animations/` (sibling of PixelLab state `main`)
@@ -55,7 +57,7 @@ assets/characters/main/character/
 
 ### crouch state (duck / hold low)
 
-- **state:** `crouch` — `assets/characters/main/character/92x92/states/crouch/`
+- **state:** `crouch` — `assets/characters/main/character/96x96/states/crouch/`
 - **character_id:** `12076436-e27d-4015-98b9-5875c3ecf071`
 - **pose:** deep game crouch, hips low, knees bent; empty hands; **no skateboard**
 - **idle:** pose-frozen v3 breathing (`animations/idle/`) — do **not** use `breathing-idle` template (stands them up)
@@ -63,14 +65,14 @@ assets/characters/main/character/
 
 ### sit state (no bench)
 
-- **state:** `sit` — `assets/characters/main/character/92x92/states/sit/`
+- **state:** `sit` — `assets/characters/main/character/96x96/states/sit/`
 - **character_id:** `82a5ecf5-0b39-4edb-a260-1f84ec18dfa1`
 - **pose:** sitting with knees bent / hips lowered; hands on thighs; **no bench, chair, or props**
 - **idle:** pose-frozen v3 breathing (`animations/idle/`) — do **not** use `breathing-idle` template (stands them up)
 
 ### Outfit / gear states (synced rotations)
 
-Synced under `assets/characters/main/states/<name>/92x92/` (south + 8 rotations):
+Synced under `assets/characters/main/states/<name>/96x96/` (and `96x96/states/…`) (south + 8 rotations):
 
 | state | character_id |
 |-------|--------------|
@@ -83,5 +85,5 @@ Synced under `assets/characters/main/states/<name>/92x92/` (south + 8 rotations)
 
 ### Scale rule
 
-Canvas size **matters** when assets share a scene. Game reference is **92×92** main. Vehicles in this project are mostly **168×168**, buildings **256×256**, small props/animals **32–96**. Preview: `preview/` (`python3 -m http.server` from repo root → `/preview/`).
+Canvas size **matters** when assets share a scene. Game reference is **96×96** main (same as Boy_/Girl_). Vehicles in this project are mostly **168×168**, buildings **256×256**, small props/animals **32–96**. Preview: `preview/` (`python3 -m http.server` from repo root → `/preview/`).
 

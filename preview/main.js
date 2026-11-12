@@ -10,7 +10,7 @@ import {
   OBJ_CAT_LABEL,
 } from "./catalog.js";
 
-const REF = 92;
+const REF = 96;
 const BUILDING_SCALE = 1.85;
 const CAM_OFFSET = new THREE.Vector3(0, 620, 520);
 const DIR_LABELS = {

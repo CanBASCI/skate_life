@@ -1,0 +1,15 @@
+state_name: sit
+from: main 37ad4d45-4dfd-442e-ace5-f38ec3c83706
+NO animations yet — wait for user
+note: no bench/seat/props in sprite
+edit:
+sitting pose on empty air with no bench no seat no furniture: knees bent as if sitting, hips lowered, torso upright and relaxed, legs bent forward, hands resting on thighs, same white hoodie blue jeans red sneakers, empty hands, no skateboard, no bench, no chair, no props, high top-down readable
+
+id: 82a5ecf5-0b39-4edb-a260-1f84ec18dfa1
+source: 37ad4d45-4dfd-442e-ace5-f38ec3c83706
+edit: sitting pose on empty air with no bench no seat no furniture: knees bent as if sitting, hips lowered, torso upright and relaxed, legs bent forward, hands resting on thighs, same white hoodie blue jeans red sneakers, empty hands, no skateboard, no bench, no chair, no props, high top-down readable
+cost: ~20-40 generations (Gemini tier by canvas size)
+status: processing (~30-90s)
+note: linked via group_id, inherits skeleton for animations
+
+hint: get_character(character_id="82a5ecf5-0b39-4edb-a260-1f84ec18dfa1")
