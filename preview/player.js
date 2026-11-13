@@ -44,6 +44,12 @@ const SETS = {
     fps: 9,
     loop: true,
   },
+  sit: {
+    base: `${ANIM_ROOT}/states/sit/animations/idle`,
+    frames: 5,
+    fps: 3.5,
+    loop: true,
+  },
 };
 
 const WALK_SPEED = 110;
@@ -126,7 +132,8 @@ export const FEET_NUDGE_Z = -28;
  * PixelLab drew dance east/west (and diagonals) smaller in the 96 canvas
  * (~54px tall vs south ~64px). Boost those dirs so visual size matches south.
  */
-const DANCE_DIR_SCALE = {
+/** Shared with placed characters so dance facings match Main’s size. */
+export const DANCE_DIR_SCALE = {
   south: 1,
   north: 1,
   east: 1.14,
@@ -177,6 +184,10 @@ export class Player {
     /** true while foot-sprint is actively draining (for UI bar) */
     this.sprinting = false;
     this._staminaRegenWait = 0;
+    /** Chat /R3 style move: { dx, dz, left, speed } unit vectors + remaining distance */
+    this.scriptMove = null;
+    /** Chat /sit — locked sit idle until /stop or move */
+    this.sitting = false;
     this._boundKeyDown = (e) => this.onKeyDown(e);
     this._boundKeyUp = (e) => this.onKeyUp(e);
   }
@@ -345,6 +356,14 @@ export class Player {
   }
 
   onKeyDown(e) {
+    const tag = e.target?.tagName;
+    if (
+      tag === "INPUT" ||
+      tag === "TEXTAREA" ||
+      e.target?.isContentEditable
+    ) {
+      return;
+    }
     if (e.repeat) {
       this.keys.add(e.code);
       return;
@@ -370,11 +389,21 @@ export class Player {
   }
 
   onKeyUp(e) {
+    const tag = e.target?.tagName;
+    if (
+      tag === "INPUT" ||
+      tag === "TEXTAREA" ||
+      e.target?.isContentEditable
+    ) {
+      return;
+    }
     this.keys.delete(e.code);
   }
 
   startOneShot(name) {
     if (this.busy) return;
+    this.sitting = false;
+    this.scriptMove = null;
     this.busy = name;
     this.anim = name;
     this.frame = 0;
@@ -387,20 +416,101 @@ export class Player {
   toggleDance() {
     if (!this.mesh || this.driving) return;
     if (this.busy === "dance") {
-      this.busy = null;
-      this.anim = "idle";
-      this.frame = 0;
-      this.accum = 0;
-      this.applyFrame();
+      this.stopDance();
       return;
     }
-    if (this.busy) return;
+    this.startDance();
+  }
+
+  startDance() {
+    if (!this.mesh || this.driving) return false;
+    if (this.busy && this.busy !== "dance") return false;
+    this.sitting = false;
+    this.scriptMove = null;
+    this.keys.clear();
     this.busy = "dance";
     this.anim = "dance";
     this.frame = 0;
     this.accum = 0;
     this.vaultMove = null;
     this.applyFrame();
+    return true;
+  }
+
+  stopDance() {
+    if (this.busy !== "dance") return;
+    this.busy = null;
+    this.anim = "idle";
+    this.frame = 0;
+    this.accum = 0;
+    this.applyFrame();
+  }
+
+  startSit() {
+    if (!this.mesh || this.driving || this.skating) return false;
+    if (this.busy && this.busy !== "dance") return false;
+    this.scriptMove = null;
+    this.keys.clear();
+    this.busy = null;
+    this.sitting = true;
+    this.anim = "sit";
+    this.frame = 0;
+    this.accum = 0;
+    this.vaultMove = null;
+    this.applyFrame();
+    return true;
+  }
+
+  startJump() {
+    if (!this.mesh || this.driving) return false;
+    if (this.busy) return false;
+    this.sitting = false;
+    this.scriptMove = null;
+    this.startOneShot("jump");
+    return true;
+  }
+
+  /** Absolute-dir scripted walk (chat /R3). dx,dz unit or any vector; distance in world units. */
+  startScriptMove(dx, dz, distance, speed = WALK_SPEED) {
+    if (!this.mesh || this.driving || !(distance > 0)) return false;
+    const len = Math.hypot(dx, dz);
+    if (!len) return false;
+    this.sitting = false;
+    this.scriptMove = {
+      dx: dx / len,
+      dz: dz / len,
+      left: distance,
+      speed: speed || WALK_SPEED,
+    };
+    this.busy = null;
+    this.vaultMove = null;
+    this.keys.clear();
+    const facing = dirFromVector(dx, dz);
+    if (facing) this.facing = facing;
+    this.anim = "walk";
+    this.frame = 0;
+    this.accum = 0;
+    this.applyFrame();
+    return true;
+  }
+
+  /** Stop dance / sit / scripted walk / held keys (chat /stop). */
+  stopActions() {
+    this.scriptMove = null;
+    this.sitting = false;
+    this.keys.clear();
+    this.vaultMove = null;
+    if (this.busy === "dance" || this.busy === "jump" || this.busy === "vault") {
+      this.busy = null;
+    }
+    this.sprinting = false;
+    if (this.mesh) {
+      this.mesh.position.y = 0;
+      this.anim = this.skating ? "skateIdle" : "idle";
+      this.frame = 0;
+      this.accum = 0;
+      this.applyFrame();
+    }
   }
 
   /** Vault over an obstacle: play vault anim + slide to far side. */
@@ -465,6 +575,37 @@ export class Player {
     this.vz = 0;
     if (this.driving) return;
 
+    // Chat scripted walk (/R3) — overrides WASD until done or /stop
+    if (this.scriptMove) {
+      const sm = this.scriptMove;
+      const step = Math.min(sm.left, sm.speed * dt);
+      const x0 = this.mesh.position.x;
+      const z0 = this.mesh.position.z;
+      this.tryMove(sm.dx * step, sm.dz * step);
+      const moved = Math.hypot(this.mesh.position.x - x0, this.mesh.position.z - z0);
+      sm.left -= Math.max(moved, step * 0.25);
+      this.busy = null;
+      this.anim = "walk";
+      this.syncRing();
+      const cfg = SETS.walk;
+      this.accum += dt;
+      const frameDur = 1 / cfg.fps;
+      while (this.accum >= frameDur) {
+        this.accum -= frameDur;
+        this.frame = (this.frame + 1) % cfg.frames;
+      }
+      this.applyFrame();
+      if (this.syncDepth) this.syncDepth(this.mesh);
+      if (sm.left <= 0.5 || moved < step * 0.05) {
+        this.scriptMove = null;
+        this.anim = "idle";
+        this.frame = 0;
+        this.accum = 0;
+        this.applyFrame();
+      }
+      return;
+    }
+
     const crouch =
       this.keys.has("KeyC") || this.keys.has("ControlLeft") || this.keys.has("ControlRight");
     const wantRun = this.keys.has("ShiftLeft") || this.keys.has("ShiftRight");
@@ -500,22 +641,24 @@ export class Player {
     if (moving) {
       const facing = dirFromVector(dx, dz);
       if (facing) this.facing = facing;
-      // walking cancels dance
+      // walking cancels dance / sit
       if (this.busy === "dance") {
         this.busy = null;
         this.vaultMove = null;
       }
+      if (this.sitting) this.sitting = false;
     }
 
     if (!this.busy) {
       if (this.skating) this.anim = "skateIdle";
+      else if (this.sitting) this.anim = "sit";
       else if (crouch) this.anim = moving ? "crouchWalk" : "crouchIdle";
       else if (moving) this.anim = canSprint ? "run" : "walk";
       else this.anim = "idle";
     }
 
     let speed = 0;
-    if (!this.busy && moving) {
+    if (!this.busy && !this.sitting && moving) {
       if (this.skating) speed = wantRun ? SKATE_BOOST : SKATE_SPEED;
       else if (crouch) speed = CROUCH_SPEED;
       else if (canSprint) speed = RUN_SPEED;

@@ -6,7 +6,7 @@
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
     <meta http-equiv="Pragma" content="no-cache" />
     <title>skate_life — editor</title>
-    <link rel="stylesheet" href="./style.css?v=20251113charDance" />
+    <link rel="stylesheet" href="./style.css?v=20251113inspFreeDrag" />
     <script type="importmap">
       {
         "imports": {
@@ -38,16 +38,33 @@
           </div>
           <div id="bg-toggle" title="Oyun alanı arka planı">
             <button type="button" data-bg="grass" class="active">Yeşil</button>
-            <button type="button" data-bg="black">Siyah</button>
+            <button type="button" data-bg="black">Lacivert</button>
           </div>
           <div id="col-toggle" title="Karakter / pet collision alanı">
             <button type="button" data-col="show" class="active">Col göster</button>
             <button type="button" data-col="hide">Col gizle</button>
           </div>
+          <div id="scene-toggle" title="9:16 sahne düzeni JSON">
+            <button type="button" id="scene-copy">JSON kopyala</button>
+            <button type="button" id="scene-load">JSON yapıştır</button>
+            <button type="button" id="scene-clear">Sahne sil</button>
+          </div>
+          <div id="scene-slots" title="Kayıtlı sahneler — tıkla yükle"></div>
+        </div>
+        <div id="scene-modal" class="hidden" aria-hidden="true">
+          <div class="scene-modal-card">
+            <h2>Sahne JSON</h2>
+            <p>Yapıştırıp yükle — refresh’te localStorage’dan da açılır.</p>
+            <textarea id="scene-json" rows="14" spellcheck="false" placeholder='{ "version": 1, ... }'></textarea>
+            <div class="scene-modal-actions">
+              <button type="button" id="scene-modal-cancel">İptal</button>
+              <button type="button" id="scene-modal-apply">Yükle</button>
+            </div>
+          </div>
         </div>
         <div id="app"></div>
         <div id="inspector" class="hidden">
-          <div class="insp-title" id="insp-label">—</div>
+          <div class="insp-title" id="insp-label" title="Sürükleyerek istediğin yere taşı">—</div>
           <label>X <input id="insp-x" type="number" step="1" /></label>
           <label>Z <input id="insp-z" type="number" step="1" /></label>
           <label>Boyut <input id="insp-scale" type="range" min="0.25" max="4" step="0.05" /><span id="insp-scale-val">1.00</span></label>
@@ -59,6 +76,10 @@
             <button type="button" id="insp-col-reset" class="insp-col-reset">Kareyi sıfırla</button>
           </div>
           <button type="button" id="insp-delete" class="danger">Sil</button>
+        </div>
+        <div id="chat-bar">
+          <input id="chat-input" type="text" maxlength="48" autocomplete="off" placeholder="Mesaj veya /R3 /dance /jump /sit /stop…" />
+          <button type="button" id="chat-send">Gönder</button>
         </div>
       </main>
 
@@ -75,6 +96,7 @@
     <div id="prompt" class="hidden"><kbd>E</kbd> <span id="prompt-text">Bin</span></div>
     <div id="stamina" class="hidden"><div id="stamina-fill"></div></div>
     <div id="drag-ghost" class="hidden"></div>
-    <script type="module" src="./main.js?v=20251113danceFix"></script>
+    <div id="world-labels"></div>
+    <script type="module" src="./main.js?v=20251113hudDrag"></script>
   </body>
 </html>

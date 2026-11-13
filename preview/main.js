@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
-import { Player, dirFromVector, FEET_NUDGE_Z } from "./player.js?v=colToggle";
+import { Player, dirFromVector, FEET_NUDGE_Z } from "./player.js?v=chatJumpSit";
 import {
   loadCatalog,
   groupByCat,
@@ -25,6 +25,7 @@ const DIR_LABELS = {
 };
 
 const statusEl = document.getElementById("status");
+const hudEl = document.getElementById("hud");
 const promptEl = document.getElementById("prompt");
 const promptTextEl = document.getElementById("prompt-text");
 const staminaEl = document.getElementById("stamina");
@@ -38,6 +39,7 @@ const colToggle = document.getElementById("col-toggle");
 const VP_STORAGE_KEY = "skate_life_viewport";
 const BG_STORAGE_KEY = "skate_life_bg";
 const COL_DEBUG_KEY = "skate_life_col_debug";
+const SCENE_STORAGE_KEY = "skate_life_scene_v1";
 /** @type {"fill" | "9x16"} */
 let viewportMode =
   localStorage.getItem(VP_STORAGE_KEY) === "9x16" ? "9x16" : "fill";
@@ -49,6 +51,22 @@ let colDebugVisible = localStorage.getItem(COL_DEBUG_KEY) !== "hide";
 let petColRing = null;
 const PET_COL_RADIUS = 12;
 const PET_FEET_NUDGE_Z = -10;
+let scenePersistTimer = 0;
+let sceneLoading = false;
+/** Bumped when a named scene file is the source of truth (AI / slot load). */
+let sceneRevision = 0;
+/** @type {string | null} */
+let activeSceneId = null;
+/** @type {{ id: string, label?: string, file?: string }[]} */
+let sceneCatalog = [];
+const sceneCopyBtn = document.getElementById("scene-copy");
+const sceneLoadBtn = document.getElementById("scene-load");
+const sceneClearBtn = document.getElementById("scene-clear");
+const sceneSlotsEl = document.getElementById("scene-slots");
+const sceneModal = document.getElementById("scene-modal");
+const sceneJsonEl = document.getElementById("scene-json");
+const sceneModalCancel = document.getElementById("scene-modal-cancel");
+const sceneModalApply = document.getElementById("scene-modal-apply");
 /** Fixed playable frame center for 9:16 (camera does not follow the player). */
 const MAP_VIEW = { x: 0, z: 200 };
 const BG_PRESETS = {
@@ -59,10 +77,11 @@ const BG_PRESETS = {
     plaza: 0x3a4a3c,
   },
   black: {
-    clear: 0x000000,
+    // R11 G13 B42 — deep navy (shown as Lacivert in UI)
+    clear: 0x0b0d2a,
     fogNear: 1400,
     fogFar: 3200,
-    plaza: 0x0a0a0a,
+    plaza: 0x0b0d2a,
   },
 };
 const inspLabel = document.getElementById("insp-label");
@@ -76,6 +95,144 @@ const inspDelete = document.getElementById("insp-delete");
 const inspCol = document.getElementById("insp-col");
 const inspColOn = document.getElementById("insp-col-on");
 const inspColReset = document.getElementById("insp-col-reset");
+/** Free position of #inspector after first drag (px, relative to #stage parent). */
+let inspPos = /** @type {{ left: number, top: number } | null} */ (null);
+
+function inspParentSize() {
+  const parent = inspector?.parentElement;
+  return {
+    w: parent?.clientWidth || window.innerWidth,
+    h: parent?.clientHeight || window.innerHeight,
+  };
+}
+
+function clampInspPos(left, top) {
+  const { w: pw, h: ph } = inspParentSize();
+  const panelW = inspector?.offsetWidth || 0;
+  const panelH = inspector?.offsetHeight || 0;
+  const pad = 8;
+  return {
+    left: Math.max(pad, Math.min(pw - panelW - pad, left)),
+    top: Math.max(pad, Math.min(ph - panelH - pad, top)),
+  };
+}
+
+function applyInspPos(left, top) {
+  if (!inspector) return;
+  inspPos = clampInspPos(left, top);
+  inspector.classList.add("insp-moved");
+  inspector.style.setProperty("--insp-left", `${inspPos.left}px`);
+  inspector.style.setProperty("--insp-top", `${inspPos.top}px`);
+  inspector.style.setProperty("--insp-bottom", "auto");
+  inspector.style.setProperty("--insp-transform", "none");
+}
+
+inspLabel?.addEventListener("pointerdown", (e) => {
+  if (e.button !== 0 || !inspector) return;
+  e.preventDefault();
+  e.stopPropagation();
+  inspLabel.setPointerCapture(e.pointerId);
+  inspector.classList.add("insp-dragging");
+  const rect = inspector.getBoundingClientRect();
+  const parent = inspector.parentElement?.getBoundingClientRect();
+  const originLeft = rect.left - (parent?.left || 0);
+  const originTop = rect.top - (parent?.top || 0);
+  // Switch to top/left coords on first drag (leave centered bottom layout)
+  if (!inspPos) applyInspPos(originLeft, originTop);
+  const startX = e.clientX;
+  const startY = e.clientY;
+  const fromLeft = inspPos.left;
+  const fromTop = inspPos.top;
+  const onMove = (ev) => {
+    applyInspPos(fromLeft + (ev.clientX - startX), fromTop + (ev.clientY - startY));
+  };
+  const onUp = (ev) => {
+    try {
+      inspLabel.releasePointerCapture(ev.pointerId);
+    } catch {
+      /* */
+    }
+    inspector.classList.remove("insp-dragging");
+    inspLabel.removeEventListener("pointermove", onMove);
+    inspLabel.removeEventListener("pointerup", onUp);
+    inspLabel.removeEventListener("pointercancel", onUp);
+  };
+  inspLabel.addEventListener("pointermove", onMove);
+  inspLabel.addEventListener("pointerup", onUp);
+  inspLabel.addEventListener("pointercancel", onUp);
+});
+
+window.addEventListener("resize", () => {
+  if (inspPos && inspector && !inspector.classList.contains("hidden")) {
+    applyInspPos(inspPos.left, inspPos.top);
+  }
+  if (hudPos && hudEl) applyHudPos(hudPos.left, hudPos.top);
+});
+
+/** Free position of #hud after first drag (px, relative to #stage). */
+let hudPos = /** @type {{ left: number, top: number } | null} */ (null);
+
+function hudParentSize() {
+  const parent = hudEl?.parentElement;
+  return {
+    w: parent?.clientWidth || window.innerWidth,
+    h: parent?.clientHeight || window.innerHeight,
+  };
+}
+
+function clampHudPos(left, top) {
+  const { w: pw, h: ph } = hudParentSize();
+  const panelW = hudEl?.offsetWidth || 0;
+  const panelH = hudEl?.offsetHeight || 0;
+  const pad = 8;
+  return {
+    left: Math.max(pad, Math.min(pw - panelW - pad, left)),
+    top: Math.max(pad, Math.min(ph - panelH - pad, top)),
+  };
+}
+
+function applyHudPos(left, top) {
+  if (!hudEl) return;
+  hudPos = clampHudPos(left, top);
+  hudEl.classList.add("hud-moved");
+  hudEl.style.setProperty("--hud-left", `${hudPos.left}px`);
+  hudEl.style.setProperty("--hud-top", `${hudPos.top}px`);
+}
+
+hudEl?.addEventListener("pointerdown", (e) => {
+  if (e.button !== 0 || !hudEl) return;
+  e.preventDefault();
+  e.stopPropagation();
+  hudEl.setPointerCapture(e.pointerId);
+  hudEl.classList.add("hud-dragging");
+  const rect = hudEl.getBoundingClientRect();
+  const parent = hudEl.parentElement?.getBoundingClientRect();
+  const originLeft = rect.left - (parent?.left || 0);
+  const originTop = rect.top - (parent?.top || 0);
+  if (!hudPos) applyHudPos(originLeft, originTop);
+  const startX = e.clientX;
+  const startY = e.clientY;
+  const fromLeft = hudPos.left;
+  const fromTop = hudPos.top;
+  const onMove = (ev) => {
+    applyHudPos(fromLeft + (ev.clientX - startX), fromTop + (ev.clientY - startY));
+  };
+  const onUp = (ev) => {
+    try {
+      hudEl.releasePointerCapture(ev.pointerId);
+    } catch {
+      /* */
+    }
+    hudEl.classList.remove("hud-dragging");
+    hudEl.removeEventListener("pointermove", onMove);
+    hudEl.removeEventListener("pointerup", onUp);
+    hudEl.removeEventListener("pointercancel", onUp);
+  };
+  hudEl.addEventListener("pointermove", onMove);
+  hudEl.addEventListener("pointerup", onUp);
+  hudEl.addEventListener("pointercancel", onUp);
+});
+
 const dragGhost = document.getElementById("drag-ghost");
 /** @type {THREE.Group | null} */
 let colGizmo = null;
@@ -207,7 +364,7 @@ function makeGroundTexture() {
 
 const grassGroundTex = makeGroundTexture();
 const grassGroundMat = new THREE.MeshBasicMaterial({ map: grassGroundTex });
-const blackGroundMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
+const blackGroundMat = new THREE.MeshBasicMaterial({ color: 0x0b0d2a });
 const ground = new THREE.Mesh(
   new THREE.PlaneGeometry(3600, 3600),
   bgMode === "black" ? blackGroundMat : grassGroundMat,
@@ -790,6 +947,7 @@ function nearestVehicle(px, pz) {
   let bestD = Infinity;
   for (const obj of pickables) {
     if (!isVehicleObj(obj)) continue;
+    if (obj.userData?.traffic) continue;
     if (obj === occupiedVehicle) continue;
     // distance to car body edge (0 = touching / inside footprint)
     const d = distToFootprint(px, pz, footprintOf(obj));
@@ -879,6 +1037,442 @@ function showPromptAbove(obj, text) {
   promptEl.style.top = `${sy}px`;
   promptEl.classList.remove("hidden");
 }
+
+const worldLabelsRoot = document.getElementById("world-labels");
+const chatInput = document.getElementById("chat-input");
+const chatSendBtn = document.getElementById("chat-send");
+const PLAYER_CHAT_NAME = "Main";
+const BUBBLE_DURATION_MS = 4500;
+/** @type {Map<string, { root: HTMLElement, nameEl: HTMLElement, bubbleEl: HTMLElement, hideAt: number, obj: THREE.Object3D | null }>} */
+const worldLabelMap = new Map();
+
+function shortCharacterName(label, path) {
+  if (label) {
+    const head = String(label).split("·")[0].trim();
+    if (head) return head;
+  }
+  const m = String(path || "").match(/assets\/characters\/([^/]+)/i);
+  return m ? m[1] : "NPC";
+}
+
+function labelKeyFor(obj) {
+  if (!obj) return null;
+  if (player?.mesh && obj === player.mesh) return "player";
+  return obj.uuid || obj.userData?.catalogKey || null;
+}
+
+function ensureWorldLabel(key, displayName) {
+  let entry = worldLabelMap.get(key);
+  if (entry) {
+    if (entry.nameEl.textContent !== displayName) {
+      entry.nameEl.textContent = displayName;
+    }
+    return entry;
+  }
+  const root = document.createElement("div");
+  root.className = "world-label hidden";
+  root.dataset.key = key;
+  const nameEl = document.createElement("div");
+  nameEl.className = "world-label-name";
+  nameEl.textContent = displayName;
+  const bubbleEl = document.createElement("div");
+  bubbleEl.className = "world-label-bubble hidden";
+  // order: bubble above name
+  root.append(bubbleEl, nameEl);
+  worldLabelsRoot?.appendChild(root);
+  entry = { root, nameEl, bubbleEl, hideAt: 0, obj: null };
+  worldLabelMap.set(key, entry);
+  return entry;
+}
+
+function removeWorldLabel(key) {
+  const entry = worldLabelMap.get(key);
+  if (!entry) return;
+  entry.root.remove();
+  worldLabelMap.delete(key);
+}
+
+function projectHeadScreen(obj) {
+  if (!obj || !renderer?.domElement) return null;
+  camera.updateMatrixWorld(true);
+  // Sprite top in world units (center.y=0 → full scale.y above feet)
+  const h = obj.scale?.y || (obj.userData?.h || 96) * (obj.userData?.scale || 1) || 96;
+  const cy = obj.center?.y ?? 0;
+  // Main’s art has more empty pad under the canvas top — nudge name down a bit
+  const pad = player?.mesh && obj === player.mesh ? -10 : 2;
+  _camUp.setFromMatrixColumn(camera.matrixWorld, 1).normalize();
+  // CSS translate(-50%, -100%) sits the name on this anchor
+  _promptWorld.copy(obj.position).addScaledVector(_camUp, h * (1 - cy) + pad);
+  _promptNdc.copy(_promptWorld).project(camera);
+  if (Math.abs(_promptNdc.x) > 1.4 || Math.abs(_promptNdc.y) > 1.4) return null;
+  const canvasRect = renderer.domElement.getBoundingClientRect();
+  const sx = ((_promptNdc.x + 1) / 2) * canvasRect.width + canvasRect.left;
+  const sy = ((-_promptNdc.y + 1) / 2) * canvasRect.height + canvasRect.top + 2;
+  return { sx, sy };
+}
+
+function speakAs(obj, text) {
+  const msg = String(text || "").trim();
+  if (!msg || !obj) return;
+  const key = labelKeyFor(obj);
+  if (!key) return;
+  const name =
+    key === "player"
+      ? PLAYER_CHAT_NAME
+      : shortCharacterName(obj.userData?.label, obj.userData?.path);
+  const entry = ensureWorldLabel(key, name);
+  entry.obj = obj;
+  entry.bubbleEl.textContent = msg;
+  entry.bubbleEl.classList.remove("hidden");
+  entry.hideAt = performance.now() + BUBBLE_DURATION_MS;
+  entry.root.classList.remove("hidden");
+}
+
+function chatSpeaker() {
+  if (selected?.userData?.kind === "character" && selected.visible !== false) {
+    return selected;
+  }
+  return player?.mesh || null;
+}
+
+/** 1 chat "birim" ≈ half a ground tile — /R3 feels like a clear step. */
+const CHAT_MOVE_UNIT = 48;
+/** Speech bubble / chat message max length (commands ignored). */
+const CHAT_MSG_MAX = 48;
+/** @type {{ obj: THREE.Object3D, dx: number, dz: number, left: number, speed: number } | null} */
+let npcScriptMove = null;
+
+const CHAT_DIR_ALIASES = {
+  n: "north",
+  s: "south",
+  e: "east",
+  w: "west",
+  r: "east", // right
+  l: "west", // left
+  ne: "north-east",
+  "n-e": "north-east",
+  nw: "north-west",
+  "n-w": "north-west",
+  se: "south-east",
+  "s-e": "south-east",
+  sw: "south-west",
+  "s-w": "south-west",
+  north: "north",
+  south: "south",
+  east: "east",
+  west: "west",
+  "north-east": "north-east",
+  "north-west": "north-west",
+  "south-east": "south-east",
+  "south-west": "south-west",
+};
+
+function parseChatDirToken(tok) {
+  const key = String(tok || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "");
+  return CHAT_DIR_ALIASES[key] || null;
+}
+
+function tickNpcScriptMove(dt) {
+  if (!npcScriptMove?.obj) {
+    npcScriptMove = null;
+    return;
+  }
+  const sm = npcScriptMove;
+  if (!sm.obj.parent || sm.obj.visible === false) {
+    npcScriptMove = null;
+    return;
+  }
+  const step = Math.min(sm.left, sm.speed * dt);
+  const nx = sm.obj.position.x + sm.dx * step;
+  const nz = sm.obj.position.z + sm.dz * step;
+  // Soft block: skip step into solids (characters aren't solid to themselves)
+  const blocked = solidBlocked(nx, nz + FEET_NUDGE_Z, 18);
+  if (!blocked) {
+    sm.obj.position.x = nx;
+    sm.obj.position.z = nz;
+    syncDepth(sm.obj);
+  }
+  sm.left -= step;
+  if (sm.left <= 0.5 || blocked) npcScriptMove = null;
+}
+
+/** Swap …/states/<x>/… → …/states/<state>/… (sit/stand). */
+function characterStatePath(path, state) {
+  const p = String(path || "");
+  if (!/\/states\//i.test(p)) return null;
+  return p.replace(/\/states\/[^/]+/i, `/states/${state}`);
+}
+
+async function setCharacterSitPose(obj, sitting) {
+  if (!obj?.userData || obj.userData.kind !== "character") return false;
+  const want = sitting ? "sit" : "stand";
+  const nextPath = characterStatePath(obj.userData.path, want);
+  if (!nextPath) {
+    statusEl.textContent = "Bu karakterde sit/stand yok";
+    return false;
+  }
+  const dir = obj.userData.dir || "south";
+  const dirs = obj.userData.dirs?.length ? obj.userData.dirs : DIRS;
+  const rotTextures = await loadRotationTextures(nextPath, dirs);
+  if (!Object.keys(rotTextures).length) {
+    statusEl.textContent = sitting ? "Sit animasyonu yok" : "Stand bulunamadı";
+    return false;
+  }
+  obj.userData.path = nextPath;
+  obj.userData.rotTextures = rotTextures;
+  obj.userData.idleSlug = null;
+  obj.userData.dancing = false;
+  obj.userData.animName = null;
+  obj.userData.anim = null;
+  obj.userData.sitting = !!sitting;
+  const faceTex = rotTextures[dir] || rotTextures.south || Object.values(rotTextures)[0];
+  if (faceTex) setMap(obj, faceTex);
+  await attachIdle(obj, nextPath, dir, { allowSouthFallback: true });
+  if (!sceneLoading) schedulePersistScene();
+  statusEl.textContent = sitting ? "Oturuyor" : "Ayağa kalktı";
+  return true;
+}
+
+async function handleChatCommand(raw) {
+  const text = String(raw || "").trim();
+  const who = chatSpeaker();
+  if (!who) {
+    statusEl.textContent = "Komut için karakter yok";
+    return;
+  }
+  const isPlayer = !!(player?.mesh && who === player.mesh);
+  // Case-insensitive: /Dance /R3 /jump …
+  const lower = text.toLowerCase();
+  const name =
+    isPlayer
+      ? PLAYER_CHAT_NAME
+      : shortCharacterName(who.userData?.label, who.userData?.path);
+
+  if (lower === "/dance") {
+    if (isPlayer) {
+      if (player.driving) {
+        statusEl.textContent = "Araçtayken dans yok";
+        return;
+      }
+      player.startDance();
+      statusEl.textContent = `${name}: dance`;
+      return;
+    }
+    await setCharacterDancing(who, true);
+    return;
+  }
+
+  if (lower === "/jump") {
+    if (isPlayer) {
+      if (player.driving) {
+        statusEl.textContent = "Araçtayken zıplama yok";
+        return;
+      }
+      if (!player.startJump()) {
+        statusEl.textContent = "Şu an zıplanamaz";
+        return;
+      }
+      statusEl.textContent = `${name}: jump`;
+      return;
+    }
+    statusEl.textContent = "Jump sadece Main için";
+    return;
+  }
+
+  if (lower === "/sit") {
+    if (isPlayer) {
+      if (player.driving || player.skating) {
+        statusEl.textContent = "Şu an oturulamaz";
+        return;
+      }
+      if (!player.startSit()) {
+        statusEl.textContent = "Şu an oturulamaz";
+        return;
+      }
+      statusEl.textContent = `${name}: sit`;
+      return;
+    }
+    npcScriptMove = null;
+    await setCharacterSitPose(who, true);
+    return;
+  }
+
+  if (lower === "/stop") {
+    if (isPlayer) {
+      player.stopActions();
+      statusEl.textContent = `${name}: stop`;
+      return;
+    }
+    npcScriptMove = null;
+    if (who.userData?.dancing || who.userData?.animName === "dance") {
+      await setCharacterDancing(who, false);
+    }
+    if (who.userData?.sitting || /\/states\/sit/i.test(who.userData?.path || "")) {
+      await setCharacterSitPose(who, false);
+    } else {
+      statusEl.textContent = `${name}: stop`;
+    }
+    return;
+  }
+
+  // /R3  /NE2  /w 10  — direction letter(s) + distance (case-insensitive)
+  const m = lower.match(
+    /^\/(n|s|e|w|r|l|ne|nw|se|sw|n-e|n-w|s-e|s-w)\s*(\d+(?:\.\d+)?)\s*$/i,
+  );
+  if (m) {
+    const dirName = parseChatDirToken(m[1]);
+    const birim = Number(m[2]);
+    if (!dirName || !Number.isFinite(birim) || birim <= 0) {
+      statusEl.textContent = "Komut: /R3 /N2 · /dance /jump /sit /stop";
+      return;
+    }
+    const vec = FACE_VEC[dirName];
+    if (!vec) {
+      statusEl.textContent = "Bilinmeyen yön";
+      return;
+    }
+    const dist = birim * CHAT_MOVE_UNIT;
+    const [dx, dz] = vec;
+    if (isPlayer) {
+      if (player.driving) {
+        statusEl.textContent = "Araçtayken yürüme komutu yok";
+        return;
+      }
+      player.startScriptMove(dx, dz, dist);
+      statusEl.textContent = `${name}: ${dirName} × ${birim}`;
+      return;
+    }
+    who.userData.dir = dirName;
+    applyFacing(who, dirName);
+    if (who.userData.dancing) {
+      who.userData.dancing = false;
+      await attachIdle(who, who.userData.path, dirName, { allowSouthFallback: false });
+    }
+    if (who.userData.sitting || /\/states\/sit/i.test(who.userData.path || "")) {
+      await setCharacterSitPose(who, false);
+    }
+    npcScriptMove = {
+      obj: who,
+      dx,
+      dz,
+      left: dist,
+      speed: 110,
+    };
+    statusEl.textContent = `${name}: ${dirName} × ${birim}`;
+    return;
+  }
+
+  statusEl.textContent = "Komut: /R3 /dance /jump /sit /stop (büyük/küçük harf OK)";
+}
+
+function sendChatMessage() {
+  if (!chatInput) return;
+  const text = chatInput.value.trim();
+  if (!text) return;
+  const who = chatSpeaker();
+  if (!who) return;
+
+  if (text.startsWith("/")) {
+    chatInput.value = "";
+    handleChatCommand(text).catch((err) => {
+      console.warn(err);
+      statusEl.textContent = err.message || String(err);
+    });
+    return;
+  }
+
+  const msg = text.slice(0, CHAT_MSG_MAX);
+  speakAs(who, msg);
+  chatInput.value = "";
+  statusEl.textContent =
+    who === player?.mesh
+      ? `${PLAYER_CHAT_NAME}: ${msg}`
+      : `${shortCharacterName(who.userData?.label, who.userData?.path)}: ${msg}`;
+}
+
+/** Match sprite depth: higher world Z = closer to camera / more “in front”. */
+function worldLabelStackOrder(obj) {
+  const z = obj?.position?.z ?? 0;
+  // Keep within a safe CSS z-index range; bubble slightly above that name
+  return Math.max(1, Math.round(z * 10) + 1000);
+}
+
+function placeWorldLabel(entry, obj, scr) {
+  entry.root.classList.remove("hidden");
+  entry.root.style.left = `${scr.sx}px`;
+  entry.root.style.top = `${scr.sy}px`;
+  const base = worldLabelStackOrder(obj);
+  const talking = entry.hideAt && performance.now() < entry.hideAt;
+  entry.root.style.zIndex = String(talking ? base + 1 : base);
+}
+
+function syncWorldLabels() {
+  if (!worldLabelsRoot) return;
+  const now = performance.now();
+  const live = new Set();
+
+  if (player?.mesh && player.mesh.visible !== false && !player.driving) {
+    const key = "player";
+    live.add(key);
+    const entry = ensureWorldLabel(key, PLAYER_CHAT_NAME);
+    entry.obj = player.mesh;
+    const scr = projectHeadScreen(player.mesh);
+    if (!scr) {
+      entry.root.classList.add("hidden");
+    } else {
+      placeWorldLabel(entry, player.mesh, scr);
+    }
+    if (entry.hideAt && now >= entry.hideAt) {
+      entry.bubbleEl.classList.add("hidden");
+      entry.bubbleEl.textContent = "";
+      entry.hideAt = 0;
+    }
+  }
+
+  for (const obj of pickables) {
+    if (obj.userData?.kind !== "character") continue;
+    if (obj.visible === false) continue;
+    const key = labelKeyFor(obj);
+    if (!key) continue;
+    live.add(key);
+    const name = shortCharacterName(obj.userData?.label, obj.userData?.path);
+    const entry = ensureWorldLabel(key, name);
+    entry.obj = obj;
+    const scr = projectHeadScreen(obj);
+    if (!scr) {
+      entry.root.classList.add("hidden");
+    } else {
+      placeWorldLabel(entry, obj, scr);
+    }
+    if (entry.hideAt && now >= entry.hideAt) {
+      entry.bubbleEl.classList.add("hidden");
+      entry.bubbleEl.textContent = "";
+      entry.hideAt = 0;
+    }
+  }
+
+  for (const key of [...worldLabelMap.keys()]) {
+    if (!live.has(key)) removeWorldLabel(key);
+  }
+}
+
+chatSendBtn?.addEventListener("click", () => sendChatMessage());
+chatInput?.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") {
+    e.preventDefault();
+    e.stopPropagation();
+    sendChatMessage();
+  } else if (e.key === "Escape") {
+    e.preventDefault();
+    chatInput.blur();
+  }
+});
+chatInput?.addEventListener("focus", () => {
+  player?.keys?.clear?.();
+});
 
 function enterVehicle(veh) {
   if (!player?.mesh || !veh) return;
@@ -1163,9 +1757,47 @@ function containmentBlocks(px, pz, radius) {
   return false;
 }
 
+const _viewClampA = new THREE.Vector3();
+const _viewClampB = new THREE.Vector3();
+
+/**
+ * 9:16 uses a fixed camera — block walking past the visible frame
+ * (feet + approx head so the sprite doesn't clip off-screen).
+ */
+function viewBoundsBlock(px, pz, radius = 22) {
+  if (viewportMode !== "9x16") return false;
+  camera.updateMatrixWorld(true);
+  const edge = 0.92;
+  const pad = Math.max(8, radius * 0.35);
+  // Sample a few points around the feet + head height along camera-up
+  _camUp.setFromMatrixColumn(camera.matrixWorld, 1).normalize();
+  const samples = [
+    [px, pz],
+    [px + pad, pz],
+    [px - pad, pz],
+    [px, pz + pad],
+    [px, pz - pad],
+  ];
+  for (const [sx, sz] of samples) {
+    _viewClampA.set(sx, 0, sz).project(camera);
+    if (Math.abs(_viewClampA.x) > edge || Math.abs(_viewClampA.y) > edge) {
+      return true;
+    }
+    _viewClampB.set(sx, 0, sz).addScaledVector(_camUp, 78).project(camera);
+    if (Math.abs(_viewClampB.x) > edge || Math.abs(_viewClampB.y) > edge) {
+      return true;
+    }
+  }
+  return false;
+}
+
 /** px/pz = feet world position (mesh.z + FEET_NUDGE_Z). */
 function playerCollides(px, pz, radius) {
-  return solidBlocked(px, pz, radius) || containmentBlocks(px, pz, radius);
+  return (
+    solidBlocked(px, pz, radius) ||
+    containmentBlocks(px, pz, radius) ||
+    viewBoundsBlock(px, pz, radius)
+  );
 }
 
 function playerFeetCollidesAtMesh(mx, mz, radius) {
@@ -1637,11 +2269,13 @@ async function setCharacterDancing(obj, on) {
       statusEl.textContent = "Bu karakterde dance yok";
       return false;
     }
+    if (!sceneLoading) schedulePersistScene();
     statusEl.textContent = "Dans açık";
     return true;
   }
   obj.userData.dancing = false;
   await attachIdle(obj, obj.userData.path, dir, { allowSouthFallback: false });
+  if (!sceneLoading) schedulePersistScene();
   statusEl.textContent = "Dans kapalı";
   return true;
 }
@@ -1954,6 +2588,7 @@ async function setDirection(obj, dir, { recordUndo = true } = {}) {
     if (d.kind === "character" && d.dancing) {
       const danced = await attachDance(obj, d.path, dir, { allowSouthFallback: false });
       if (danced) {
+        schedulePersistScene();
         refreshInspector();
         return;
       }
@@ -1961,6 +2596,7 @@ async function setDirection(obj, dir, { recordUndo = true } = {}) {
     }
     const ok = await attachIdle(obj, d.path, dir, { allowSouthFallback: false });
     if (ok) {
+      schedulePersistScene();
       refreshInspector();
       return;
     }
@@ -1968,6 +2604,7 @@ async function setDirection(obj, dir, { recordUndo = true } = {}) {
   if (d.rotTextures?.[dir]) {
     d.anim = null; // stop south idle from overwriting the facing sprite
     setMap(obj, d.rotTextures[dir]);
+    schedulePersistScene();
     refreshInspector();
     return;
   }
@@ -2035,7 +2672,7 @@ async function spawnItem(item, x, z, opts = {}) {
     dirs,
     rotTextures,
     fallbackSouth: true,
-    editable: true,
+    editable: opts.editable !== false,
     solid: isSolidItem(item),
     ball: isBallPath(item.path),
     vehicle: isVehiclePath(item.path),
@@ -2044,7 +2681,12 @@ async function spawnItem(item, x, z, opts = {}) {
     tileable,
     baseTile,
     tileSize,
+    traffic: !!opts.traffic,
   };
+  if (opts.traffic) {
+    userData.editable = false;
+    userData.solid = true;
+  }
   if (hasEditableCollision(item.path)) {
     userData.col = defaultColData();
     userData.solid = false; // containment zone when col.enabled
@@ -2105,9 +2747,523 @@ async function spawnItem(item, x, z, opts = {}) {
     statusEl.textContent = "Hazır";
   }
 
-  selectObject(obj);
-  if (opts.recordUndo !== false) pushSpawnUndo(obj);
+  if (opts.select !== false) selectObject(obj);
+  if (opts.recordUndo !== false && !opts.traffic) pushSpawnUndo(obj);
+  if (!sceneLoading && !opts.traffic && opts.editable !== false) schedulePersistScene();
   return obj;
+}
+
+function roundSceneNum(n, digits = 2) {
+  const p = 10 ** digits;
+  return Math.round(Number(n) * p) / p;
+}
+
+/** Snapshot walkable-zone collision (night_club_inside polygon). */
+function serializeCol(obj) {
+  if (!hasEditableCollision(obj?.userData?.path)) return null;
+  const col = ensureColData(obj);
+  return {
+    enabled: !!col.enabled,
+    pts: (col.pts || []).map((p) => ({
+      fx: roundSceneNum(p.fx, 4),
+      fz: roundSceneNum(p.fz, 4),
+    })),
+  };
+}
+
+function applySerializedCol(obj, colData) {
+  if (!obj || !colData || !hasEditableCollision(obj.userData?.path)) return;
+  const pts = Array.isArray(colData.pts)
+    ? colData.pts
+        .filter((p) => p && Number.isFinite(Number(p.fx)) && Number.isFinite(Number(p.fz)))
+        .map((p) => ({ fx: Number(p.fx), fz: Number(p.fz) }))
+    : [];
+  obj.userData.col = {
+    enabled: !!colData.enabled,
+    pts: pts.length >= 3 ? pts : defaultColData().pts.map((p) => ({ ...p })),
+  };
+  syncColSolid(obj);
+}
+
+function serializeScene() {
+  const objects = [];
+  for (const obj of pickables) {
+    const d = obj.userData;
+    if (!d?.editable || d.companion) continue;
+    const entry = {
+      kind: d.kind || "object",
+      id: d.catalogId || null,
+      path: d.path,
+      x: roundSceneNum(obj.position.x),
+      z: roundSceneNum(obj.position.z),
+      scale: roundSceneNum(d.scale ?? 1),
+      dir: d.dir || "south",
+    };
+    if (d.dancing) entry.dancing = true;
+    // Always embed night_club_inside walkable collision polygon
+    const col = serializeCol(obj);
+    if (col) entry.col = col;
+    objects.push(entry);
+  }
+  return {
+    version: 1,
+    revision: sceneRevision || 0,
+    sceneId: activeSceneId || undefined,
+    label:
+      sceneCatalog.find((s) => s.id === activeSceneId)?.label || undefined,
+    viewport: viewportMode,
+    bg: bgMode,
+    player: player?.mesh
+      ? {
+          x: roundSceneNum(player.mesh.position.x),
+          z: roundSceneNum(player.mesh.position.z),
+          facing: player.facing || "south",
+        }
+      : { x: 0, z: 200, facing: "south" },
+    objects,
+  };
+}
+
+function persistScene() {
+  try {
+    localStorage.setItem(SCENE_STORAGE_KEY, JSON.stringify(serializeScene()));
+  } catch (err) {
+    console.warn("persistScene", err);
+  }
+}
+
+function schedulePersistScene() {
+  if (sceneLoading) return;
+  clearTimeout(scenePersistTimer);
+  scenePersistTimer = setTimeout(() => persistScene(), 400);
+}
+
+function findCatalogItem(entry) {
+  if (!entry) return null;
+  const path = entry.path;
+  if (entry.id && path) {
+    const byKey = catalogItemById.get(`${entry.id}:${path}`);
+    if (byKey) return byKey;
+  }
+  if (path) {
+    for (const it of catalogItemById.values()) {
+      if (it.path === path) return it;
+    }
+  }
+  return null;
+}
+
+function clearEditableSceneObjects() {
+  selectObject(null);
+  const doomed = pickables.filter((o) => o.userData?.editable && !o.userData?.companion);
+  for (const obj of doomed) {
+    detachPlacedObject(obj);
+    disposePlacedObject(obj);
+  }
+  undoStack.length = 0;
+}
+
+/** NPC traffic on street road — car_2→car_5→pickup, L↔R off-screen. */
+const TRAFFIC_PATHS = [
+  "assets/vehicles/car_2/168x168/day",
+  "assets/vehicles/car_3/168x168/day",
+  "assets/vehicles/car_4/168x168/day",
+  "assets/vehicles/car_5/168x168/day",
+  "assets/vehicles/pickup/168x168/day",
+];
+const TRAFFIC_SPAWN_X = 420;
+const TRAFFIC_DESPAWN_X = 450;
+const TRAFFIC_SPEED = 175;
+const TRAFFIC_LANE_KEY = "skate_life_traffic_lanes_v1";
+let trafficEnabled = false;
+let trafficQueueIdx = 0;
+let trafficSpawnTimer = 0;
+let trafficSpawning = false;
+/** east = sol→sağ, west = sağ→sol — ayrı Z çizgileri */
+/** @type {{ east: number | null, west: number | null }} */
+let trafficLanes = { east: null, west: null };
+/** @type {THREE.Group | null} */
+let trafficLaneGizmo = null;
+/** @type {"east" | "west" | null} */
+let trafficLaneDragDir = null;
+
+function findStreetRoad() {
+  return (
+    pickables.find((o) => /\/props\/road\//i.test(o.userData?.path || "")) || null
+  );
+}
+
+function defaultTrafficLanes() {
+  const road = findStreetRoad();
+  const base = road ? road.position.z : 568;
+  return { east: base - 22, west: base + 22 };
+}
+
+function loadTrafficLaneZ() {
+  try {
+    const raw = localStorage.getItem(TRAFFIC_LANE_KEY);
+    if (!raw) {
+      // migrate old single-lane key if present
+      const old = localStorage.getItem("skate_life_traffic_lane_z");
+      if (old != null && Number.isFinite(Number(old))) {
+        const z = Number(old);
+        trafficLanes = { east: z - 18, west: z + 18 };
+      }
+      return;
+    }
+    const data = JSON.parse(raw);
+    if (data && typeof data === "object") {
+      if (Number.isFinite(Number(data.east))) trafficLanes.east = Number(data.east);
+      if (Number.isFinite(Number(data.west))) trafficLanes.west = Number(data.west);
+    }
+  } catch {
+    /* */
+  }
+}
+
+function saveTrafficLaneZ() {
+  try {
+    localStorage.setItem(
+      TRAFFIC_LANE_KEY,
+      JSON.stringify({
+        east: getTrafficLaneZ("east"),
+        west: getTrafficLaneZ("west"),
+      }),
+    );
+  } catch {
+    /* */
+  }
+}
+
+function getTrafficLaneZ(dir) {
+  const d = dir === "west" ? "west" : "east";
+  const v = trafficLanes[d];
+  if (v != null && Number.isFinite(v)) return v;
+  const defs = defaultTrafficLanes();
+  return defs[d];
+}
+
+function disposeTrafficLaneGizmo() {
+  if (!trafficLaneGizmo) return;
+  trafficLaneGizmo.traverse((n) => {
+    n.geometry?.dispose?.();
+    if (n.material) {
+      if (Array.isArray(n.material)) n.material.forEach((m) => m.dispose?.());
+      else n.material.dispose?.();
+    }
+  });
+  trafficLaneGizmo.parent?.remove(trafficLaneGizmo);
+  trafficLaneGizmo = null;
+}
+
+function updateTrafficLaneGizmo() {
+  // Lane guides hidden in-game; Z still comes from saved trafficLanes / defaults
+  disposeTrafficLaneGizmo();
+}
+
+function setTrafficLaneZ(dir, z) {
+  const d = dir === "west" ? "west" : "east";
+  trafficLanes[d] = z;
+  for (const obj of pickables) {
+    if (!obj.userData?.traffic) continue;
+    if (obj.userData.trafficDir !== d) continue;
+    obj.position.z = z;
+    syncDepth(obj);
+  }
+}
+
+function clearTraffic() {
+  const doomed = pickables.filter((o) => o.userData?.traffic);
+  for (const obj of doomed) {
+    detachPlacedObject(obj);
+    disposePlacedObject(obj);
+  }
+  trafficSpawning = false;
+  trafficSpawnTimer = 0.6;
+  trafficLaneDragDir = null;
+}
+
+function syncTrafficForScene() {
+  if (activeSceneId === "street") {
+    trafficEnabled = true;
+    trafficSpawnTimer = 0.4;
+    const defs = defaultTrafficLanes();
+    if (trafficLanes.east == null) trafficLanes.east = defs.east;
+    if (trafficLanes.west == null) trafficLanes.west = defs.west;
+    disposeTrafficLaneGizmo();
+  } else {
+    trafficEnabled = false;
+    clearTraffic();
+    disposeTrafficLaneGizmo();
+  }
+}
+
+async function spawnNextTrafficCar() {
+  const path = TRAFFIC_PATHS[trafficQueueIdx % TRAFFIC_PATHS.length];
+  trafficQueueIdx += 1;
+  const item = findCatalogItem({ path });
+  if (!item) {
+    console.warn("traffic: katalogda yok", path);
+    return;
+  }
+  const goEast = Math.random() < 0.5;
+  const dir = goEast ? "east" : "west";
+  const laneZ = getTrafficLaneZ(dir);
+  const x0 = goEast ? -TRAFFIC_SPAWN_X : TRAFFIC_SPAWN_X;
+  const vx = goEast ? TRAFFIC_SPEED : -TRAFFIC_SPEED;
+  const obj = await spawnItem(item, x0, laneZ, {
+    dir,
+    scale: 1,
+    exactPos: true,
+    recordUndo: false,
+    select: false,
+    editable: false,
+    traffic: true,
+  });
+  if (!obj) return;
+  obj.userData.traffic = true;
+  obj.userData.trafficDir = dir;
+  obj.userData.trafficVx = vx;
+  obj.userData.editable = false;
+  syncDepth(obj);
+}
+
+function tickTraffic(dt) {
+  if (!trafficEnabled) return;
+
+  for (const obj of [...pickables]) {
+    if (!obj.userData?.traffic) continue;
+    const vx = obj.userData.trafficVx || 0;
+    obj.position.x += vx * dt;
+    syncDepth(obj);
+    if (obj.position.x > TRAFFIC_DESPAWN_X || obj.position.x < -TRAFFIC_DESPAWN_X) {
+      detachPlacedObject(obj);
+      disposePlacedObject(obj);
+    }
+  }
+
+  if (trafficSpawning) return;
+  if (pickables.some((o) => o.userData?.traffic)) return;
+  trafficSpawnTimer -= dt;
+  if (trafficSpawnTimer > 0) return;
+  trafficSpawning = true;
+  spawnNextTrafficCar()
+    .catch((err) => console.warn("traffic spawn", err))
+    .finally(() => {
+      trafficSpawning = false;
+      trafficSpawnTimer = 1.4 + Math.random() * 2.2;
+    });
+}
+
+async function loadScene(data, { persist = true } = {}) {
+  if (!data || Number(data.version) !== 1) {
+    throw new Error("Geçersiz sahne JSON (version: 1 bekleniyor)");
+  }
+  sceneLoading = true;
+  statusEl.textContent = "Sahne yükleniyor…";
+  try {
+    clearTraffic();
+    if (data.revision != null) sceneRevision = Number(data.revision) || 0;
+    if (data.sceneId) activeSceneId = String(data.sceneId);
+    else activeSceneId = null;
+    highlightSceneSlot(activeSceneId);
+    if (data.bg === "black" || data.bg === "grass") applyBackgroundMode(data.bg);
+    if (data.viewport === "9x16" || data.viewport === "fill") {
+      applyViewportMode(data.viewport);
+    }
+    clearEditableSceneObjects();
+    if (player?.mesh && data.player) {
+      player.mesh.position.x = Number(data.player.x) || 0;
+      player.mesh.position.z = Number(data.player.z) || 200;
+      if (data.player.facing) player.facing = data.player.facing;
+      player.syncRing?.();
+      if (player.syncDepth) player.syncDepth(player.mesh);
+      if (viewportMode !== "9x16") syncCameraRig(player.mesh.position);
+      else syncCameraRig(MAP_VIEW);
+    }
+    const entries = Array.isArray(data.objects) ? data.objects : [];
+    let placed = 0;
+    let missing = 0;
+    for (const entry of entries) {
+      const item = findCatalogItem(entry);
+      if (!item) {
+        missing += 1;
+        console.warn("sahne: katalogda yok", entry.path);
+        continue;
+      }
+      const obj = await spawnItem(item, Number(entry.x) || 0, Number(entry.z) || 0, {
+        scale: entry.scale != null ? Number(entry.scale) : undefined,
+        dir: entry.dir,
+        exactPos: true,
+        recordUndo: false,
+        select: false,
+      });
+      if (entry.col) applySerializedCol(obj, entry.col);
+      if (entry.dancing && obj.userData.kind === "character") {
+        await setCharacterDancing(obj, true);
+      }
+      placed += 1;
+    }
+    selectObject(null);
+    if (persist) persistScene();
+    syncTrafficForScene();
+    statusEl.textContent =
+      missing > 0
+        ? `Sahne: ${placed} obje (${missing} eksik asset)`
+        : `Sahne yüklendi · ${placed} obje`;
+  } finally {
+    sceneLoading = false;
+  }
+}
+
+async function copySceneJson() {
+  const json = JSON.stringify(serializeScene(), null, 2);
+  persistScene();
+  try {
+    await navigator.clipboard.writeText(json);
+    statusEl.textContent = "Sahne JSON panoya kopyalandı";
+  } catch {
+    if (sceneJsonEl && sceneModal) {
+      sceneJsonEl.value = json;
+      sceneModal.classList.remove("hidden");
+      sceneJsonEl.focus();
+      sceneJsonEl.select();
+      statusEl.textContent = "Panoya yazılamadı — JSON kutudan kopyala";
+      return;
+    }
+    statusEl.textContent = "JSON kopyalanamadı";
+  }
+}
+
+function openSceneLoadModal() {
+  if (!sceneModal || !sceneJsonEl) return;
+  sceneJsonEl.value = "";
+  sceneModal.classList.remove("hidden");
+  sceneJsonEl.focus();
+}
+
+function closeSceneModal() {
+  sceneModal?.classList.add("hidden");
+}
+
+async function applySceneFromModal() {
+  const raw = sceneJsonEl?.value?.trim();
+  if (!raw) {
+    statusEl.textContent = "JSON boş";
+    return;
+  }
+  try {
+    const data = JSON.parse(raw);
+    closeSceneModal();
+    await loadScene(data);
+  } catch (err) {
+    console.warn(err);
+    statusEl.textContent = "JSON okunamadı: " + (err.message || err);
+  }
+}
+
+async function clearSavedScene() {
+  if (!confirm("Yerleştirilmiş objeler silinsin mi? (localStorage da temizlenir)")) return;
+  sceneLoading = true;
+  try {
+    clearTraffic();
+    trafficEnabled = false;
+    disposeTrafficLaneGizmo();
+    activeSceneId = null;
+    highlightSceneSlot(null);
+    clearEditableSceneObjects();
+    try {
+      localStorage.removeItem(SCENE_STORAGE_KEY);
+    } catch {
+      /* */
+    }
+    statusEl.textContent = "Sahne temizlendi";
+  } finally {
+    sceneLoading = false;
+  }
+}
+
+sceneCopyBtn?.addEventListener("click", () => {
+  copySceneJson();
+});
+sceneLoadBtn?.addEventListener("click", () => openSceneLoadModal());
+sceneClearBtn?.addEventListener("click", () => {
+  clearSavedScene();
+});
+sceneModalCancel?.addEventListener("click", () => closeSceneModal());
+sceneModalApply?.addEventListener("click", () => {
+  applySceneFromModal();
+});
+sceneModal?.addEventListener("click", (e) => {
+  if (e.target === sceneModal) closeSceneModal();
+});
+window.addEventListener("beforeunload", () => {
+  if (!sceneLoading) persistScene();
+});
+
+function highlightSceneSlot(sceneId) {
+  sceneSlotsEl?.querySelectorAll("button[data-scene]").forEach((btn) => {
+    btn.classList.toggle("active", btn.getAttribute("data-scene") === sceneId);
+  });
+}
+
+async function fetchSceneCatalog() {
+  try {
+    const res = await fetch(new URL("./scenes/index.json", import.meta.url).href, {
+      cache: "no-store",
+    });
+    if (!res.ok) return [];
+    const data = await res.json();
+    return Array.isArray(data.scenes) ? data.scenes : [];
+  } catch {
+    return [];
+  }
+}
+
+function renderSceneSlots() {
+  if (!sceneSlotsEl) return;
+  sceneSlotsEl.innerHTML = "";
+  if (!sceneCatalog.length) {
+    sceneSlotsEl.classList.add("hidden");
+    return;
+  }
+  sceneSlotsEl.classList.remove("hidden");
+  for (const s of sceneCatalog) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.textContent = s.label || s.id;
+    btn.dataset.scene = s.id;
+    btn.title = `${s.id} — tıkla yükle`;
+    if (s.id === activeSceneId) btn.classList.add("active");
+    btn.addEventListener("click", () => {
+      loadNamedScene(s.id).catch((err) => {
+        console.warn(err);
+        statusEl.textContent = err.message || String(err);
+      });
+    });
+    sceneSlotsEl.appendChild(btn);
+  }
+}
+
+async function loadNamedScene(sceneId) {
+  const meta = sceneCatalog.find((s) => s.id === sceneId);
+  const file = meta?.file || `${sceneId}.json`;
+  statusEl.textContent = `${meta?.label || sceneId} yükleniyor…`;
+  const res = await fetch(new URL(`./scenes/${file}`, import.meta.url).href, {
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error(`Sahne bulunamadı: ${sceneId}`);
+  const data = await res.json();
+  if (!data || Number(data.version) !== 1) {
+    throw new Error("Geçersiz sahne dosyası");
+  }
+  // Button click always wins over older localStorage revision
+  data.sceneId = sceneId;
+  data.label = meta?.label || data.label || sceneId;
+  data.revision = Math.max(Number(data.revision) || 0, (sceneRevision || 0) + 1);
+  activeSceneId = sceneId;
+  await loadScene(data, { persist: true });
+  highlightSceneSlot(sceneId);
 }
 
 function disposeSelectionOutline() {
@@ -2405,8 +3561,10 @@ function pushMoveUndo(obj, fromX, fromZ, toX, toZ) {
       syncDepth(obj);
       if (selected === obj) refreshInspector();
       else selectObject(obj);
+      schedulePersistScene();
     },
   });
+  schedulePersistScene();
 }
 
 function pushDeleteUndo(obj) {
@@ -2415,11 +3573,13 @@ function pushDeleteUndo(obj) {
     undo() {
       attachPlacedObject(obj);
       selectObject(obj);
+      schedulePersistScene();
     },
     discard() {
       disposePlacedObject(obj);
     },
   });
+  schedulePersistScene();
 }
 
 function refreshInspector() {
@@ -2536,6 +3696,7 @@ inspZ.addEventListener("change", () => {
   if (hasEditableCollision(selected.userData?.path)) updateColGizmo(selected);
   pushMoveUndo(selected, selected.position.x, fromZ, selected.position.x, toZ);
 });
+// pushMoveUndo already schedules persist
 let scaleBefore = null;
 inspScale.addEventListener("pointerdown", () => {
   if (!selected) return;
@@ -2569,8 +3730,10 @@ inspScale.addEventListener("change", () => {
       applyScale(obj);
       if (selected === obj) refreshInspector();
       else selectObject(obj);
+      schedulePersistScene();
     },
   });
+  schedulePersistScene();
 });
 
 function applyColInspector() {
@@ -2579,6 +3742,7 @@ function applyColInspector() {
   col.enabled = !!inspColOn?.checked;
   syncColSolid(selected);
   updateColGizmo(selected);
+  schedulePersistScene();
   statusEl.textContent = col.enabled
     ? "İç alan açık — köşe sürükle · kenar ortası ekler · Alt+tık siler"
     : "İç alan kapalı";
@@ -2589,6 +3753,7 @@ inspColReset?.addEventListener("click", () => {
   if (!selected || !hasEditableCollision(selected.userData?.path)) return;
   resetColPts(selected);
   updateColGizmo(selected);
+  schedulePersistScene();
   statusEl.textContent = "Collision karesi sıfırlandı";
 });
 
@@ -2777,8 +3942,10 @@ async function onPointerUp(event) {
         undo() {
           ensureColData(obj).pts = from.map((p) => ({ ...p }));
           if (selected === obj) updateColGizmo(obj);
+          schedulePersistScene();
         },
       });
+      schedulePersistScene();
     }
     colCornerDrag = null;
     if (viewportMode !== "9x16") controls.enabled = true;
@@ -3085,6 +4252,36 @@ async function boot() {
     controls.target.set(player.mesh.position.x, 0, player.mesh.position.z);
     placeCamera(controls.target);
   }
+
+  loadTrafficLaneZ();
+
+  // Scene slots: default empty; named JSON only loads when user clicks (e.g. Sahne 1)
+  try {
+    sceneCatalog = await fetchSceneCatalog();
+    renderSceneSlots();
+    let localData = null;
+    try {
+      const raw = localStorage.getItem(SCENE_STORAGE_KEY);
+      if (raw) localData = JSON.parse(raw);
+    } catch {
+      /* */
+    }
+    const isNamedSlot =
+      !!localData?.sceneId &&
+      sceneCatalog.some((s) => s.id === localData.sceneId);
+    // Restore freehand edits only — not named slots (those need a button click)
+    if (
+      !isNamedSlot &&
+      localData?.version === 1 &&
+      Array.isArray(localData.objects) &&
+      localData.objects.length
+    ) {
+      await loadScene(localData, { persist: false });
+    }
+  } catch (err) {
+    console.warn("scene restore", err);
+  }
+
   statusEl.textContent = "Hazır";
 }
 
@@ -3355,6 +4552,8 @@ function tick(now) {
   const dt = Math.min(0.05, (now - lastTs) / 1000);
   lastTs = now;
   tickAnims(dt);
+  tickNpcScriptMove(dt);
+  tickTraffic(dt);
   // Keep characters / pets above night_club_inside after moves
   for (const obj of pickables) {
     if (isForegroundActor(obj)) syncDepth(obj);
@@ -3384,6 +4583,7 @@ function tick(now) {
   if (viewportMode !== "9x16") controls.update();
   updateVehiclePrompt();
   updateStaminaBar();
+  syncWorldLabels();
   renderer.render(scene, camera);
   requestAnimationFrame(tick);
 }

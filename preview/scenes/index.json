@@ -1,0 +1,14 @@
+{
+  "scenes": [
+    {
+      "id": "night_club_inside",
+      "label": "night_club",
+      "file": "night_club_inside.json"
+    },
+    {
+      "id": "street",
+      "label": "street",
+      "file": "street.json"
+    }
+  ]
+}

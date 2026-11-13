@@ -1,0 +1,113 @@
+{
+  "version": 1,
+  "revision": 2,
+  "sceneId": "night_club_inside",
+  "label": "night_club",
+  "viewport": "9x16",
+  "bg": "black",
+  "player": {
+    "x": 23.38,
+    "z": 269.76,
+    "facing": "south"
+  },
+  "objects": [
+    {
+      "kind": "object",
+      "id": "9031a7cf-e8bd-4f36-b6cf-4dce2129440a",
+      "path": "assets/interiors/night_club_inside/256x256/default",
+      "x": -1.11,
+      "z": 430.83,
+      "scale": 2.8,
+      "dir": "unknown",
+      "col": {
+        "enabled": true,
+        "pts": [
+          {
+            "fx": -0.1444,
+            "fz": -0.5758
+          },
+          {
+            "fx": 0.1167,
+            "fz": -0.5748
+          },
+          {
+            "fx": 0.2361,
+            "fz": -0.3027
+          },
+          {
+            "fx": 0.2734,
+            "fz": -0.2948
+          },
+          {
+            "fx": 0.2449,
+            "fz": -0.461
+          },
+          {
+            "fx": 0.231,
+            "fz": -0.4606
+          },
+          {
+            "fx": 0.1266,
+            "fz": -0.6074
+          },
+          {
+            "fx": 0.2172,
+            "fz": -0.6253
+          },
+          {
+            "fx": 0.2897,
+            "fz": -0.5492
+          },
+          {
+            "fx": 0.3533,
+            "fz": -0.4711
+          },
+          {
+            "fx": 0.378,
+            "fz": -0.206
+          },
+          {
+            "fx": -0.3328,
+            "fz": -0.2038
+          },
+          {
+            "fx": -0.3274,
+            "fz": -0.3054
+          },
+          {
+            "fx": -0.2913,
+            "fz": -0.3045
+          }
+        ]
+      }
+    },
+    {
+      "kind": "character",
+      "id": "b3002319-0e25-4105-918a-09faad61493c",
+      "path": "assets/characters/boy_1/96x96/states/stand",
+      "x": 222.68,
+      "z": 161.9,
+      "scale": 1,
+      "dir": "west",
+      "dancing": true
+    },
+    {
+      "kind": "character",
+      "id": "65c1cc89-05d4-4bba-8870-0cc801f83767",
+      "path": "assets/characters/boy_4/96x96/states/sit",
+      "x": -47.12,
+      "z": 104.85,
+      "scale": 0.8,
+      "dir": "west"
+    },
+    {
+      "kind": "character",
+      "id": "c6396571-f6dd-4062-aa13-a591aadfd9a1",
+      "path": "assets/characters/girl_4/96x96/states/sit",
+      "x": -100.88,
+      "z": 112.51,
+      "scale": 0.8,
+      "dir": "east"
+    }
+  ]
+}
