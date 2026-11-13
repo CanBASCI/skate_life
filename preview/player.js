@@ -19,6 +19,19 @@ const SETS = {
   run: { base: `${ANIM_ROOT}/main/animations/run`, frames: 6, fps: 12, loop: true },
   jump: { base: `${ANIM_ROOT}/main/animations/jump`, frames: 9, fps: 14, loop: false },
   vault: { base: `${ANIM_ROOT}/main/animations/vault`, frames: 9, fps: 14, loop: false },
+  dance: {
+    base: `../assets/characters/main/96x96/states/main/animations/dance`,
+    frames: 8,
+    fps: 10,
+    loop: true,
+  },
+  skateIdle: {
+    // main_skate — rider stands sideways on the board
+    base: `../assets/characters/main/96x96/states/main_skate/animations/skate-idle`,
+    frames: 5,
+    fps: 5,
+    loop: true,
+  },
   crouchIdle: {
     base: `${ANIM_ROOT}/states/crouch/animations/idle`,
     frames: 5,
@@ -36,6 +49,13 @@ const SETS = {
 const WALK_SPEED = 110;
 const RUN_SPEED = 190;
 const CROUCH_SPEED = 55;
+const SKATE_SPEED = 200;
+const SKATE_BOOST = 280;
+/** Foot-run stamina only (not skate / vehicle). */
+const STAMINA_MAX = 100;
+const STAMINA_DRAIN = 28; // per second while sprinting
+const STAMINA_REGEN = 18; // per second when not sprinting
+const STAMINA_REGEN_DELAY = 0.35; // sec after sprint before regen
 
 function frameUrl(base, dir, i) {
   return new URL(`${base}/${dir}/frame_${String(i).padStart(3, "0")}.png`, import.meta.url)
@@ -68,6 +88,48 @@ export function dirFromVector(dx, dz) {
   return DIRS[idx];
 }
 
+/** Compass clockwise — 90° = 2 steps. */
+const SKATE_TRAVEL_CW = [
+  "north",
+  "north-east",
+  "east",
+  "south-east",
+  "south",
+  "south-west",
+  "west",
+  "north-west",
+];
+
+/**
+ * Skate stance: rider faces 90° from travel (board nose).
+ * Going east (right) → character south anim.
+ * south-east → north-east (other perpendicular; +90 SW art reads wrong).
+ */
+export function skateRiderFacing(travelDir) {
+  if (travelDir === "south-east") return "north-east";
+  const i = SKATE_TRAVEL_CW.indexOf(travelDir);
+  if (i < 0) return "south";
+  return SKATE_TRAVEL_CW[(i + 2) % 8];
+}
+
+/** While skating, drop sprite slightly so feet sit on the deck. */
+const SKATE_SPRITE_CENTER_Y = 0.04;
+
+/**
+ * PixelLab drew dance east/west (and diagonals) smaller in the 96 canvas
+ * (~54px tall vs south ~64px). Boost those dirs so visual size matches south.
+ */
+const DANCE_DIR_SCALE = {
+  south: 1,
+  north: 1,
+  east: 1.14,
+  west: 1.14,
+  "south-east": 1.12,
+  "south-west": 1.12,
+  "north-east": 1.12,
+  "north-west": 1.12,
+};
+
 export class Player {
   constructor(
     scene,
@@ -97,8 +159,39 @@ export class Player {
     this.vz = 0;
     /** true while controlling a vehicle — character hidden, no walk update */
     this.driving = false;
+    /** riding placed skateboard — uses skate-idle 8-dir anims */
+    this.skating = false;
+    /** 0..1 jump progress (for ollie board tip); 0 when not jumping */
+    this.ollieU = 0;
+    this.stamina = STAMINA_MAX;
+    this.staminaMax = STAMINA_MAX;
+    /** true while foot-sprint is actively draining (for UI bar) */
+    this.sprinting = false;
+    this._staminaRegenWait = 0;
     this._boundKeyDown = (e) => this.onKeyDown(e);
     this._boundKeyUp = (e) => this.onKeyUp(e);
+  }
+
+  startSkating() {
+    if (!this.mesh) return;
+    this.skating = true;
+    this.driving = false;
+    this.busy = null;
+    this.vaultMove = null;
+    this.anim = "skateIdle";
+    this.frame = 0;
+    this.accum = 0;
+    this.mesh.center.set(0.5, SKATE_SPRITE_CENTER_Y);
+    this.applyFrame();
+  }
+
+  stopSkating() {
+    this.skating = false;
+    this.anim = "idle";
+    this.frame = 0;
+    this.accum = 0;
+    if (this.mesh) this.mesh.center.set(0.5, 0);
+    this.applyFrame();
   }
 
   setVisible(on) {
@@ -162,6 +255,7 @@ export class Player {
     });
     this.mesh = new THREE.Sprite(mat);
     this.mesh.center.set(0.5, 0);
+    this.baseScale = w;
     this.mesh.scale.set(w, h, 1);
     this.mesh.position.set(this.spawn.x, 0, this.spawn.z);
     this.mesh.userData = {
@@ -199,15 +293,19 @@ export class Player {
     if (this.driving) return;
     if (e.code === "Space") {
       e.preventDefault();
-      // near vaultable obstacle → vault (V anim); else normal jump
+      // skating: jump ollie still ok; vault if near obstacle
       const v = this.findVault?.() || null;
-      if (v) this.startVault(v);
+      if (v && !this.skating) this.startVault(v);
       else this.startOneShot("jump");
-    } else if (e.code === "KeyV" || e.code === "KeyF") {
+    } else if ((e.code === "KeyV" || e.code === "KeyF") && !this.skating) {
       e.preventDefault();
       const v = this.findVault?.() || null;
       if (v) this.startVault(v);
       else this.startOneShot("vault");
+    } else if (e.code === "KeyH" || e.code === "KeyG") {
+      e.preventDefault();
+      if (this.skating) return;
+      this.toggleDance();
     }
   }
 
@@ -219,6 +317,26 @@ export class Player {
     if (this.busy) return;
     this.busy = name;
     this.anim = name;
+    this.frame = 0;
+    this.accum = 0;
+    this.vaultMove = null;
+    this.applyFrame();
+  }
+
+  /** H / G — dance loop; again or WASD to stop. */
+  toggleDance() {
+    if (!this.mesh || this.driving) return;
+    if (this.busy === "dance") {
+      this.busy = null;
+      this.anim = "idle";
+      this.frame = 0;
+      this.accum = 0;
+      this.applyFrame();
+      return;
+    }
+    if (this.busy) return;
+    this.busy = "dance";
+    this.anim = "dance";
     this.frame = 0;
     this.accum = 0;
     this.vaultMove = null;
@@ -260,11 +378,25 @@ export class Player {
     return { dx, dz };
   }
 
+  /** Facing used for sprite: sideways on board while skating. */
+  animFacing() {
+    if (this.skating && this.anim === "skateIdle") {
+      return skateRiderFacing(this.facing);
+    }
+    return this.facing;
+  }
+
   applyFrame() {
-    const dirTex = this.textures[this.anim]?.[this.facing];
+    const face = this.animFacing();
+    const dirTex = this.textures[this.anim]?.[face];
     if (!dirTex || !dirTex[this.frame] || !this.mesh) return;
     this.mesh.material.map = dirTex[this.frame];
     this.mesh.material.needsUpdate = true;
+    const base = this.baseScale || 96;
+    const boost =
+      this.anim === "dance" && !this.skating ? DANCE_DIR_SCALE[face] || 1 : 1;
+    const s = base * boost;
+    this.mesh.scale.set(s, s, 1);
   }
 
   update(dt) {
@@ -275,28 +407,63 @@ export class Player {
 
     const crouch =
       this.keys.has("KeyC") || this.keys.has("ControlLeft") || this.keys.has("ControlRight");
-    const run = this.keys.has("ShiftLeft") || this.keys.has("ShiftRight");
+    const wantRun = this.keys.has("ShiftLeft") || this.keys.has("ShiftRight");
     const { dx, dz } = this.inputVector();
     const moving = dx !== 0 || dz !== 0;
+
+    // stamina: only normal foot run (not skate / vehicle)
+    this.sprinting = false;
+    let canSprint = false;
+    if (!this.skating && !this.driving && !crouch) {
+      if (wantRun && moving && this.stamina > 0.5) {
+        canSprint = true;
+        this.sprinting = true;
+        this.stamina = Math.max(0, this.stamina - STAMINA_DRAIN * dt);
+        this._staminaRegenWait = STAMINA_REGEN_DELAY;
+        if (this.stamina <= 0.5) {
+          this.stamina = 0;
+          canSprint = false;
+          this.sprinting = false;
+        }
+      } else {
+        this._staminaRegenWait = Math.max(0, this._staminaRegenWait - dt);
+        if (this._staminaRegenWait <= 0) {
+          this.stamina = Math.min(STAMINA_MAX, this.stamina + STAMINA_REGEN * dt);
+        }
+      }
+    } else {
+      // skating / vehicle: hide drain, keep full for when you hop off
+      this.stamina = STAMINA_MAX;
+      this._staminaRegenWait = 0;
+    }
 
     if (moving) {
       const facing = dirFromVector(dx, dz);
       if (facing) this.facing = facing;
+      // walking cancels dance
+      if (this.busy === "dance") {
+        this.busy = null;
+        this.vaultMove = null;
+      }
     }
 
     if (!this.busy) {
-      if (crouch) this.anim = moving ? "crouchWalk" : "crouchIdle";
-      else if (moving) this.anim = run ? "run" : "walk";
+      if (this.skating) this.anim = "skateIdle";
+      else if (crouch) this.anim = moving ? "crouchWalk" : "crouchIdle";
+      else if (moving) this.anim = canSprint ? "run" : "walk";
       else this.anim = "idle";
     }
 
     let speed = 0;
     if (!this.busy && moving) {
-      if (crouch) speed = CROUCH_SPEED;
-      else if (run) speed = RUN_SPEED;
+      if (this.skating) speed = wantRun ? SKATE_BOOST : SKATE_SPEED;
+      else if (crouch) speed = CROUCH_SPEED;
+      else if (canSprint) speed = RUN_SPEED;
       else speed = WALK_SPEED;
     } else if (this.busy === "jump") {
-      speed = moving ? WALK_SPEED * 0.85 : 0;
+      speed = moving
+        ? (this.skating ? SKATE_SPEED * 0.9 : WALK_SPEED * 0.85)
+        : 0;
     }
 
     // vault: lerp over obstacle (ignore its collision)
@@ -314,7 +481,16 @@ export class Player {
       this.vx = this.mesh.position.x - x0;
       this.vz = this.mesh.position.z - z0;
     } else {
-      if (this.mesh.position.y !== 0) this.mesh.position.y = 0;
+      if (this.busy === "jump") {
+        // ollie arc — board syncs to this.y / ollieU while skating
+        const jcfg = SETS.jump;
+        const u = Math.min(1, (this.frame + this.accum * jcfg.fps) / jcfg.frames);
+        this.ollieU = u;
+        this.mesh.position.y = Math.sin(Math.PI * u) * (this.skating ? 26 : 16);
+      } else {
+        this.ollieU = 0;
+        if (this.mesh.position.y !== 0) this.mesh.position.y = 0;
+      }
       if (speed > 0 && (dx !== 0 || dz !== 0)) {
         this.tryMove(dx * speed * dt, dz * speed * dt);
       }
@@ -324,8 +500,14 @@ export class Player {
     this.ring.position.z = this.mesh.position.z;
 
     const cfg = SETS[this.anim];
+    const fps =
+      this.skating && this.anim === "skateIdle"
+        ? moving
+          ? 12
+          : 5
+        : cfg.fps;
     this.accum += dt;
-    const frameDur = 1 / cfg.fps;
+    const frameDur = 1 / fps;
     while (this.accum >= frameDur) {
       this.accum -= frameDur;
       this.frame += 1;
@@ -334,16 +516,12 @@ export class Player {
         else {
           this.busy = null;
           this.vaultMove = null;
-          this.anim = crouch
-            ? moving
-              ? "crouchWalk"
-              : "crouchIdle"
-            : moving
-              ? run
-                ? "run"
-                : "walk"
-              : "idle";
           this.frame = 0;
+          this.accum = 0;
+          if (this.skating) this.anim = "skateIdle";
+          else if (crouch) this.anim = moving ? "crouchWalk" : "crouchIdle";
+          else if (moving) this.anim = canSprint ? "run" : "walk";
+          else this.anim = "idle";
         }
       }
     }

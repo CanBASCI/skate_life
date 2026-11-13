@@ -269,6 +269,37 @@ body {
   box-shadow: 0 2px 6px #0007;
 }
 
+#stamina {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 9998;
+  width: 52px;
+  height: 6px;
+  padding: 0;
+  margin: 0;
+  border-radius: 999px;
+  background: #0a100de8;
+  border: 1px solid #2a3830;
+  box-shadow: 0 2px 8px #0008;
+  transform: translate(-50%, -100%);
+  pointer-events: none;
+  overflow: hidden;
+}
+
+#stamina.hidden {
+  display: none !important;
+}
+
+#stamina-fill {
+  height: 100%;
+  width: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #e0a040, #e8d060);
+  transform-origin: left center;
+  transition: width 0.05s linear;
+}
+
 #hud kbd {
   display: inline-block;
   padding: 0 4px;

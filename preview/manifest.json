@@ -210,10 +210,10 @@
     },
     {
       "id": "skateboard",
-      "src": "assets/objects/skateboard/80x80/south.png",
+      "src": "assets/objects/skateboard/68x68/base/south.png",
       "x": 0,
       "z": 230,
-      "label": "board 80"
+      "label": "board base"
     },
     {
       "id": "outfitFootball",

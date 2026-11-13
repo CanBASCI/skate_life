@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
-import { Player, dirFromVector } from "./player.js?v=vaultZ";
+import { Player, dirFromVector } from "./player.js?v=skateOllieTip";
 import {
   loadCatalog,
   groupByCat,
@@ -27,6 +27,8 @@ const DIR_LABELS = {
 const statusEl = document.getElementById("status");
 const promptEl = document.getElementById("prompt");
 const promptTextEl = document.getElementById("prompt-text");
+const staminaEl = document.getElementById("stamina");
+const staminaFillEl = document.getElementById("stamina-fill");
 const app = document.getElementById("app");
 const inspector = document.getElementById("inspector");
 const inspLabel = document.getElementById("insp-label");
@@ -46,6 +48,9 @@ let placing = null; // catalog item while dragging from palette
 /** @type {THREE.Object3D | null} */
 let occupiedVehicle = null;
 let nearbyVehicle = null;
+/** @type {THREE.Object3D | null} */
+let occupiedSkateboard = null;
+let nearbySkateboard = null;
 /** @type {THREE.Object3D | null} */
 let companion = null;
 const texCache = new Map(); // url -> Promise<Texture>
@@ -288,7 +293,7 @@ function syncDepth(obj) {
   if (
     obj.userData?.controllable &&
     player &&
-    (player.busy === "vault" || player.busy === "jump")
+    (player.busy === "vault" || player.busy === "jump" || player.skating)
   ) {
     order += 90000;
   }
@@ -297,6 +302,8 @@ function syncDepth(obj) {
 
 function defaultScale(item) {
   if (item.kind === "object" && item.path.includes("/buildings/")) return BUILDING_SCALE;
+  // tuned vs 96px character; E-ride / parked board same scale
+  if (isSkateboardPath(item.path)) return 0.7;
   return 1;
 }
 
@@ -338,6 +345,135 @@ function isVehicleObj(obj) {
   return !!(obj?.userData?.vehicle || isVehiclePath(obj?.userData?.path));
 }
 
+function isSkateboardPath(path) {
+  return /\/skateboard\//i.test(path || "");
+}
+
+function isSkateboardObj(obj) {
+  return !!(obj?.userData?.skateboard || isSkateboardPath(obj?.userData?.path));
+}
+
+function nearestSkateboard(px, pz) {
+  let best = null;
+  let bestD = Infinity;
+  for (const obj of pickables) {
+    if (!isSkateboardObj(obj)) continue;
+    if (obj === occupiedSkateboard) continue;
+    if (!obj.visible) continue;
+    const d = distToFootprint(px, pz, footprintOf(obj));
+    if (d < bestD) {
+      bestD = d;
+      best = obj;
+    }
+  }
+  return best && bestD <= VEHICLE_ENTER_PAD + 24 ? best : null;
+}
+
+/** SpriteMaterial.rotation sign so board nose (travel dir) tips “up” on screen. */
+const OLLIE_TIP_ROT = {
+  east: 0.38,
+  west: -0.38,
+  south: -0.22,
+  north: 0.22,
+  "south-east": 0.28,
+  "south-west": -0.28,
+  "north-east": 0.28,
+  "north-west": -0.28,
+};
+
+/** Keep board under feet while riding (skate-idle art has no board drawn in). */
+function syncSkateboardUnderPlayer() {
+  const board = occupiedSkateboard;
+  if (!board || !player?.mesh || !player.skating) return;
+  board.visible = true;
+  const dir = player.facing || board.userData.dir || "";
+  const face = FACE_VEC[dir] || FACE_VEC.south;
+  const u = player.ollieU || 0;
+  const lift = Math.sin(Math.PI * u);
+  // shift board slightly toward nose so the travel-end reads up during ollie
+  const nose = lift * 5;
+  board.position.x = player.mesh.position.x + face[0] * nose;
+  board.position.z = player.mesh.position.z + face[1] * nose;
+  // follow hop; nose a touch higher than feet at peak
+  board.position.y = (player.mesh.position.y || 0) + 0.05 + lift * 3;
+  if (player.facing && board.userData.dir !== player.facing) {
+    applyFacing(board, player.facing);
+  }
+  // east/west deck sits mid-canvas with empty pad below — lift sprite so deck meets feet
+  if (board.isSprite) {
+    const horiz = dir === "east" || dir === "west";
+    board.center.set(0.5, horiz ? -0.07 : -0.02);
+  }
+  if (board.material) {
+    board.material.rotation = lift * (OLLIE_TIP_ROT[dir] || 0);
+  }
+  syncDepth(board);
+  // character always paints above the deck
+  board.renderOrder = (player.mesh.renderOrder || 0) - 20;
+}
+
+function enterSkateboard(board) {
+  if (!player?.mesh || !board || player.skating) return;
+  occupiedSkateboard = board;
+  nearbySkateboard = null;
+  board.userData._solidBeforeSkate = !!board.userData.solid;
+  board.userData.solid = false;
+  board.visible = true;
+  player.mesh.position.x = board.position.x;
+  player.mesh.position.z = board.position.z;
+  player.ring.position.x = board.position.x;
+  player.ring.position.z = board.position.z;
+  if (board.userData.dir) player.facing = board.userData.dir;
+  player.startSkating();
+  syncSkateboardUnderPlayer();
+  if (selected === board) selectObject(null);
+  hidePrompt();
+  statusEl.textContent = "Kaykaydasın";
+}
+
+function exitSkateboard() {
+  const board = occupiedSkateboard;
+  if (!player?.mesh || !board) return;
+  const face = FACE_VEC[player.facing] || FACE_VEC.south;
+  const side = [-face[1], face[0]];
+  // leave board at feet; step player slightly aside so you aren't glued on the deck
+  board.position.x = player.mesh.position.x;
+  board.position.z = player.mesh.position.z;
+  board.position.y = 0;
+  if (player.facing) applyFacing(board, player.facing);
+  if (board.isSprite) board.center.set(0.5, 0);
+  if (board.material) board.material.rotation = 0;
+  board.userData.solid = false;
+  board.visible = true;
+  syncDepth(board);
+
+  occupiedSkateboard = null;
+  player.stopSkating();
+
+  const pr = player.radius || 22;
+  const tryOffsets = [
+    [side[0] * (pr + 14), side[1] * (pr + 14)],
+    [-side[0] * (pr + 14), -side[1] * (pr + 14)],
+    [face[0] * (pr + 16), face[1] * (pr + 16)],
+    [-face[0] * (pr + 16), -face[1] * (pr + 16)],
+  ];
+  for (const [ox, oz] of tryOffsets) {
+    const nx = board.position.x + ox;
+    const nz = board.position.z + oz;
+    if (!solidBlocked(nx, nz, pr)) {
+      player.mesh.position.x = nx;
+      player.mesh.position.z = nz;
+      player.ring.position.x = nx;
+      player.ring.position.z = nz;
+      if (player.syncDepth) player.syncDepth(player.mesh);
+      break;
+    }
+  }
+
+  hidePrompt();
+  statusEl.textContent = "Hazır";
+}
+
 function nearestVehicle(px, pz) {
   let best = null;
   let bestD = Infinity;
@@ -356,9 +492,55 @@ function nearestVehicle(px, pz) {
 
 const _promptWorld = new THREE.Vector3();
 const _promptNdc = new THREE.Vector3();
+const _camUp = new THREE.Vector3();
 
 function hidePrompt() {
   if (promptEl) promptEl.classList.add("hidden");
+}
+
+function hideStaminaBar() {
+  if (staminaEl) staminaEl.classList.add("hidden");
+}
+
+/** Foot-run stamina bar above player (hidden on skate / vehicle / full+idle). */
+function updateStaminaBar() {
+  if (!staminaEl || !staminaFillEl || !player?.mesh) {
+    hideStaminaBar();
+    return;
+  }
+  if (player.skating || player.driving || occupiedVehicle) {
+    hideStaminaBar();
+    return;
+  }
+  const max = player.staminaMax || 100;
+  const ratio = Math.max(0, Math.min(1, (player.stamina ?? max) / max));
+  const show = player.sprinting || ratio < 0.999;
+  if (!show) {
+    hideStaminaBar();
+    return;
+  }
+  staminaFillEl.style.width = `${ratio * 100}%`;
+  // color: yellow → red as empty
+  if (ratio > 0.45) staminaFillEl.style.background = "linear-gradient(90deg, #e0a040, #e8d060)";
+  else staminaFillEl.style.background = "linear-gradient(90deg, #c04040, #e07050)";
+
+  camera.updateMatrixWorld(true);
+  // Sprite is billboarded: head ≈ feet + camera-up * spriteHeight (not world Y mid-body)
+  const h = player.mesh.scale?.y || 96;
+  const cy = player.mesh.center?.y ?? 0;
+  _camUp.setFromMatrixColumn(camera.matrixWorld, 1).normalize();
+  _promptWorld.copy(player.mesh.position).addScaledVector(_camUp, h * (1 - cy) + 10);
+  _promptNdc.copy(_promptWorld).project(camera);
+  if (Math.abs(_promptNdc.x) > 1.35 || Math.abs(_promptNdc.y) > 1.35) {
+    hideStaminaBar();
+    return;
+  }
+  const canvasRect = renderer.domElement.getBoundingClientRect();
+  const sx = ((_promptNdc.x + 1) / 2) * canvasRect.width + canvasRect.left;
+  const sy = ((-_promptNdc.y + 1) / 2) * canvasRect.height + canvasRect.top - 10;
+  staminaEl.style.left = `${sx}px`;
+  staminaEl.style.top = `${sy}px`;
+  staminaEl.classList.remove("hidden");
 }
 
 /**
@@ -398,7 +580,7 @@ function enterVehicle(veh) {
   veh.userData.solid = false;
   veh.userData.occupied = true;
   if (selected === veh) selectObject(null);
-  showPromptAbove(veh, "İn");
+  hidePrompt();
   statusEl.textContent = "Araçtasın";
 }
 
@@ -509,13 +691,14 @@ function driveVehicle(dt) {
   syncDepth(veh);
 }
 
-/** Buildings / vehicles / props / interiors block; roads, animals, balls, characters don't. */
+/** Buildings / vehicles / props / interiors block; roads, animals, balls, skateboards don't. */
 function isSolidItem(item) {
   if (!item || item.kind === "character") return false;
   const p = item.path || "";
   if (usesGroundPlane(item) || /\/props\/road\//i.test(p)) return false;
   if (isAnimalPath(p)) return false;
   if (isBallPath(p)) return false;
+  if (isSkateboardPath(p)) return false; // walk/stand on board — never trap on dismount
   return item.kind === "object";
 }
 
@@ -1061,6 +1244,15 @@ function rotationUrl(path, dir) {
   return assetUrl(`${path.replace(/\/$/, "")}/rotations/${dir}.png`);
 }
 
+/** rotations/dir.png or flat dir.png (skateboard 68x68/base layout). */
+function rotationUrlCandidates(path, dir) {
+  const base = path.replace(/\/$/, "");
+  return [
+    assetUrl(`${base}/rotations/${dir}.png`),
+    assetUrl(`${base}/${dir}.png`),
+  ];
+}
+
 function imageExists(url) {
   return new Promise((resolve) => {
     const img = new Image();
@@ -1070,16 +1262,23 @@ function imageExists(url) {
   });
 }
 
+async function firstExistingUrl(urls) {
+  for (const url of urls) {
+    if (await imageExists(url)) return url;
+  }
+  return null;
+}
+
 async function probeDirs(path) {
   const available = [];
   await Promise.all(
     DIRS.map(async (dir) => {
-      if (await imageExists(rotationUrl(path, dir))) available.push(dir);
+      if (await firstExistingUrl(rotationUrlCandidates(path, dir))) available.push(dir);
     }),
   );
   if (!available.length) {
     for (const name of ["unknown", "south"]) {
-      if (await imageExists(rotationUrl(path, name))) {
+      if (await firstExistingUrl(rotationUrlCandidates(path, name))) {
         available.push(name);
         break;
       }
@@ -1099,7 +1298,8 @@ async function loadRotationTextures(path, dirs) {
   await Promise.all(
     dirs.map(async (dir) => {
       try {
-        map[dir] = await pixelTexture(rotationUrl(path, dir));
+        const url = await firstExistingUrl(rotationUrlCandidates(path, dir));
+        if (url) map[dir] = await pixelTexture(url);
       } catch {
         /* missing dir */
       }
@@ -1107,10 +1307,7 @@ async function loadRotationTextures(path, dirs) {
   );
   if (!map.south) {
     try {
-      map.south = (await loadAnyTexture([
-        rotationUrl(path, "south"),
-        assetUrl(`${path}/south.png`),
-      ])).tex;
+      map.south = (await loadAnyTexture(rotationUrlCandidates(path, "south"))).tex;
     } catch {
       /* */
     }
@@ -1188,10 +1385,7 @@ async function setDirection(obj, dir) {
   }
   if (dir === "south" && d.fallbackSouth) {
     try {
-      const { tex } = await loadAnyTexture([
-        rotationUrl(d.path, "south"),
-        assetUrl(`${d.path}/south.png`),
-      ]);
+      const { tex } = await loadAnyTexture(rotationUrlCandidates(d.path, "south"));
       d.rotTextures = d.rotTextures || {};
       d.rotTextures.south = tex;
       setMap(obj, tex);
@@ -1202,7 +1396,9 @@ async function setDirection(obj, dir) {
     }
   }
   try {
-    const tex = await pixelTexture(rotationUrl(d.path, dir));
+    const url = await firstExistingUrl(rotationUrlCandidates(d.path, dir));
+    if (!url) throw new Error("no rotation url");
+    const tex = await pixelTexture(url);
     d.rotTextures = d.rotTextures || {};
     d.rotTextures[dir] = tex;
     if (!d.dirs.includes(dir)) d.dirs.push(dir);
@@ -1216,9 +1412,11 @@ async function setDirection(obj, dir) {
 async function spawnItem(item, x, z) {
   const { tex } = await loadAnyTexture(item.thumbs);
   let dirs = await probeDirs(item.path);
-  // Vehicles/buildings: always try full 8-dir atlas (probe alone can miss under load)
+  // Vehicles/buildings/skateboard: always try full 8-dir atlas
   const wantFull =
-    isVehiclePath(item.path) || /\/buildings\//i.test(item.path || "");
+    isVehiclePath(item.path) ||
+    /\/buildings\//i.test(item.path || "") ||
+    /\/skateboard\//i.test(item.path || "");
   const rotTextures = await loadRotationTextures(
     item.path,
     wantFull ? DIRS : dirs.length ? dirs : DIRS,
@@ -1253,6 +1451,7 @@ async function spawnItem(item, x, z) {
     solid: isSolidItem(item),
     ball: isBallPath(item.path),
     vehicle: isVehiclePath(item.path),
+    skateboard: isSkateboardPath(item.path),
     vaultable: isVaultablePath(item.path),
     tileable,
     tileSize,
@@ -1531,11 +1730,21 @@ window.addEventListener("keydown", (e) => {
     return;
   }
 
-  // E: enter / exit vehicle (priority over rotate)
+  // E: skateboard / vehicle enter-exit (priority over rotate)
   if ((e.key === "e" || e.key === "E") && !e.repeat) {
+    if (player?.skating && occupiedSkateboard) {
+      e.preventDefault();
+      exitSkateboard();
+      return;
+    }
     if (occupiedVehicle) {
       e.preventDefault();
       exitVehicle();
+      return;
+    }
+    if (nearbySkateboard) {
+      e.preventDefault();
+      enterSkateboard(nearbySkateboard);
       return;
     }
     if (nearbyVehicle) {
@@ -1546,16 +1755,32 @@ window.addEventListener("keydown", (e) => {
   }
 
   if (!selected || !selected.userData.editable) return;
-  if (occupiedVehicle) return;
-  const dirs = selected.userData.dirs.length ? selected.userData.dirs : DIRS;
+  if (occupiedVehicle || player?.skating) return;
+  // clockwise compass so Q/E steps N→NE→E→… (not jumping to odd diagonals)
+  const TURN_DIRS = [
+    "north",
+    "north-east",
+    "east",
+    "south-east",
+    "south",
+    "south-west",
+    "west",
+    "north-west",
+  ];
+  const available = selected.userData.dirs?.length ? selected.userData.dirs : DIRS;
+  const dirs = TURN_DIRS.filter((d) => available.includes(d));
   if (!dirs.length) return;
   let idx = dirs.indexOf(selected.userData.dir);
   if (idx < 0) idx = 0;
   if (e.key === "q" || e.key === "Q") {
     idx = (idx - 1 + dirs.length) % dirs.length;
     setDirection(selected, dirs[idx]);
-  } else if ((e.key === "e" || e.key === "E") && !nearbyVehicle) {
-    // rotate selection only when not in vehicle enter range
+  } else if (
+    (e.key === "e" || e.key === "E") &&
+    !nearbyVehicle &&
+    !nearbySkateboard
+  ) {
+    // rotate selection only when not in ride enter range
     idx = (idx + 1) % dirs.length;
     setDirection(selected, dirs[idx]);
   } else if (e.key === "Delete" || e.key === "Backspace") {
@@ -1843,13 +2068,26 @@ function updateVehiclePrompt() {
   if (!player?.mesh) return;
   if (occupiedVehicle) {
     nearbyVehicle = null;
-    showPromptAbove(occupiedVehicle, "İn");
-    if (statusEl && !statusEl.dataset.busy) statusEl.textContent = "E · İn";
+    nearbySkateboard = null;
+    hidePrompt();
+    if (statusEl && !statusEl.dataset.busy) statusEl.textContent = "Araçtasın";
+    return;
+  }
+  if (player.skating && occupiedSkateboard) {
+    nearbyVehicle = null;
+    nearbySkateboard = null;
+    hidePrompt();
+    if (statusEl && !statusEl.dataset.busy) statusEl.textContent = "Kaykaydasın";
     return;
   }
   const p = player.mesh.position;
+  nearbySkateboard = nearestSkateboard(p.x, p.z);
   nearbyVehicle = nearestVehicle(p.x, p.z);
-  if (nearbyVehicle) {
+  // prefer skateboard if both in range
+  if (nearbySkateboard) {
+    showPromptAbove(nearbySkateboard, "Bin");
+    if (statusEl && !statusEl.dataset.busy) statusEl.textContent = "E · Kaykaya bin";
+  } else if (nearbyVehicle) {
     showPromptAbove(nearbyVehicle, "Bin");
     if (statusEl && !statusEl.dataset.busy) statusEl.textContent = "E · Bin";
   } else {
@@ -1867,6 +2105,7 @@ function tick(now) {
   if (player) {
     if (occupiedVehicle) driveVehicle(dt);
     else player.update(dt);
+    if (player.skating) syncSkateboardUnderPlayer();
     tickCompanions(dt);
     tickBallPhysics(dt);
     if (!dragging && !placing) {
@@ -1881,6 +2120,7 @@ function tick(now) {
   }
   controls.update();
   updateVehiclePrompt();
+  updateStaminaBar();
   renderer.render(scene, camera);
   requestAnimationFrame(tick);
 }

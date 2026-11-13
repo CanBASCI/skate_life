@@ -1248,11 +1248,11 @@
       "path": "assets/buildings/singlehouse/256x256/night"
     },
     {
-      "id": "aa7c55db-4c5b-4b90-919a-47d29833c336",
+      "id": "2c0c672d-7165-47d0-99f5-3b27bbf9b586",
       "name": "skateboard",
-      "state": null,
+      "state": "base",
       "size": "68x68",
-      "path": "assets/objects/skateboard/68x68/default"
+      "path": "assets/objects/skateboard/68x68/base"
     },
     {
       "id": "abc05c2b-a10a-470f-9737-c55ad4abdb5e",
