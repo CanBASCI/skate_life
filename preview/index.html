@@ -49,13 +49,17 @@
             <button type="button" id="street-walk-fit">Görünüme sığdır</button>
             <button type="button" id="street-walk-reset">Sıfırla</button>
           </div>
+          <div id="night-club-col" class="hidden" title="Night club walk alanını göster / gizle — collision aynı kalır">
+            <button type="button" data-nccol="show">Club col göster</button>
+            <button type="button" data-nccol="hide" class="active">Club col gizle</button>
+          </div>
           <div id="scene-toggle" title="9:16 sahne düzeni JSON">
             <button type="button" id="scene-copy">JSON kopyala</button>
             <button type="button" id="scene-load">JSON yapıştır</button>
             <button type="button" id="scene-clear">Sahne sil</button>
           </div>
           <div id="scene-slots" title="Kayıtlı sahneler — isim = ayarla · json = dosyadaki sahneyi yükle"></div>
-          <div id="truth-dare-crowd" class="hidden" title="Street’te sayı seç → doğrulukmu_cesaretmi’ye geç">
+          <div id="truth-dare-crowd" class="hidden" title="Street / night club kalabalık">
             <span class="crowd-label">kalabalık</span>
             <button type="button" data-crowd="5">5</button>
             <button type="button" data-crowd="10">10</button>

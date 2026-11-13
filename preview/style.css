@@ -260,9 +260,47 @@ body {
   border-color: var(--accent);
 }
 
+#night-club-col {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 3px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  align-items: center;
+}
+
+#night-club-col.hidden {
+  display: none;
+}
+
+#night-club-col button {
+  appearance: none;
+  border: 0;
+  border-radius: 999px;
+  padding: 5px 10px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+#night-club-col button:hover {
+  color: var(--ink);
+}
+
+#night-club-col button.active {
+  background: #1c2a22;
+  color: var(--accent);
+}
+
 #viewport-toggle,
 #bg-toggle,
 #col-toggle,
+#night-club-col,
 #scene-toggle,
 #scene-slots,
 #truth-dare-crowd {
@@ -277,6 +315,10 @@ body {
 }
 
 #truth-dare-crowd.hidden {
+  display: none;
+}
+
+#truth-dare-crowd button.hidden {
   display: none;
 }
 
@@ -740,7 +782,7 @@ body {
   border-radius: 10px;
   background: #f3f1ea;
   color: #1c221c;
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 500;
   line-height: 1.35;
   text-align: center;

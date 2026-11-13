@@ -62,6 +62,13 @@ let activeSceneId = null;
 function isStreetLikeScene(id = activeSceneId) {
   return id === "street" || id === "dogrulukmu_cesaretmi";
 }
+function isNightClubScene(id = activeSceneId) {
+  return id === "night_club_inside";
+}
+/** Crowd spawn buttons: street family + night club. */
+function isCrowdScene(id = activeSceneId) {
+  return isStreetLikeScene(id) || isNightClubScene(id);
+}
 /** @type {{ id: string, label?: string, file?: string }[]} */
 let sceneCatalog = [];
 const sceneCopyBtn = document.getElementById("scene-copy");
@@ -1141,13 +1148,20 @@ const BUBBLE_DURATION_MS = 4500;
 /** @type {Map<string, { root: HTMLElement, nameEl: HTMLElement, bubbleEl: HTMLElement, hideAt: number, obj: THREE.Object3D | null }>} */
 const worldLabelMap = new Map();
 
+const WORLD_NAME_MAX = 6;
+
 function shortCharacterName(label, path) {
+  let name = "";
   if (label) {
     const head = String(label).split("·")[0].trim();
-    if (head) return head;
+    if (head) name = head;
   }
-  const m = String(path || "").match(/assets\/characters\/([^/]+)/i);
-  return m ? m[1] : "NPC";
+  if (!name) {
+    const m = String(path || "").match(/assets\/characters\/([^/]+)/i);
+    name = m ? m[1] : "NPC";
+  }
+  if (name.length > WORLD_NAME_MAX) return `${name.slice(0, WORLD_NAME_MAX)}…`;
+  return name;
 }
 
 function labelKeyFor(obj) {
@@ -1459,7 +1473,14 @@ function tickNpcScriptMove(dt) {
     sm.left -= Math.max(moved, step * 0.25);
     if (moved < 0.04) sm.stuck = (sm.stuck || 0) + dt;
     else sm.stuck = 0;
-    if (sm.left <= 0.5 || (sm.stuck || 0) > 1.4) {
+    // Night club crowd enter: wait longer before snap-finish
+    const stuckLimit =
+      isNightClubScene() &&
+      sm.obj?.userData?.crowdExtra &&
+      sm.obj?.userData?.formationMove
+        ? 3.2
+        : 1.4;
+    if (sm.left <= 0.5 || (sm.stuck || 0) > stuckLimit) {
       finishNpcWalk(sm.obj, sm);
       npcScriptMoves.splice(i, 1);
     }
@@ -2109,6 +2130,8 @@ function streetWalkActive() {
 
 /** Checkbox: show edit gizmo only — does not turn collision on/off. */
 let streetWalkEditOpen = false;
+/** Night club walk poly outline show/hide (collision stays as col.enabled). */
+let nightClubColVisible = false;
 
 /** True if most zone corners project off the canvas (can't grab handles). */
 function streetWalkHandlesOffscreen() {
@@ -2281,13 +2304,21 @@ function actorBlocked(obj, px, pz, radius) {
   const r = radius || NPC_WALK_RADIUS;
   const fromX = obj.position.x;
   const fromZ = obj.position.z + FEET_NUDGE_Z;
-  // Formation run: don't jam on other cast — otherwise one stalls mid-row
-  const skipChar = !!obj?.userData?.formationMove;
+  const formation = !!obj?.userData?.formationMove;
+  // Night club crowd enter only: ignore walk-zone / frame / cast (gate jam → teleport)
+  if (
+    formation &&
+    isNightClubScene() &&
+    obj.userData?.crowdExtra
+  ) {
+    return solidBlocked(px, pz, r);
+  }
+  // Truth-dare / street formation: still skip other cast so rows don't stall
   return (
     solidBlocked(px, pz, r) ||
     containmentBlocksFor(fromX, fromZ, px, pz, r) ||
     viewBoundsBlock(px, pz, r) ||
-    (!skipChar &&
+    (!formation &&
       characterBlocked(px, pz, Math.max(r * 0.7, CHAR_SEP_MIN * 0.85), obj))
   );
 }
@@ -2332,6 +2363,8 @@ const CHAR_SEP_PUSH = 70;
 
 function isSeparableCharacter(obj) {
   if (!obj?.visible || obj.visible === false) return false;
+  // Night club crowd only — dense enter/pack; street / doğrulukmu keep soft-sep
+  if (obj.userData?.crowdExtra && isNightClubScene()) return false;
   if (obj === player?.mesh) return !occupiedVehicle;
   return obj.userData?.kind === "character" && obj.userData?.editable !== false;
 }
@@ -2352,6 +2385,8 @@ function characterBlocked(px, pz, radius, exceptObj = null) {
   for (const obj of listSeparableCharacters()) {
     if (obj === exceptObj) continue;
     if (dragging && obj === dragging) continue;
+    // Night club crowd only — don't block peers at the gate
+    if (obj.userData?.crowdExtra && isNightClubScene()) continue;
     const ox = obj.position.x;
     const oz = obj.position.z + FEET_NUDGE_Z;
     const dx = px - ox;
@@ -4240,9 +4275,10 @@ sceneClearBtn?.addEventListener("click", () => {
 
 truthDareCrowdEl?.addEventListener("click", (e) => {
   const btn = e.target?.closest?.("button[data-crowd]");
-  if (!btn) return;
+  if (!btn || btn.classList.contains("hidden")) return;
   const n = Number(btn.getAttribute("data-crowd"));
   if (!TRUTH_DARE_CROWD_COUNTS.includes(n)) return;
+  if (!isCrowdScene()) return;
   setTruthDareCrowdCount(n).catch((err) => {
     console.warn(err);
     statusEl.textContent = err.message || String(err);
@@ -4394,13 +4430,204 @@ function truthDareActorPool() {
 function syncTruthDareCrowdUi() {
   const panel = truthDareCrowdEl;
   if (!panel) return;
-  // Show on street too — pick count there, then switch to doğrulukmu
-  const show = isStreetLikeScene();
+  // Street: pick count → doğrulukmu. Night club: pack the floor.
+  const show = isCrowdScene();
+  const club = isNightClubScene();
   panel.classList.toggle("hidden", !show);
+  panel.title = club
+    ? "Night club dans alanına boy/girl kalabalık"
+    : "Street’te sayı seç → doğrulukmu_cesaretmi’ye geç";
   panel.querySelectorAll("button[data-crowd]").forEach((btn) => {
     const n = Number(btn.getAttribute("data-crowd"));
+    btn.classList.remove("hidden");
     btn.classList.toggle("active", show && n === truthDareCrowdCount);
   });
+}
+
+function nightClubRoomObj() {
+  return pickables.find((o) =>
+    /night_club_inside/i.test(o.userData?.path || ""),
+  );
+}
+
+/** World-space walk poly for night_club_inside (null if missing). */
+function nightClubWalkPts() {
+  const room = nightClubRoomObj();
+  if (!room) return null;
+  const box = colFootprint(room);
+  return box?.pts?.length >= 3 ? box.pts : null;
+}
+
+/**
+ * Pack crowd inside night club walk poly:
+ * — few → tight center band
+ * — more → expand evenly toward both alt + üst (and sides)
+ * — at 50 → fill full depth, centered (no empty strip at alt)
+ */
+function nightClubCrowdSlots(count) {
+  const n = Math.max(0, Math.min(50, Number(count) || 0));
+  const pts = nightClubWalkPts();
+  if (!pts || n <= 0) return [];
+  let minX = Infinity;
+  let maxX = -Infinity;
+  let minZ = Infinity;
+  let maxZ = -Infinity;
+  for (const [x, z] of pts) {
+    minX = Math.min(minX, x);
+    maxX = Math.max(maxX, x);
+    minZ = Math.min(minZ, z);
+    maxZ = Math.max(maxZ, z);
+  }
+  const width = maxX - minX;
+  const sidePad = Math.max(48, width * 0.22);
+  const edgePad = 4;
+  const gapX = 34;
+  const gapZ = 22;
+
+  const ustZAtX = (x) => {
+    for (let z = minZ; z <= maxZ; z += 1) {
+      if (pointInPoly(x, z, pts)) return z;
+    }
+    return null;
+  };
+  const altZAtX = (x) => {
+    for (let z = maxZ; z >= minZ; z -= 1) {
+      if (pointInPoly(x, z, pts)) return z;
+    }
+    return null;
+  };
+
+  const allColumns = [];
+  for (let x = minX + sidePad; x <= maxX - sidePad; x += gapX) {
+    const ustZ = ustZAtX(x);
+    const altZ = altZAtX(x);
+    if (ustZ == null || altZ == null) continue;
+    if (altZ - ustZ < gapZ * 2) continue;
+    allColumns.push({ x, ustZ, altZ });
+  }
+  if (!allColumns.length) return [];
+
+  const t = Math.min(1, n / 50);
+  const maxCols = allColumns.length;
+  const useCols = Math.max(
+    1,
+    Math.min(maxCols, Math.ceil(2 + t * (maxCols - 2))),
+  );
+  const midCol = (maxCols - 1) / 2;
+  const columns = allColumns
+    .map((c, i) => ({ ...c, i }))
+    .sort((a, b) => Math.abs(a.i - midCol) - Math.abs(b.i - midCol))
+    .slice(0, useCols)
+    .sort((a, b) => a.x - b.x);
+
+  // Full floor depth: reach true alt + üst edges (not the shy min-alt)
+  const bandAlt = Math.max(...columns.map((c) => c.altZ)) - edgePad;
+  const bandUst = Math.min(...columns.map((c) => c.ustZ)) + edgePad;
+  const fullSpan = Math.max(gapZ, bandAlt - bandUst);
+  const geoMid = (bandAlt + bandUst) / 2;
+  // Home sits lower (toward alt) so small crowds aren't too yüksek
+  const homeMid = geoMid + (bandAlt - geoMid) * 0.45;
+  const usedSpan = fullSpan * t;
+  // Expand more toward alt than üst (≈70/30), then clamp to floor
+  let zHi = homeMid + usedSpan * 0.7;
+  let zLo = homeMid - usedSpan * 0.3;
+  if (zHi > bandAlt) {
+    zLo -= zHi - bandAlt;
+    zHi = bandAlt;
+  }
+  if (zLo < bandUst) {
+    zHi += bandUst - zLo;
+    zLo = bandUst;
+  }
+  zHi = Math.min(bandAlt, zHi);
+  zLo = Math.max(bandUst, zLo);
+  const span = Math.max(0, zHi - zLo);
+  const cols = columns.length;
+  const needRows = Math.max(1, Math.ceil(n / Math.max(1, cols)));
+  const rowsBySpan = Math.max(1, Math.round(span / gapZ) + 1);
+  const rows = Math.max(needRows, rowsBySpan);
+  const zStep = rows <= 1 ? 0 : span / (rows - 1);
+  const ringMid = (zHi + zLo) / 2;
+
+  const slots = [];
+  const tryPlace = (x, z) => {
+    if (slots.length >= n) return;
+    if (z < zLo - 1 || z > zHi + 1) return;
+    if (!pointInPoly(x, z, pts)) return;
+    if (slots.some((s) => Math.hypot(s.x - x, s.z - z) < 14)) return;
+    slots.push({ x, z });
+  };
+
+  for (let row = 0; row < rows && slots.length < n; row++) {
+    const xOff = (row % 2) * (gapX * 0.4);
+    const z = zHi - row * zStep;
+    const order = columns
+      .map((c, i) => ({ c, i }))
+      .sort(
+        (a, b) =>
+          Math.abs(a.i - (cols - 1) / 2) - Math.abs(b.i - (cols - 1) / 2),
+      );
+    for (const { c: col } of order) {
+      tryPlace(col.x + xOff, z);
+    }
+  }
+
+  // Top up: prefer alt side first, then üst
+  for (let ring = 0; slots.length < n && ring < rows + 4; ring++) {
+    for (const sign of [1, -1]) {
+      const z = ringMid + sign * ring * (gapZ * 0.5);
+      const xOff = (ring % 2) * (gapX * 0.4);
+      for (const col of columns) {
+        tryPlace(col.x + xOff, z);
+      }
+    }
+  }
+  return slots.slice(0, n);
+}
+
+/**
+ * Sol-alt giriş: collision içinde, bbox sol-alt köşesine (minX, maxZ)
+ * en yakın nokta — biraz içeride kalsın.
+ */
+function nightClubEntranceGate() {
+  const pts = nightClubWalkPts();
+  if (!pts?.length) return { x: -160, z: 250 };
+  let minX = Infinity;
+  let maxX = -Infinity;
+  let minZ = Infinity;
+  let maxZ = -Infinity;
+  for (const [x, z] of pts) {
+    minX = Math.min(minX, x);
+    maxX = Math.max(maxX, x);
+    minZ = Math.min(minZ, z);
+    maxZ = Math.max(maxZ, z);
+  }
+  const cornerX = minX;
+  const cornerZ = maxZ;
+  let best = null;
+  let bestD = Infinity;
+  // Dense scan near sol-alt; prefer points deep in the corner
+  for (let x = minX; x <= minX + 120; x += 3) {
+    for (let z = maxZ; z >= maxZ - 100; z -= 3) {
+      if (!pointInPoly(x, z, pts)) continue;
+      // Must stay clearly inside (not on the wire)
+      if (distToPolyEdge(x, z, pts) < 6) continue;
+      const d = Math.hypot(x - cornerX, z - cornerZ);
+      if (d < bestD) {
+        bestD = d;
+        best = { x, z };
+      }
+    }
+  }
+  if (best) return best;
+  // Last resort: any in-poly near corner
+  for (let x = minX; x <= minX + 140; x += 4) {
+    for (let z = maxZ; z >= maxZ - 120; z -= 4) {
+      if (!pointInPoly(x, z, pts)) continue;
+      return { x, z };
+    }
+  }
+  return { x: (minX + maxX) / 2, z: maxZ - 20 };
 }
 
 /** Boy/girl stand catalog entries for crowd spawn (skip sit-only). */
@@ -4436,19 +4663,74 @@ async function spawnCrowdExtras(count) {
     statusEl.textContent = "Kalabalık için boy/girl karakter yok";
     return 0;
   }
+  const club = isNightClubScene();
   const n = Math.max(0, Math.min(50, Number(count) || 0));
+  const dirs = ["south", "south-east", "south-west", "east", "west"];
+  let placed = 0;
+
+  if (club) {
+    const slots = nightClubCrowdSlots(n);
+    if (!slots.length) {
+      statusEl.textContent = "Night club walk zone yok — kalabalık eklenemedi";
+      return 0;
+    }
+    const gate = nightClubEntranceGate();
+    for (let i = 0; i < slots.length; i++) {
+      const item = catalog[i % catalog.length];
+      const slot = slots[i];
+      const dir = dirs[i % dirs.length];
+      // Queue along alt edge (sağa), not upward — avoid stacking into the floor
+      const lane = i % 8;
+      const wave = Math.floor(i / 8);
+      const sx = gate.x + 6 + lane * 12 + wave * 3 + (Math.random() - 0.5) * 4;
+      const sz = gate.z - 4 - (Math.random() - 0.5) * 5;
+      try {
+        const obj = await spawnItem(item, sx, sz, {
+          dir,
+          exactPos: true,
+          recordUndo: false,
+          select: false,
+          playEntrance: false,
+        });
+        obj.userData.crowdExtra = true;
+        obj.userData.formationMove = true; // before first frame soft-sep / blockers
+        // Enter from sol alt, run to floor slot, then dance
+        scriptActorTo(obj, slot.x, slot.z, {
+          run: true,
+          faceDir: dir,
+          idleOnArrive: false,
+          wait: i * 0.14,
+          onDone: () => {
+            attachDance(obj, obj.userData.path, dir, {
+              allowSouthFallback: true,
+            })
+              .then((ok) => {
+                if (ok) return;
+                return attachIdle(obj, obj.userData.path, dir, {
+                  allowSouthFallback: true,
+                });
+              })
+              .catch(() => {});
+          },
+        });
+        placed += 1;
+      } catch (err) {
+        console.warn("crowd spawn", err);
+      }
+    }
+    return placed;
+  }
+
   const home = streetGatherTarget || { x: 0, z: 180 };
   const cols = 10;
   const gapX = 42;
   const gapZ = 46;
-  let placed = 0;
   for (let i = 0; i < n; i++) {
     const item = catalog[i % catalog.length];
     const col = i % cols;
     const row = Math.floor(i / cols);
     const x = home.x + (col - (cols - 1) / 2) * gapX + (row % 2) * 12;
     const z = home.z - 40 - row * gapZ;
-    const dirs = ["south", "south-east", "south-west", "east", "west"];
     const dir = dirs[i % dirs.length];
     try {
       const obj = await spawnItem(item, x, z, {
@@ -4470,6 +4752,7 @@ async function spawnCrowdExtras(count) {
 async function setTruthDareCrowdCount(count) {
   const n = Number(count) || 0;
   if (!TRUTH_DARE_CROWD_COUNTS.includes(n)) return;
+  if (!isCrowdScene()) return;
   statusEl.textContent = `${n} karakter hazırlanıyor…`;
   // Stop current formation mid-run
   clearNpcScriptMoves();
@@ -4484,6 +4767,8 @@ async function setTruthDareCrowdCount(count) {
   if (activeSceneId === "dogrulukmu_cesaretmi") {
     await startTruthDareFormation();
     statusEl.textContent = `Kalabalık: ${placed} karakter · dizilim`;
+  } else if (isNightClubScene()) {
+    statusEl.textContent = `Kalabalık: ${placed} · night club`;
   } else {
     statusEl.textContent = `Kalabalık: ${placed} — doğrulukmu_cesaretmi’ye geç`;
   }
@@ -5124,15 +5409,60 @@ function buildPolyGizmo(corners, enabled, { street = false } = {}) {
   scene.add(colGizmo);
 }
 
+/** Night club room used for walk-col gizmo / edits. */
+function nightClubColTarget() {
+  if (selected && hasEditableCollision(selected.userData?.path)) return selected;
+  return nightClubRoomObj();
+}
+
 /** Outline + vertex handles for night_club object col. */
 function updateColGizmo(obj) {
   if (!obj || !hasEditableCollision(obj.userData?.path)) {
     if (isStreetLikeScene()) updateStreetWalkGizmo();
+    else if (isNightClubScene()) updateNightClubColGizmo();
     else disposeColGizmo();
+    return;
+  }
+  if (isNightClubScene() && !nightClubColVisible) {
+    disposeColGizmo();
     return;
   }
   const col = ensureColData(obj);
   buildPolyGizmo(getColWorldPts(obj), !!col.enabled, { street: false });
+  if (colGizmo) {
+    colGizmo.userData.nightClub = true;
+    colGizmo.userData.nightClubObj = obj;
+  }
+}
+
+/** Show/hide night club walk poly (does not toggle col.enabled). */
+function updateNightClubColGizmo() {
+  if (!isNightClubScene() || !nightClubColVisible) {
+    if (colGizmo?.userData?.nightClub) disposeColGizmo();
+    return;
+  }
+  const room = nightClubColTarget();
+  if (!room) {
+    if (colGizmo?.userData?.nightClub) disposeColGizmo();
+    return;
+  }
+  const col = ensureColData(room);
+  buildPolyGizmo(getColWorldPts(room), !!col.enabled, { street: false });
+  if (colGizmo) {
+    colGizmo.userData.nightClub = true;
+    colGizmo.userData.nightClubObj = room;
+  }
+}
+
+function syncNightClubColUi() {
+  const panel = document.getElementById("night-club-col");
+  if (panel) panel.classList.toggle("hidden", !isNightClubScene());
+  panel?.querySelectorAll("button[data-nccol]").forEach((btn) => {
+    const show = btn.getAttribute("data-nccol") === "show";
+    btn.classList.toggle("active", isNightClubScene() && show === nightClubColVisible);
+  });
+  if (isNightClubScene()) updateNightClubColGizmo();
+  else if (colGizmo?.userData?.nightClub) disposeColGizmo();
 }
 
 function updateStreetWalkGizmo() {
@@ -5163,6 +5493,7 @@ function syncStreetWalkUi() {
   if (isStreetLikeScene()) updateStreetWalkGizmo();
   else if (colGizmo?.userData?.streetWalk) disposeColGizmo();
   syncTruthDareCrowdUi();
+  syncNightClubColUi();
 }
 
 function polyHandleHitR() {
@@ -5366,6 +5697,8 @@ function refreshInspector() {
     updateColGizmo(selected);
   } else if (isStreetLikeScene()) {
     updateStreetWalkGizmo();
+  } else if (isNightClubScene()) {
+    updateNightClubColGizmo();
   } else {
     disposeColGizmo();
   }
@@ -5534,6 +5867,16 @@ inspColReset?.addEventListener("click", () => {
   statusEl.textContent = "Collision karesi sıfırlandı";
 });
 
+document.getElementById("night-club-col")?.addEventListener("click", (e) => {
+  const btn = e.target?.closest?.("button[data-nccol]");
+  if (!btn || !isNightClubScene()) return;
+  nightClubColVisible = btn.getAttribute("data-nccol") === "show";
+  syncNightClubColUi();
+  statusEl.textContent = nightClubColVisible
+    ? "Club col görünür — köşe sürükle · collision aynı"
+    : "Club col gizli — collision çalışmaya devam eder";
+});
+
 document.getElementById("street-walk-on")?.addEventListener("change", (e) => {
   if (!isStreetLikeScene()) return;
   streetWalkEditOpen = !!e.target.checked;
@@ -5625,29 +5968,35 @@ function onPointerDown(event) {
 
   // Collision polygon handles (night_club object OR street walk zone)
   const gp0 = groundHit();
-  if (gp0 && selected && hasEditableCollision(selected.userData?.path)) {
-    const corner = hitColCorner(gp0.x, gp0.z, selected);
+  const nightColObj =
+    nightClubColVisible && colGizmo?.userData?.nightClub
+      ? colGizmo.userData.nightClubObj || nightClubColTarget()
+      : selected && hasEditableCollision(selected.userData?.path)
+        ? selected
+        : null;
+  if (gp0 && nightColObj && hasEditableCollision(nightColObj.userData?.path)) {
+    const corner = hitColCorner(gp0.x, gp0.z, nightColObj);
     if (corner >= 0) {
       if (placing) endPaletteDrag();
       if (event.altKey) {
-        const from = ensureColData(selected).pts.map((p) => ({ fx: p.fx, fz: p.fz }));
-        if (removeColPt(selected, corner)) {
+        const from = ensureColData(nightColObj).pts.map((p) => ({ fx: p.fx, fz: p.fz }));
+        if (removeColPt(nightColObj, corner)) {
           pushUndo({
             undo() {
-              ensureColData(selected).pts = from.map((p) => ({ ...p }));
-              if (selected) updateColGizmo(selected);
+              ensureColData(nightColObj).pts = from.map((p) => ({ ...p }));
+              updateNightClubColGizmo();
             },
           });
-          updateColGizmo(selected);
+          updateNightClubColGizmo();
           statusEl.textContent = "Köşe silindi (Alt+tık)";
         } else {
           statusEl.textContent = "En az 3 köşe gerekli";
         }
         return;
       }
-      const col = ensureColData(selected);
+      const col = ensureColData(nightColObj);
       colCornerDrag = {
-        obj: selected,
+        obj: nightColObj,
         index: corner,
         from: col.pts.map((p) => ({ fx: p.fx, fz: p.fz })),
       };
@@ -5656,23 +6005,23 @@ function onPointerDown(event) {
       statusEl.textContent = `Köşe ${corner + 1} — sürükle · Alt+tık sil`;
       return;
     }
-    const edge = hitColEdgeMid(gp0.x, gp0.z, selected);
+    const edge = hitColEdgeMid(gp0.x, gp0.z, nightColObj);
     if (edge >= 0) {
       if (placing) endPaletteDrag();
-      const from = ensureColData(selected).pts.map((p) => ({ fx: p.fx, fz: p.fz }));
-      const newIndex = insertColPtOnEdge(selected, edge, gp0.x, gp0.z);
+      const from = ensureColData(nightColObj).pts.map((p) => ({ fx: p.fx, fz: p.fz }));
+      const newIndex = insertColPtOnEdge(nightColObj, edge, gp0.x, gp0.z);
       if (newIndex < 0) {
         statusEl.textContent = `En fazla ${COL_MAX_PTS} köşe`;
         return;
       }
       colCornerDrag = {
-        obj: selected,
+        obj: nightColObj,
         index: newIndex,
         from,
       };
       controls.enabled = false;
       renderer.domElement.setPointerCapture(event.pointerId);
-      updateColGizmo(selected);
+      updateNightClubColGizmo();
       statusEl.textContent = "Kenara nokta eklendi — sürükle";
       return;
     }
@@ -5784,7 +6133,11 @@ function onPointerMove(event) {
       return;
     }
     setColWorldPt(colCornerDrag.obj, colCornerDrag.index, gp.x, gp.z);
-    updateColGizmo(colCornerDrag.obj);
+    if (colGizmo?.userData?.nightClub || isNightClubScene()) {
+      updateNightClubColGizmo();
+    } else {
+      updateColGizmo(colCornerDrag.obj);
+    }
     return;
   }
   if (!dragging) return;
