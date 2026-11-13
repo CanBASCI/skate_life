@@ -266,11 +266,27 @@ body {
 #scene-toggle,
 #scene-slots {
   display: flex;
+  flex-wrap: wrap;
   gap: 4px;
   padding: 3px;
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: 999px;
+  align-items: center;
+}
+
+.scene-slot {
+  display: inline-flex;
+  align-items: stretch;
+  gap: 0;
+  border-radius: 999px;
+  overflow: hidden;
+  border: 1px solid transparent;
+}
+
+.scene-slot.active {
+  border-color: #2a4a38;
+  background: #1c2a22;
 }
 
 #viewport-toggle button,
@@ -291,6 +307,24 @@ body {
   cursor: pointer;
 }
 
+#scene-slots .scene-slot button {
+  border-radius: 0;
+}
+
+#scene-slots .scene-slot button:first-child {
+  padding-right: 6px;
+}
+
+#scene-slots .scene-slot-json {
+  padding-left: 6px;
+  padding-right: 9px;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  opacity: 0.75;
+  border-left: 1px solid #ffffff18;
+}
+
 #viewport-toggle button:hover,
 #bg-toggle button:hover,
 #col-toggle button:hover,
@@ -299,11 +333,21 @@ body {
   color: var(--ink);
 }
 
+#scene-slots .scene-slot-json:hover {
+  opacity: 1;
+  color: var(--accent);
+}
+
 #viewport-toggle button.active,
 #bg-toggle button.active,
 #col-toggle button.active,
 #scene-slots button.active {
   background: #1c2a22;
+  color: var(--accent);
+}
+
+#scene-slots .scene-slot.active button {
+  background: transparent;
   color: var(--accent);
 }
 

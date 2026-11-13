@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "revision": 5,
+  "sceneId": "dogrulukmu_cesaretmi",
+  "label": "doğrulukmu_cesaretmi",
+  "base": "street",
+  "objects": [
+    {
+      "kind": "object",
+      "id": "468b842d-e086-4352-866e-50288fc0b035",
+      "path": "assets/props/outdoorPark/bench/96x96/day",
+      "x": -40.97,
+      "z": -104.97,
+      "scale": 0.8,
+      "dir": "south"
+    },
+    {
+      "kind": "object",
+      "id": "468b842d-e086-4352-866e-50288fc0b035",
+      "path": "assets/props/outdoorPark/bench/96x96/day",
+      "x": 48.85,
+      "z": -103.81,
+      "scale": 0.8,
+      "dir": "south"
+    }
+  ]
+}

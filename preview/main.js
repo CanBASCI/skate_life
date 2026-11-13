@@ -58,6 +58,10 @@ let sceneLoading = false;
 let sceneRevision = 0;
 /** @type {string | null} */
 let activeSceneId = null;
+/** Street layout + walkZone / garage intro (street + truth-or-dare fork). */
+function isStreetLikeScene(id = activeSceneId) {
+  return id === "street" || id === "dogrulukmu_cesaretmi";
+}
 /** @type {{ id: string, label?: string, file?: string }[]} */
 let sceneCatalog = [];
 const sceneCopyBtn = document.getElementById("scene-copy");
@@ -1984,7 +1988,7 @@ function ensureStreetWalkZone() {
 }
 
 function streetWalkActive() {
-  return activeSceneId === "street" && !!ensureStreetWalkZone().enabled;
+  return isStreetLikeScene() && !!ensureStreetWalkZone().enabled;
 }
 
 /** Checkbox: show edit gizmo only — does not turn collision on/off. */
@@ -3404,7 +3408,7 @@ async function spawnItem(item, x, z, opts = {}) {
 
   // Street: new cast exits garage → scene JSON player spot (not live Main)
   if (
-    activeSceneId === "street" &&
+    isStreetLikeScene() &&
     item.kind === "character" &&
     !sceneLoading &&
     !opts.traffic &&
@@ -3460,7 +3464,7 @@ function applySerializedCol(obj, colData) {
 }
 
 function serializeWalkZone() {
-  if (activeSceneId !== "street") return undefined;
+  if (!isStreetLikeScene()) return undefined;
   const z = ensureStreetWalkZone();
   return {
     enabled: !!z.enabled,
@@ -3697,7 +3701,7 @@ function clearTraffic() {
 }
 
 function syncTrafficForScene() {
-  if (activeSceneId === "street") {
+  if (isStreetLikeScene()) {
     trafficEnabled = true;
     trafficSpawnTimer = 0.4;
     const defs = defaultTrafficLanes();
@@ -3899,7 +3903,7 @@ async function loadScene(data, { persist = true } = {}) {
       applyViewportMode(data.viewport);
     }
     clearEditableSceneObjects();
-    applyWalkZone(activeSceneId === "street" ? data.walkZone : null);
+    applyWalkZone(isStreetLikeScene() ? data.walkZone : null);
     syncStreetWalkUi();
     if (player?.mesh && data.player) {
       player.mesh.position.x = Number(data.player.x) || 0;
@@ -3926,7 +3930,9 @@ async function loadScene(data, { persist = true } = {}) {
         exactPos: true,
         recordUndo: false,
         select: false,
+        playEntrance: false,
       });
+      if (entry.sceneOverlay) obj.userData.sceneOverlay = entry.sceneOverlay;
       if (entry.col) applySerializedCol(obj, entry.col);
       if (entry.dancing && obj.userData.kind === "character") {
         await setCharacterDancing(obj, true);
@@ -3937,7 +3943,7 @@ async function loadScene(data, { persist = true } = {}) {
     if (persist) persistScene();
     syncTrafficForScene();
     // Street: Main + cast → JSON player home; later spawns use same fixed point
-    if (activeSceneId === "street") {
+    if (isStreetLikeScene()) {
       const dest = data.player
         ? {
             x: Number(data.player.x) || -0.33,
@@ -4050,8 +4056,12 @@ window.addEventListener("beforeunload", () => {
 });
 
 function highlightSceneSlot(sceneId) {
-  sceneSlotsEl?.querySelectorAll("button[data-scene]").forEach((btn) => {
-    btn.classList.toggle("active", btn.getAttribute("data-scene") === sceneId);
+  sceneSlotsEl?.querySelectorAll(".scene-slot").forEach((slot) => {
+    const on = slot.getAttribute("data-scene") === sceneId;
+    slot.classList.toggle("active", on);
+    slot.querySelectorAll("button[data-scene]").forEach((btn) => {
+      btn.classList.toggle("active", on);
+    });
   });
 }
 
@@ -4077,11 +4087,16 @@ function renderSceneSlots() {
   }
   sceneSlotsEl.classList.remove("hidden");
   for (const s of sceneCatalog) {
+    const slot = document.createElement("div");
+    slot.className = "scene-slot";
+    slot.dataset.scene = s.id;
+    if (s.id === activeSceneId) slot.classList.add("active");
+
     const btn = document.createElement("button");
     btn.type = "button";
     btn.textContent = s.label || s.id;
     btn.dataset.scene = s.id;
-    btn.title = `${s.id} — tıkla yükle`;
+    btn.title = `${s.label || s.id} — sahneyi yükle / ayarla`;
     if (s.id === activeSceneId) btn.classList.add("active");
     btn.addEventListener("click", () => {
       loadNamedScene(s.id).catch((err) => {
@@ -4089,22 +4104,136 @@ function renderSceneSlots() {
         statusEl.textContent = err.message || String(err);
       });
     });
-    sceneSlotsEl.appendChild(btn);
+
+    const jsonBtn = document.createElement("button");
+    jsonBtn.type = "button";
+    jsonBtn.className = "scene-slot-json";
+    jsonBtn.textContent = "json";
+    jsonBtn.dataset.scene = s.id;
+    jsonBtn.title = `${s.file || s.id + ".json"} — dosyadaki JSON sahnesini yükle`;
+    if (s.id === activeSceneId) jsonBtn.classList.add("active");
+    jsonBtn.addEventListener("click", () => {
+      loadNamedScene(s.id).catch((err) => {
+        console.warn(err);
+        statusEl.textContent = err.message || String(err);
+      });
+    });
+
+    slot.appendChild(btn);
+    slot.appendChild(jsonBtn);
+    sceneSlotsEl.appendChild(slot);
   }
+}
+
+async function fetchSceneFile(file) {
+  const res = await fetch(new URL(`./scenes/${file}`, import.meta.url).href, {
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error(`Sahne bulunamadı: ${file}`);
+  const data = await res.json();
+  if (!data || Number(data.version) !== 1) {
+    throw new Error(`Geçersiz sahne dosyası: ${file}`);
+  }
+  return data;
+}
+
+/**
+ * Overlay scenes (e.g. dogrulukmu_cesaretmi) reuse street.json and only
+ * append their extra objects — no separate full street copy.
+ */
+async function resolveSceneData(sceneId, overlay) {
+  const baseId = overlay?.base || null;
+  if (!baseId) return overlay;
+  const baseMeta = sceneCatalog.find((s) => s.id === baseId);
+  const baseFile = baseMeta?.file || `${baseId}.json`;
+  const base = await fetchSceneFile(baseFile);
+  const extra = Array.isArray(overlay.objects) ? overlay.objects : [];
+  return {
+    ...base,
+    ...Object.fromEntries(
+      Object.entries(overlay).filter(
+        ([k]) => k !== "objects" && k !== "base" && overlay[k] != null,
+      ),
+    ),
+    base: baseId,
+    objects: [
+      ...(base.objects || []),
+      ...extra.map((o) => ({ ...o, sceneOverlay: sceneId })),
+    ],
+    walkZone: overlay.walkZone || base.walkZone,
+    player: overlay.player || base.player,
+  };
+}
+
+function clearSceneOverlayObjects(overlayId) {
+  const doomed = pickables.filter((o) => o.userData?.sceneOverlay === overlayId);
+  for (const obj of doomed) {
+    detachPlacedObject(obj);
+    disposePlacedObject(obj);
+  }
+  return doomed.length;
+}
+
+/** Street ↔ dogrulukmu: only add/remove banks — keep Main, cast, balls in place. */
+async function softSwitchStreetVariant(sceneId) {
+  const meta = sceneCatalog.find((s) => s.id === sceneId);
+  clearSceneOverlayObjects("dogrulukmu_cesaretmi");
+
+  if (sceneId === "dogrulukmu_cesaretmi") {
+    const file = meta?.file || `${sceneId}.json`;
+    const raw = await fetchSceneFile(file);
+    const extras = Array.isArray(raw.objects) ? raw.objects : [];
+    for (const entry of extras) {
+      const item = findCatalogItem(entry);
+      if (!item) {
+        console.warn("overlay: katalogda yok", entry.path);
+        continue;
+      }
+      const obj = await spawnItem(item, Number(entry.x) || 0, Number(entry.z) || 0, {
+        scale: entry.scale != null ? Number(entry.scale) : undefined,
+        dir: entry.dir,
+        exactPos: true,
+        recordUndo: false,
+        select: false,
+        playEntrance: false,
+      });
+      obj.userData.sceneOverlay = "dogrulukmu_cesaretmi";
+    }
+  }
+
+  activeSceneId = sceneId;
+  sceneRevision = Math.max((sceneRevision || 0) + 1, Number(meta?.revision) || 0);
+  highlightSceneSlot(sceneId);
+  syncStreetWalkUi();
+  syncTrafficForScene();
+  persistScene();
+  statusEl.textContent =
+    sceneId === "dogrulukmu_cesaretmi"
+      ? "doğrulukmu_cesaretmi — 2 bank eklendi (konumlar korundu)"
+      : "street — overlay kalktı (konumlar korundu)";
 }
 
 async function loadNamedScene(sceneId) {
   const meta = sceneCatalog.find((s) => s.id === sceneId);
+  // Same street world: don't rebuild / re-run garage intro / reset balls
+  if (
+    isStreetLikeScene(activeSceneId) &&
+    (sceneId === "street" || sceneId === "dogrulukmu_cesaretmi")
+  ) {
+    if (activeSceneId === sceneId) {
+      highlightSceneSlot(sceneId);
+      statusEl.textContent = `${meta?.label || sceneId} zaten açık`;
+      return;
+    }
+    statusEl.textContent = `${meta?.label || sceneId}…`;
+    await softSwitchStreetVariant(sceneId);
+    return;
+  }
+
   const file = meta?.file || `${sceneId}.json`;
   statusEl.textContent = `${meta?.label || sceneId} yükleniyor…`;
-  const res = await fetch(new URL(`./scenes/${file}`, import.meta.url).href, {
-    cache: "no-store",
-  });
-  if (!res.ok) throw new Error(`Sahne bulunamadı: ${sceneId}`);
-  const data = await res.json();
-  if (!data || Number(data.version) !== 1) {
-    throw new Error("Geçersiz sahne dosyası");
-  }
+  const raw = await fetchSceneFile(file);
+  const data = await resolveSceneData(sceneId, raw);
   // Button click always wins over older localStorage revision
   data.sceneId = sceneId;
   data.label = meta?.label || data.label || sceneId;
@@ -4315,7 +4444,7 @@ function buildPolyGizmo(corners, enabled, { street = false } = {}) {
 /** Outline + vertex handles for night_club object col. */
 function updateColGizmo(obj) {
   if (!obj || !hasEditableCollision(obj.userData?.path)) {
-    if (activeSceneId === "street") updateStreetWalkGizmo();
+    if (isStreetLikeScene()) updateStreetWalkGizmo();
     else disposeColGizmo();
     return;
   }
@@ -4324,7 +4453,7 @@ function updateColGizmo(obj) {
 }
 
 function updateStreetWalkGizmo() {
-  if (activeSceneId !== "street") {
+  if (!isStreetLikeScene()) {
     if (colGizmo?.userData?.streetWalk) disposeColGizmo();
     return;
   }
@@ -4345,10 +4474,10 @@ function updateStreetWalkGizmo() {
 
 function syncStreetWalkUi() {
   const panel = document.getElementById("street-walk");
-  if (panel) panel.classList.toggle("hidden", activeSceneId !== "street");
+  if (panel) panel.classList.toggle("hidden", !isStreetLikeScene());
   const on = document.getElementById("street-walk-on");
   if (on) on.checked = !!streetWalkEditOpen;
-  if (activeSceneId === "street") updateStreetWalkGizmo();
+  if (isStreetLikeScene()) updateStreetWalkGizmo();
   else if (colGizmo?.userData?.streetWalk) disposeColGizmo();
 }
 
@@ -4434,7 +4563,7 @@ function selectObject(obj) {
   attachSelectionOutline(obj);
   if (!obj) {
     inspector.classList.add("hidden");
-    if (activeSceneId === "street") updateStreetWalkGizmo();
+    if (isStreetLikeScene()) updateStreetWalkGizmo();
     else disposeColGizmo();
     return;
   }
@@ -4551,7 +4680,7 @@ function refreshInspector() {
     const col = ensureColData(selected);
     if (inspColOn) inspColOn.checked = !!col.enabled;
     updateColGizmo(selected);
-  } else if (activeSceneId === "street") {
+  } else if (isStreetLikeScene()) {
     updateStreetWalkGizmo();
   } else {
     disposeColGizmo();
@@ -4722,7 +4851,7 @@ inspColReset?.addEventListener("click", () => {
 });
 
 document.getElementById("street-walk-on")?.addEventListener("change", (e) => {
-  if (activeSceneId !== "street") return;
+  if (!isStreetLikeScene()) return;
   streetWalkEditOpen = !!e.target.checked;
   const zone = ensureStreetWalkZone();
   // Editing does not toggle collision — keep walkZone.enabled as saved
@@ -4738,7 +4867,7 @@ document.getElementById("street-walk-on")?.addEventListener("change", (e) => {
 });
 
 document.getElementById("street-walk-fit")?.addEventListener("click", () => {
-  if (activeSceneId !== "street") return;
+  if (!isStreetLikeScene()) return;
   streetWalkEditOpen = true;
   const on = document.getElementById("street-walk-on");
   if (on) on.checked = true;
@@ -4747,7 +4876,7 @@ document.getElementById("street-walk-fit")?.addEventListener("click", () => {
 });
 
 document.getElementById("street-walk-reset")?.addEventListener("click", () => {
-  if (activeSceneId !== "street") return;
+  if (!isStreetLikeScene()) return;
   streetWalkEditOpen = true;
   const on = document.getElementById("street-walk-on");
   if (on) on.checked = true;
@@ -4863,7 +4992,7 @@ function onPointerDown(event) {
       statusEl.textContent = "Kenara nokta eklendi — sürükle";
       return;
     }
-  } else if (gp0 && activeSceneId === "street" && colGizmo?.userData?.streetWalk) {
+  } else if (gp0 && isStreetLikeScene() && colGizmo?.userData?.streetWalk) {
     const zone = ensureStreetWalkZone();
     const corner = hitPolyCorner(gp0.x, gp0.z, zone.pts);
     if (corner >= 0) {

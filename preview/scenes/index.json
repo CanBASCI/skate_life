@@ -9,6 +9,12 @@
       "id": "street",
       "label": "street",
       "file": "street.json"
+    },
+    {
+      "id": "dogrulukmu_cesaretmi",
+      "label": "doğrulukmu_cesaretmi",
+      "file": "dogrulukmu_cesaretmi.json",
+      "base": "street"
     }
   ]
 }
