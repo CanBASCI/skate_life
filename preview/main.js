@@ -317,6 +317,11 @@ function defaultScale(item) {
   if (isSkateboardPath(item.path)) return 0.7;
   // roads / tileable paths — user prefers large default
   if (isRoadTileItem(item) || /\/props\/road\//i.test(item.path || "")) return 4;
+  if (/americanschoolbus|schoolBus/i.test(item.path || "")) return 1.7;
+  if (/\/ambulance\//i.test(item.path || "")) return 1.7;
+  if (/boat|ferry/i.test(item.path || "")) return 1.5;
+  if (/outdoorPark\/bench|outdoorpark\/bench/i.test(item.path || "")) return 0.8;
+  if (/outdoorPark\/table|outdoorpark\/table/i.test(item.path || "")) return 1;
   return 1;
 }
 

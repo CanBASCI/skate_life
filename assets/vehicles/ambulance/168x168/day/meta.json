@@ -1,24 +1,9 @@
 {
-  "id": "7752487f-fd99-433c-abda-b15364885caa",
-  "kind": "object",
-  "w": 168,
-  "h": 168,
-  "state": "ambulance_Day",
+  "id": "11d82a70-1368-49ac-b2f4-d74b06501d4f",
   "name": "vehicles",
+  "state": "ambulance_Day",
+  "size": "170x170",
   "path": "assets/vehicles/ambulance/168x168/day",
-  "canvasBeforeTrim": [
-    168,
-    168
-  ],
-  "canvasTrimmed": [
-    74,
-    129
-  ],
-  "trimBox": [
-    2,
-    11,
-    164,
-    149
-  ],
-  "trimMode": "per-frame-tight"
+  "replaces": "7752487f-fd99-433c-abda-b15364885caa",
+  "note": "regenerated: true E/W side profiles"
 }

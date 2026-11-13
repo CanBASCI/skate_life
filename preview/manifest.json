@@ -138,7 +138,7 @@
     },
     {
       "id": "ambulance",
-      "src": "assets/vehicles/ambulance/168x168/day/south.png?v=trim3",
+      "src": "assets/vehicles/ambulance/168x168/day/south.png?v=dirs8",
       "x": 480,
       "z": 50,
       "label": "ambulance",

@@ -57,24 +57,30 @@ function charGroupKey(entry) {
 export async function loadCatalog() {
   const index = await fetch(assetUrl("assets/INDEX.json")).then((r) => r.json());
 
-  const objects = (index.objects || []).map((o) => {
-    const cat = objectCat(o);
-    const label =
-      cat === "roads"
-        ? o.state || o.name || "road"
-        : [o.name, o.state].filter(Boolean).join(" · ");
-    return {
-      kind: "object",
-      id: o.id,
-      cat,
-      label,
-      path: o.path,
-      size: o.size || (o.w && o.h ? `${o.w}x${o.h}` : undefined),
-      tileable: !!o.tileable || /\/roadTiles\//i.test(o.path || ""),
-      tileSize: o.tileSize || (/\/roadTiles\//i.test(o.path || "") ? 64 : undefined),
-      thumbs: thumbUrls(o.path),
-    };
-  });
+  const objects = (index.objects || [])
+    .filter((o) => {
+      const s = `${o.state || ""} ${o.path || ""}`;
+      // night variants unused for now — day only in the palette
+      return !/night/i.test(s);
+    })
+    .map((o) => {
+      const cat = objectCat(o);
+      const label =
+        cat === "roads"
+          ? o.state || o.name || "road"
+          : [o.name, o.state].filter(Boolean).join(" · ");
+      return {
+        kind: "object",
+        id: o.id,
+        cat,
+        label,
+        path: o.path,
+        size: o.size || (o.w && o.h ? `${o.w}x${o.h}` : undefined),
+        tileable: !!o.tileable || /\/roadTiles\//i.test(o.path || ""),
+        tileSize: o.tileSize || (/\/roadTiles\//i.test(o.path || "") ? 64 : undefined),
+        thumbs: thumbUrls(o.path),
+      };
+    });
 
   const characters = (index.characters || []).map((c) => {
     const group = charGroupKey(c);

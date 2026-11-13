@@ -1444,35 +1444,18 @@
       "path": "assets/buildings/theater/256x256/night"
     },
     {
-      "id": "329fa067-eb56-491d-b470-1251fc17f03f",
+      "id": "3d518fba-fc31-4aa8-b80c-866138fcfbf5",
       "name": "vehicles",
-      "state": "amblance_Night",
-      "size": "168x168",
-      "path": "assets/vehicles/amblance/168x168/night"
+      "state": "ambulance_Night",
+      "size": "170x170",
+      "path": "assets/vehicles/ambulance/168x168/night"
     },
     {
-      "id": "7752487f-fd99-433c-abda-b15364885caa",
-      "kind": "object",
-      "w": 168,
-      "h": 168,
+      "id": "11d82a70-1368-49ac-b2f4-d74b06501d4f",
       "state": "ambulance_Day",
       "name": "vehicles",
       "path": "assets/vehicles/ambulance/168x168/day",
-      "canvasBeforeTrim": [
-        168,
-        168
-      ],
-      "canvasTrimmed": [
-        74,
-        129
-      ],
-      "trimBox": [
-        2,
-        11,
-        164,
-        149
-      ],
-      "trimMode": "per-frame-tight"
+      "size": "170x170"
     },
     {
       "id": "38046849-2689-4e3a-aef3-f907b1603df5",
