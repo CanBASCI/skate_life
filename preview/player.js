@@ -471,24 +471,31 @@ export class Player {
   }
 
   /** Absolute-dir scripted move (chat /R3). On skateboard keeps skateIdle + skate speed. */
-  startScriptMove(dx, dz, distance, speed) {
+  startScriptMove(dx, dz, distance, speed, opts = {}) {
     if (!this.mesh || this.driving || !(distance > 0)) return false;
     const len = Math.hypot(dx, dz);
     if (!len) return false;
     this.sitting = false;
-    const defaultSpeed = this.skating ? SKATE_SPEED : WALK_SPEED;
+    const wantRun = opts.anim === "run" && !this.skating;
+    const defaultSpeed = this.skating
+      ? SKATE_SPEED
+      : wantRun
+        ? RUN_SPEED
+        : WALK_SPEED;
     this.scriptMove = {
       dx: dx / len,
       dz: dz / len,
       left: distance,
       speed: speed || defaultSpeed,
+      anim: wantRun ? "run" : this.skating ? "skateIdle" : "walk",
+      onDone: typeof opts.onDone === "function" ? opts.onDone : null,
     };
     this.busy = null;
     this.vaultMove = null;
     this.keys.clear();
     const facing = dirFromVector(dx, dz);
     if (facing) this.facing = facing;
-    this.anim = this.skating ? "skateIdle" : "walk";
+    this.anim = this.skating ? "skateIdle" : wantRun ? "run" : "walk";
     this.frame = 0;
     this.accum = 0;
     this.applyFrame();
@@ -587,7 +594,11 @@ export class Player {
       sm.left -= Math.max(moved, step * 0.25);
       this.busy = null;
       // Stay on skateIdle while riding — walk anim looked stuck / broke board ride
-      this.anim = this.skating ? "skateIdle" : "walk";
+      this.anim = this.skating
+        ? "skateIdle"
+        : sm.anim === "run"
+          ? "run"
+          : "walk";
       this.syncRing();
       const cfg = SETS[this.anim] || SETS.walk;
       this.accum += dt;
@@ -601,11 +612,17 @@ export class Player {
       // Only cancel for a hard wall when nearly no progress (lenient while skating)
       const stuckThresh = this.skating ? step * 0.02 : step * 0.05;
       if (sm.left <= 0.5 || moved < stuckThresh) {
+        const done = sm.onDone;
         this.scriptMove = null;
         this.anim = this.skating ? "skateIdle" : "idle";
         this.frame = 0;
         this.accum = 0;
         this.applyFrame();
+        try {
+          done?.();
+        } catch {
+          /* */
+        }
       }
       return;
     }

@@ -72,6 +72,18 @@ const sceneModal = document.getElementById("scene-modal");
 const sceneJsonEl = document.getElementById("scene-json");
 const sceneModalCancel = document.getElementById("scene-modal-cancel");
 const sceneModalApply = document.getElementById("scene-modal-apply");
+const truthDareCrowdEl = document.getElementById("truth-dare-crowd");
+const TRUTH_DARE_CROWD_COUNTS = [5, 10, 20, 30, 40, 50];
+/** @type {Map<object, { x: number, z: number, dir: string, sitting: boolean, isPlayer: boolean }>} */
+let truthDareSnapshot = new Map();
+let truthDareActive = false;
+let truthDareCrowdCount = 0;
+const TRUTH_DARE_RUN_SPEED = 190;
+const TRUTH_DARE_WALK_SPEED = 110;
+const TRUTH_DARE_ROW_SIZE = 8;
+const TRUTH_DARE_ROW_GAP_Z = 48;
+const TRUTH_DARE_COL_GAP_X = 44;
+const TRUTH_DARE_FRONT_Z = 200;
 /** Fixed playable frame center for 9:16 (camera does not follow the player). */
 const MAP_VIEW = { x: 0, z: 200 };
 const BG_PRESETS = {
@@ -1040,7 +1052,10 @@ function nearestVehicle(px, pz) {
 
 const _promptWorld = new THREE.Vector3();
 const _promptNdc = new THREE.Vector3();
+const _promptFeetNdc = new THREE.Vector3();
 const _camUp = new THREE.Vector3();
+/** Label CSS size tracks on-screen sprite height (ref ≈ desktop 9:16). */
+const WORLD_LABEL_REF_PX = 118;
 
 function hidePrompt() {
   if (promptEl) promptEl.classList.add("hidden");
@@ -1141,12 +1156,22 @@ function labelKeyFor(obj) {
   return obj.uuid || obj.userData?.catalogKey || null;
 }
 
-function ensureWorldLabel(key, displayName) {
+function isGirlCharacterPath(path) {
+  return /\/characters\/girl_/i.test(String(path || ""));
+}
+
+function applyWorldLabelGender(nameEl, path) {
+  if (!nameEl) return;
+  nameEl.classList.toggle("girl", isGirlCharacterPath(path));
+}
+
+function ensureWorldLabel(key, displayName, path = null) {
   let entry = worldLabelMap.get(key);
   if (entry) {
     if (entry.nameEl.textContent !== displayName) {
       entry.nameEl.textContent = displayName;
     }
+    if (path != null) applyWorldLabelGender(entry.nameEl, path);
     return entry;
   }
   const root = document.createElement("div");
@@ -1155,6 +1180,7 @@ function ensureWorldLabel(key, displayName) {
   const nameEl = document.createElement("div");
   nameEl.className = "world-label-name";
   nameEl.textContent = displayName;
+  applyWorldLabelGender(nameEl, path);
   const bubbleEl = document.createElement("div");
   bubbleEl.className = "world-label-bubble hidden";
   // order: bubble above name
@@ -1194,7 +1220,13 @@ function projectHeadScreen(obj) {
   const canvasRect = renderer.domElement.getBoundingClientRect();
   const sx = ((_promptNdc.x + 1) / 2) * canvasRect.width + canvasRect.left;
   const sy = ((-_promptNdc.y + 1) / 2) * canvasRect.height + canvasRect.top + 2;
-  return { sx, sy };
+  // Feet → head screen height so labels shrink with the viewport/sprites
+  _promptFeetNdc.copy(obj.position).project(camera);
+  const feetSy =
+    ((-_promptFeetNdc.y + 1) / 2) * canvasRect.height + canvasRect.top;
+  const spritePx = Math.max(8, Math.abs(feetSy - sy));
+  const scale = Math.min(1.2, Math.max(0.52, spritePx / WORLD_LABEL_REF_PX));
+  return { sx, sy, scale };
 }
 
 function speakAs(obj, text) {
@@ -1206,7 +1238,7 @@ function speakAs(obj, text) {
     key === "player"
       ? PLAYER_CHAT_NAME
       : shortCharacterName(obj.userData?.label, obj.userData?.path);
-  const entry = ensureWorldLabel(key, name);
+  const entry = ensureWorldLabel(key, name, obj.userData?.path);
   entry.obj = obj;
   entry.bubbleEl.textContent = msg;
   entry.bubbleEl.classList.remove("hidden");
@@ -1269,7 +1301,7 @@ function clearNpcScriptMoves(obj = null) {
   npcScriptMoves = npcScriptMoves.filter((sm) => sm.obj !== obj);
 }
 
-function enqueueNpcWalk(obj, dx, dz, dist, speed = 110, wait = 0) {
+function enqueueNpcWalk(obj, dx, dz, dist, speed = 110, wait = 0, opts = {}) {
   if (!obj || !(dist > 0)) return;
   clearNpcScriptMoves(obj);
   const len = Math.hypot(dx, dz) || 1;
@@ -1281,20 +1313,48 @@ function enqueueNpcWalk(obj, dx, dz, dist, speed = 110, wait = 0) {
     speed,
     wait: Math.max(0, wait),
     stuck: 0,
+    gait: opts.gait || "walk",
+    onDone: typeof opts.onDone === "function" ? opts.onDone : null,
   });
 }
 
-function finishNpcWalk(obj) {
-  if (!obj?.userData) return;
-  if (obj.userData.driving) return; // stay hidden in vehicle
+function finishNpcWalk(obj, sm = null) {
+  if (!obj?.userData) {
+    try {
+      sm?.onDone?.();
+    } catch {
+      /* */
+    }
+    return;
+  }
+  if (obj.userData.driving) {
+    try {
+      sm?.onDone?.();
+    } catch {
+      /* */
+    }
+    return; // stay hidden in vehicle
+  }
   if (obj.userData.skating) {
     syncSkateboardUnderRider(obj);
+    try {
+      sm?.onDone?.();
+    } catch {
+      /* */
+    }
     return;
   }
   const dir = obj.userData.dir || "south";
-  attachIdle(obj, obj.userData.path, dir, { allowSouthFallback: true }).catch(
-    () => {},
-  );
+  if (!sm?.onDone) {
+    attachIdle(obj, obj.userData.path, dir, { allowSouthFallback: true }).catch(
+      () => {},
+    );
+  }
+  try {
+    sm?.onDone?.();
+  } catch {
+    /* */
+  }
 }
 
 const NPC_WALK_RADIUS = 18;
@@ -1400,23 +1460,77 @@ function tickNpcScriptMove(dt) {
     if (moved < 0.04) sm.stuck = (sm.stuck || 0) + dt;
     else sm.stuck = 0;
     if (sm.left <= 0.5 || (sm.stuck || 0) > 1.4) {
-      finishNpcWalk(sm.obj);
+      finishNpcWalk(sm.obj, sm);
       npcScriptMoves.splice(i, 1);
     }
   }
 }
 
-/** Swap …/states/<x>/… → …/states/<state>/… (sit/stand). */
+/** Swap …/states/<x>/… → …/states/<state>/… */
 function characterStatePath(path, state) {
   const p = String(path || "");
   if (!/\/states\//i.test(p)) return null;
   return p.replace(/\/states\/[^/]+/i, `/states/${state}`);
 }
 
+async function listCharacterStateFolders(path) {
+  const m = String(path || "").match(/^(.*\/states)\/([^/]+)/i);
+  if (!m) return [];
+  try {
+    const res = await fetch(assetUrl(`${m[1]}/`));
+    if (!res.ok) return [];
+    const html = await res.text();
+    const names = [];
+    for (const hit of html.matchAll(/href="([^"?#]+)\/"/gi)) {
+      let name = decodeURIComponent(hit[1]);
+      name = name.replace(/\/$/, "").split("/").pop();
+      if (!name || name === ".." || name === ".") continue;
+      names.push(name);
+    }
+    return [...new Set(names)];
+  } catch {
+    return [];
+  }
+}
+
+/** Pick sit/stand folder — sit_chair, sit_onground, outfit_sit_*, etc. */
+function pickCharacterStateFolder(folders, current, wantSit) {
+  const list = folders || [];
+  if (!list.length) return wantSit ? "sit" : "stand";
+  const cur = String(current || "");
+  const isSitName = (n) => /sit/i.test(n);
+  const isStandName = (n) => /stand/i.test(n) && !/sit/i.test(n);
+  const ranked = list
+    .filter((n) => (wantSit ? isSitName(n) : isStandName(n)))
+    .map((n) => {
+      let score = 0;
+      const curKey = cur.replace(/_?(stand|sit).*$/i, "").toLowerCase();
+      const nKey = n.replace(/_?(stand|sit).*$/i, "").toLowerCase();
+      if (curKey && nKey && (nKey.startsWith(curKey) || curKey.startsWith(nKey))) {
+        score += 50;
+      }
+      if (wantSit && /^sit$/i.test(n)) score += 10;
+      if (!wantSit && /^stand$/i.test(n)) score += 10;
+      return { n, score };
+    })
+    .sort((a, b) => b.score - a.score);
+  if (ranked.length) return ranked[0].n;
+  return wantSit ? "sit" : "stand";
+}
+
+async function resolveCharacterStatePath(path, wantSit) {
+  const m = String(path || "").match(/^(.*\/states)\/([^/]+)/i);
+  if (!m) return null;
+  const folders = await listCharacterStateFolders(path);
+  const folder = pickCharacterStateFolder(folders, m[2], wantSit);
+  return `${m[1]}/${folder}`;
+}
+
 async function setCharacterSitPose(obj, sitting) {
   if (!obj?.userData || obj.userData.kind !== "character") return false;
-  const want = sitting ? "sit" : "stand";
-  const nextPath = characterStatePath(obj.userData.path, want);
+  const nextPath =
+    (await resolveCharacterStatePath(obj.userData.path, !!sitting)) ||
+    characterStatePath(obj.userData.path, sitting ? "sit" : "stand");
   if (!nextPath) {
     statusEl.textContent = "Bu karakterde sit/stand yok";
     return false;
@@ -1679,6 +1793,8 @@ function placeWorldLabel(entry, obj, scr) {
   entry.root.classList.remove("hidden");
   entry.root.style.left = `${scr.sx}px`;
   entry.root.style.top = `${scr.sy}px`;
+  const s = Number.isFinite(scr.scale) ? scr.scale : 1;
+  entry.root.style.transform = `translate(-50%, -100%) scale(${s})`;
   const base = worldLabelStackOrder(obj);
   const talking = entry.hideAt && performance.now() < entry.hideAt;
   entry.root.style.zIndex = String(talking ? base + 1 : base);
@@ -1714,7 +1830,7 @@ function syncWorldLabels() {
     if (!key) continue;
     live.add(key);
     const name = shortCharacterName(obj.userData?.label, obj.userData?.path);
-    const entry = ensureWorldLabel(key, name);
+    const entry = ensureWorldLabel(key, name, obj.userData?.path);
     entry.obj = obj;
     const scr = projectHeadScreen(obj);
     if (!scr) {
@@ -2165,11 +2281,14 @@ function actorBlocked(obj, px, pz, radius) {
   const r = radius || NPC_WALK_RADIUS;
   const fromX = obj.position.x;
   const fromZ = obj.position.z + FEET_NUDGE_Z;
+  // Formation run: don't jam on other cast — otherwise one stalls mid-row
+  const skipChar = !!obj?.userData?.formationMove;
   return (
     solidBlocked(px, pz, r) ||
     containmentBlocksFor(fromX, fromZ, px, pz, r) ||
     viewBoundsBlock(px, pz, r) ||
-    characterBlocked(px, pz, Math.max(r * 0.7, CHAR_SEP_MIN * 0.85), obj)
+    (!skipChar &&
+      characterBlocked(px, pz, Math.max(r * 0.7, CHAR_SEP_MIN * 0.85), obj))
   );
 }
 
@@ -2261,7 +2380,20 @@ function trySepMove(obj, dx, dz) {
 
 /** Gentle push-apart so sprites don't fully overlap. */
 function tickCharacterSeparation(dt) {
-  const actors = listSeparableCharacters().filter((o) => o !== dragging);
+  // Pin truth-dare row/seat slots so soft-sep can't shove someone forward
+  for (const o of listSeparableCharacters()) {
+    const slot = o.userData?.formationSlot;
+    if (!slot || o.userData?.formationMove) continue;
+    if (Math.hypot(o.position.x - slot.x, o.position.z - slot.z) > 0.5) {
+      o.position.x = slot.x;
+      o.position.z = slot.z;
+      syncDepth(o);
+      if (o === player?.mesh) player.syncRing?.(slot.x, slot.z);
+    }
+  }
+  const actors = listSeparableCharacters().filter(
+    (o) => o !== dragging && !o.userData?.formationSlot && !o.userData?.formationMove,
+  );
   for (let i = 0; i < actors.length; i++) {
     for (let j = i + 1; j < actors.length; j++) {
       const a = actors[i];
@@ -2304,11 +2436,18 @@ function tickCharacterSeparation(dt) {
 
 /** px/pz = feet world position (mesh.z + FEET_NUDGE_Z). */
 function playerCollides(px, pz, radius) {
+  const skipChar = !!player?.mesh?.userData?.formationMove;
   return (
     solidBlocked(px, pz, radius) ||
     containmentBlocks(px, pz, radius) ||
     viewBoundsBlock(px, pz, radius) ||
-    characterBlocked(px, pz, Math.max(radius * 0.7, CHAR_SEP_MIN * 0.85), player?.mesh)
+    (!skipChar &&
+      characterBlocked(
+        px,
+        pz,
+        Math.max(radius * 0.7, CHAR_SEP_MIN * 0.85),
+        player?.mesh,
+      ))
   );
 }
 
@@ -2854,6 +2993,52 @@ async function attachWalk(obj, path, dir, { allowSouthFallback = true } = {}) {
     frame: 0,
     accum: 0,
     fps: 10,
+    dir,
+  };
+  setMap(obj, frames[0]);
+  return true;
+}
+
+async function resolveRunSlug(path) {
+  const listed = await listAnimSlugs(path);
+  const hit =
+    listed.find((a) => /^run$/i.test(a)) ||
+    listed.find((a) => /run/i.test(a) && !/idle/i.test(a));
+  if (hit) return hit;
+  try {
+    const meta = await fetch(assetUrl(`${path}/meta.json`)).then((r) => r.json());
+    const anims = meta.animations || [];
+    return (
+      anims.find((a) => /^run$/i.test(a)) ||
+      anims.find((a) => /run/i.test(a)) ||
+      null
+    );
+  } catch {
+    return null;
+  }
+}
+
+/** Character run loop — used when casting into truth-dare circle. */
+async function attachRun(obj, path, dir, { allowSouthFallback = true } = {}) {
+  const slug = (await resolveRunSlug(path)) || "run";
+  let frames = await loadAnimFrames(path, slug, dir);
+  if (!frames.length && allowSouthFallback && dir !== "south") {
+    frames = await loadAnimFrames(path, slug, "south");
+  }
+  if (!frames.length) {
+    frames = await loadAnimFrames(path, slug, "unknown");
+  }
+  // Fallback to walk if this character has no run clip
+  if (!frames.length) {
+    return attachWalk(obj, path, dir, { allowSouthFallback });
+  }
+  obj.userData.dancing = false;
+  obj.userData.animName = "run";
+  obj.userData.anim = {
+    frames,
+    frame: 0,
+    accum: 0,
+    fps: 12,
     dir,
   };
   setMap(obj, frames[0]);
@@ -3498,7 +3683,7 @@ function serializeScene() {
   const objects = [];
   for (const obj of pickables) {
   const d = obj.userData;
-    if (!d?.editable || d.companion) continue;
+    if (!d?.editable || d.companion || d.crowdExtra) continue;
     const entry = {
       kind: d.kind || "object",
       id: d.catalogId || null,
@@ -3893,6 +4078,14 @@ async function loadScene(data, { persist = true } = {}) {
   sceneLoading = true;
   statusEl.textContent = "Sahne yükleniyor…";
   try {
+    // Full reload wipes live actors — drop truth-dare session state
+    truthDareActive = false;
+    truthDareSnapshot = new Map();
+    try {
+      clearTruthDareFormationLocks();
+    } catch {
+      /* helpers may not be ready on first boot */
+    }
     clearTraffic();
     if (data.revision != null) sceneRevision = Number(data.revision) || 0;
     if (data.sceneId) activeSceneId = String(data.sceneId);
@@ -4044,6 +4237,17 @@ sceneLoadBtn?.addEventListener("click", () => openSceneLoadModal());
 sceneClearBtn?.addEventListener("click", () => {
   clearSavedScene();
 });
+
+truthDareCrowdEl?.addEventListener("click", (e) => {
+  const btn = e.target?.closest?.("button[data-crowd]");
+  if (!btn) return;
+  const n = Number(btn.getAttribute("data-crowd"));
+  if (!TRUTH_DARE_CROWD_COUNTS.includes(n)) return;
+  setTruthDareCrowdCount(n).catch((err) => {
+    console.warn(err);
+    statusEl.textContent = err.message || String(err);
+  });
+});
 sceneModalCancel?.addEventListener("click", () => closeSceneModal());
 sceneModalApply?.addEventListener("click", () => {
   applySceneFromModal();
@@ -4174,9 +4378,477 @@ function clearSceneOverlayObjects(overlayId) {
   return doomed.length;
 }
 
+function truthDareActorPool() {
+  const pool = [];
+  if (player?.mesh) pool.push(player.mesh);
+  for (const o of pickables) {
+    if (o.userData?.kind !== "character") continue;
+    if (o.userData?.editable === false) continue;
+    if (o.userData?.companion) continue;
+    if (o === player?.mesh) continue;
+    pool.push(o);
+  }
+  return pool;
+}
+
+function syncTruthDareCrowdUi() {
+  const panel = truthDareCrowdEl;
+  if (!panel) return;
+  // Show on street too — pick count there, then switch to doğrulukmu
+  const show = isStreetLikeScene();
+  panel.classList.toggle("hidden", !show);
+  panel.querySelectorAll("button[data-crowd]").forEach((btn) => {
+    const n = Number(btn.getAttribute("data-crowd"));
+    btn.classList.toggle("active", show && n === truthDareCrowdCount);
+  });
+}
+
+/** Boy/girl stand catalog entries for crowd spawn (skip sit-only). */
+function crowdCharacterCatalog() {
+  const byFolder = new Map();
+  for (const it of catalogItemById.values()) {
+    if (it.kind !== "character") continue;
+    const p = it.path || "";
+    if (!/\/characters\/(boy_|girl_)/i.test(p)) continue;
+    if (!/\/states\//i.test(p)) continue;
+    if (/sit/i.test(p) && !/stand/i.test(p)) continue;
+    if (!/stand/i.test(p)) continue;
+    const folder = (p.match(/\/characters\/([^/]+)/i) || [])[1];
+    if (!folder) continue;
+    if (!byFolder.has(folder)) byFolder.set(folder, it);
+  }
+  return [...byFolder.values()];
+}
+
+function clearCrowdExtras() {
+  const doomed = pickables.filter((o) => o.userData?.crowdExtra);
+  for (const obj of doomed) {
+    clearNpcScriptMoves(obj);
+    detachPlacedObject(obj);
+    disposePlacedObject(obj);
+  }
+  return doomed.length;
+}
+
+async function spawnCrowdExtras(count) {
+  const catalog = crowdCharacterCatalog();
+  if (!catalog.length) {
+    statusEl.textContent = "Kalabalık için boy/girl karakter yok";
+    return 0;
+  }
+  const n = Math.max(0, Math.min(50, Number(count) || 0));
+  const home = streetGatherTarget || { x: 0, z: 180 };
+  const cols = 10;
+  const gapX = 42;
+  const gapZ = 46;
+  let placed = 0;
+  for (let i = 0; i < n; i++) {
+    const item = catalog[i % catalog.length];
+    const col = i % cols;
+    const row = Math.floor(i / cols);
+    const x = home.x + (col - (cols - 1) / 2) * gapX + (row % 2) * 12;
+    const z = home.z - 40 - row * gapZ;
+    const dirs = ["south", "south-east", "south-west", "east", "west"];
+    const dir = dirs[i % dirs.length];
+    try {
+      const obj = await spawnItem(item, x, z, {
+        dir,
+        exactPos: true,
+        recordUndo: false,
+        select: false,
+        playEntrance: false,
+      });
+      obj.userData.crowdExtra = true;
+      placed += 1;
+    } catch (err) {
+      console.warn("crowd spawn", err);
+    }
+  }
+  return placed;
+}
+
+async function setTruthDareCrowdCount(count) {
+  const n = Number(count) || 0;
+  if (!TRUTH_DARE_CROWD_COUNTS.includes(n)) return;
+  statusEl.textContent = `${n} karakter hazırlanıyor…`;
+  // Stop current formation mid-run
+  clearNpcScriptMoves();
+  if (player?.scriptMove) player.scriptMove = null;
+  clearTruthDareFormationLocks();
+  truthDareActive = false;
+  truthDareSnapshot = new Map();
+  clearCrowdExtras();
+  const placed = await spawnCrowdExtras(n);
+  truthDareCrowdCount = n;
+  syncTruthDareCrowdUi();
+  if (activeSceneId === "dogrulukmu_cesaretmi") {
+    await startTruthDareFormation();
+    statusEl.textContent = `Kalabalık: ${placed} karakter · dizilim`;
+  } else {
+    statusEl.textContent = `Kalabalık: ${placed} — doğrulukmu_cesaretmi’ye geç`;
+  }
+  persistScene();
+}
+
+/** v1: random 4 — swap later for fair pick. */
+function pickTruthDareFour(pool) {
+  const list = pool.slice();
+  for (let i = list.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [list[i], list[j]] = [list[j], list[i]];
+  }
+  return list.slice(0, Math.min(4, list.length));
+}
+
+function truthDareBenchObjects() {
+  const overlay = pickables.filter(
+    (o) =>
+      o.userData?.sceneOverlay === "dogrulukmu_cesaretmi" &&
+      /outdoorPark\/bench|outdoorpark\/bench/i.test(o.userData?.path || ""),
+  );
+  if (overlay.length >= 2) {
+    return overlay.sort((a, b) => a.position.x - b.position.x);
+  }
+  // Fallback: any two center benches near the truth-dare spots
+  return pickables
+    .filter((o) => /outdoorPark\/bench|outdoorpark\/bench/i.test(o.userData?.path || ""))
+    .filter((o) => Math.abs(o.position.z + 104) < 40)
+    .sort((a, b) => a.position.x - b.position.x)
+    .slice(0, 2);
+}
+
+function truthDareSeatSlots(benches) {
+  const seats = [];
+  // Side-by-side on each bench, slightly in front of the sprite feet
+  const seatOff = 18;
+  const sitInFront = 6;
+  for (const b of benches.slice(0, 2)) {
+    const dir = b.userData?.dir || "south";
+    const face = FACE_VEC[dir] || FACE_VEC.south;
+    // Perpendicular along bench (east-west if facing south)
+    const sx = -face[1];
+    const sz = face[0];
+    seats.push({
+      x: b.position.x + sx * seatOff,
+      z: b.position.z + sz * seatOff + face[1] * sitInFront,
+      dir,
+      sit: true,
+    });
+    seats.push({
+      x: b.position.x - sx * seatOff,
+      z: b.position.z - sz * seatOff + face[1] * sitInFront,
+      dir,
+      sit: true,
+    });
+  }
+  return seats;
+}
+
+/** Rows of 10 under/in front of the banks — front row first, then back rows. */
+function truthDareRowSlots(cx, cz, count) {
+  if (count <= 0) return [];
+  const slots = [];
+  const rowCount = Math.ceil(count / TRUTH_DARE_ROW_SIZE);
+  for (let row = 0; row < rowCount; row++) {
+    const start = row * TRUTH_DARE_ROW_SIZE;
+    const n = Math.min(TRUTH_DARE_ROW_SIZE, count - start);
+    const rowZ = cz + TRUTH_DARE_FRONT_Z + row * TRUTH_DARE_ROW_GAP_Z;
+    const width = (n - 1) * TRUTH_DARE_COL_GAP_X;
+    const x0 = cx - width / 2;
+    for (let i = 0; i < n; i++) {
+      slots.push({
+        x: x0 + i * TRUTH_DARE_COL_GAP_X,
+        z: rowZ,
+        dir: "north",
+        sit: false,
+        run: true,
+      });
+    }
+  }
+  return slots;
+}
+
+function snapshotTruthDareActors(actors) {
+  truthDareSnapshot = new Map();
+  for (const obj of actors) {
+    const isPlayer = !!(player?.mesh && obj === player.mesh);
+    truthDareSnapshot.set(obj, {
+      x: obj.position.x,
+      z: obj.position.z,
+      dir: isPlayer ? player.facing || "south" : obj.userData?.dir || "south",
+      sitting: isPlayer
+        ? !!player.sitting
+        : !!(
+            obj.userData?.sitting || /\/states\/sit/i.test(obj.userData?.path || "")
+          ),
+      isPlayer,
+    });
+  }
+}
+
+function scriptActorTo(
+  obj,
+  tx,
+  tz,
+  {
+    run = false,
+    onDone = null,
+    faceDir = null,
+    snap = true,
+    idleOnArrive = true,
+    wait = 0,
+  } = {},
+) {
+  const isPlayer = !!(player?.mesh && obj === player.mesh);
+  const dx = tx - obj.position.x;
+  const dz = tz - obj.position.z;
+  const dist = Math.hypot(dx, dz);
+  const walkDir = dirFromVector(dx, dz) || faceDir || "south";
+
+  obj.userData.formationMove = true;
+  obj.userData.formationSlot = null;
+
+  const snapToTarget = () => {
+    if (!snap) return;
+    if (isPlayer) {
+      player.mesh.position.set(tx, 0, tz);
+      player.syncRing?.(tx, tz);
+      if (player.syncDepth) player.syncDepth(player.mesh);
+    } else {
+      obj.position.set(tx, 0, tz);
+      syncDepth(obj);
+    }
+  };
+
+  const finishFace = () => {
+    snapToTarget();
+    obj.userData.formationMove = false;
+    obj.userData.formationSlot = { x: tx, z: tz };
+    if (faceDir) {
+      if (isPlayer) {
+        player.facing = faceDir;
+        player.applyFrame?.();
+      } else {
+        obj.userData.dir = faceDir;
+        applyFacing(obj, faceDir);
+      }
+    }
+    if (!isPlayer && idleOnArrive) {
+      attachIdle(obj, obj.userData.path, faceDir || walkDir, {
+        allowSouthFallback: true,
+      }).catch(() => {});
+    }
+    onDone?.();
+  };
+
+  if (dist <= 12) {
+    finishFace();
+    return;
+  }
+
+  if (isPlayer) {
+    if (occupiedVehicle) exitVehicle();
+    if (player.skating && occupiedSkateboard) exitSkateboard();
+    player.stopActions?.();
+    const startMain = () => {
+      player.startScriptMove(dx, dz, dist, run ? TRUTH_DARE_RUN_SPEED : TRUTH_DARE_WALK_SPEED, {
+        anim: run ? "run" : "walk",
+        onDone: finishFace,
+      });
+    };
+    if (wait > 0) setTimeout(startMain, wait * 1000);
+    else startMain();
+    return;
+  }
+
+  if (obj.userData?.driving) exitVehicle(obj);
+  if (obj.userData?.skating) exitSkateboard(obj);
+
+  clearNpcScriptMoves(obj);
+  obj.userData.dir = walkDir;
+  applyFacing(obj, walkDir);
+  const gaitAttach = run
+    ? attachRun(obj, obj.userData.path, walkDir, { allowSouthFallback: true })
+    : attachWalk(obj, obj.userData.path, walkDir, { allowSouthFallback: true });
+  gaitAttach.catch(() => {});
+  enqueueNpcWalk(
+    obj,
+    dx,
+    dz,
+    dist,
+    run ? TRUTH_DARE_RUN_SPEED : TRUTH_DARE_WALK_SPEED,
+    wait,
+    {
+      gait: run ? "run" : "walk",
+      onDone: finishFace,
+    },
+  );
+}
+
+async function seatActorAfterArrive(obj, slot) {
+  const isPlayer = !!(player?.mesh && obj === player.mesh);
+  if (obj.userData) {
+    obj.userData.formationMove = false;
+    obj.userData.formationSlot = { x: slot.x, z: slot.z };
+  }
+  if (isPlayer) {
+    player.facing = slot.dir || "south";
+    player.mesh.position.set(slot.x, 0, slot.z);
+    player.syncRing?.(slot.x, slot.z);
+    player.startSit?.();
+    return;
+  }
+  obj.position.set(slot.x, 0, slot.z);
+  obj.userData.dir = slot.dir || "south";
+  applyFacing(obj, obj.userData.dir);
+  syncDepth(obj);
+  await setCharacterSitPose(obj, true);
+}
+
+async function startTruthDareFormation() {
+  const pool = truthDareActorPool();
+  if (!pool.length) {
+    statusEl.textContent = "doğrulukmu_cesaretmi — oyuncu yok";
+    return false;
+  }
+  const benches = truthDareBenchObjects();
+  if (benches.length < 2) {
+    statusEl.textContent = "doğrulukmu_cesaretmi — 2 bank gerekli";
+    return false;
+  }
+
+  // End any prior round without restoring (fresh start)
+  truthDareActive = false;
+  truthDareSnapshot = new Map();
+  snapshotTruthDareActors(pool);
+
+  const four = pickTruthDareFour(pool);
+  const seatedSet = new Set(four);
+  const rest = pool.filter((o) => !seatedSet.has(o));
+  const seats = truthDareSeatSlots(benches);
+  const cx = (benches[0].position.x + benches[1].position.x) / 2;
+  const cz = (benches[0].position.z + benches[1].position.z) / 2;
+  const rows = truthDareRowSlots(cx, cz, rest.length);
+
+  if (pool.length < 4) {
+    statusEl.textContent = `doğrulukmu — ${pool.length} oyuncu (4 ideal), diziliyor…`;
+  } else {
+    statusEl.textContent =
+      "doğrulukmu_cesaretmi — 4 oturur, diğerleri bank altında 8’er sıra";
+  }
+
+  truthDareActive = true;
+
+  four.forEach((obj, i) => {
+    const slot = seats[i];
+    if (!slot) return;
+    // Run to the bank, then sit (no idle flash before sit pose)
+    scriptActorTo(obj, slot.x, slot.z, {
+      run: true,
+      faceDir: slot.dir,
+      snap: true,
+      idleOnArrive: false,
+      wait: i * 0.12,
+      onDone: () => {
+        seatActorAfterArrive(obj, slot).catch((err) => {
+          console.warn("truth-dare sit", err);
+        });
+      },
+    });
+  });
+
+  rest.forEach((obj, i) => {
+    const slot = rows[i];
+    if (!slot) return;
+    scriptActorTo(obj, slot.x, slot.z, {
+      run: true,
+      faceDir: slot.dir,
+      onDone: () => {
+        const isPlayer = !!(player?.mesh && obj === player.mesh);
+        if (isPlayer) {
+          player.facing = slot.dir;
+          player.applyFrame?.();
+        } else {
+          attachIdle(obj, obj.userData.path, slot.dir, {
+            allowSouthFallback: true,
+          }).catch(() => {});
+        }
+      },
+    });
+  });
+
+  return true;
+}
+
+function clearTruthDareFormationLocks() {
+  const actors = truthDareActorPool();
+  for (const o of actors) {
+    if (!o?.userData) continue;
+    o.userData.formationMove = false;
+    o.userData.formationSlot = null;
+  }
+}
+
+async function endTruthDareFormation() {
+  if (!truthDareActive && truthDareSnapshot.size === 0) return;
+  const entries = [...truthDareSnapshot.entries()];
+  truthDareActive = false;
+  clearTruthDareFormationLocks();
+
+  for (const [obj, snap] of entries) {
+    if (!obj?.parent && !(player?.mesh && obj === player.mesh)) continue;
+    const isPlayer = !!(player?.mesh && obj === player.mesh);
+
+    // Stand first if sitting
+    if (isPlayer) {
+      if (player.sitting) player.stopActions?.();
+    } else if (
+      obj.userData?.sitting ||
+      /\/states\/sit/i.test(obj.userData?.path || "")
+    ) {
+      await setCharacterSitPose(obj, false);
+    }
+
+    scriptActorTo(obj, snap.x, snap.z, {
+      run: true,
+      faceDir: snap.dir,
+      onDone: () => {
+        // Home again — release formation pin
+        if (obj.userData) {
+          obj.userData.formationMove = false;
+          obj.userData.formationSlot = null;
+        }
+        if (isPlayer) {
+          player.facing = snap.dir || "south";
+          if (snap.sitting) player.startSit?.();
+          else player.applyFrame?.();
+        } else {
+          obj.userData.dir = snap.dir || "south";
+          applyFacing(obj, obj.userData.dir);
+          if (snap.sitting) {
+            setCharacterSitPose(obj, true).catch(() => {});
+          } else {
+            attachIdle(obj, obj.userData.path, obj.userData.dir, {
+              allowSouthFallback: true,
+            }).catch(() => {});
+          }
+        }
+      },
+    });
+  }
+
+  truthDareSnapshot = new Map();
+  statusEl.textContent = "doğrulukmu bitti — eski konumlara dönülüyor";
+}
+
 /** Street ↔ dogrulukmu: only add/remove banks — keep Main, cast, balls in place. */
 async function softSwitchStreetVariant(sceneId) {
   const meta = sceneCatalog.find((s) => s.id === sceneId);
+
+  if (sceneId === "street" && (truthDareActive || truthDareSnapshot.size)) {
+    await endTruthDareFormation();
+  }
+
   clearSceneOverlayObjects("dogrulukmu_cesaretmi");
 
   if (sceneId === "dogrulukmu_cesaretmi") {
@@ -4199,6 +4871,15 @@ async function softSwitchStreetVariant(sceneId) {
       });
       obj.userData.sceneOverlay = "dogrulukmu_cesaretmi";
     }
+    activeSceneId = sceneId;
+    sceneRevision = Math.max((sceneRevision || 0) + 1, Number(meta?.revision) || 0);
+    highlightSceneSlot(sceneId);
+    syncStreetWalkUi();
+    syncTrafficForScene();
+    syncTruthDareCrowdUi();
+    await startTruthDareFormation();
+    persistScene();
+    return;
   }
 
   activeSceneId = sceneId;
@@ -4206,11 +4887,9 @@ async function softSwitchStreetVariant(sceneId) {
   highlightSceneSlot(sceneId);
   syncStreetWalkUi();
   syncTrafficForScene();
+  syncTruthDareCrowdUi();
   persistScene();
-  statusEl.textContent =
-    sceneId === "dogrulukmu_cesaretmi"
-      ? "doğrulukmu_cesaretmi — 2 bank eklendi (konumlar korundu)"
-      : "street — overlay kalktı (konumlar korundu)";
+  statusEl.textContent = "street — overlay kalktı (konumlar geri)";
 }
 
 async function loadNamedScene(sceneId) {
@@ -4241,6 +4920,10 @@ async function loadNamedScene(sceneId) {
   activeSceneId = sceneId;
   await loadScene(data, { persist: true });
   highlightSceneSlot(sceneId);
+  syncTruthDareCrowdUi();
+  if (sceneId === "dogrulukmu_cesaretmi") {
+    await startTruthDareFormation();
+  }
 }
 
 function disposeSelectionOutline() {
@@ -4479,6 +5162,7 @@ function syncStreetWalkUi() {
   if (on) on.checked = !!streetWalkEditOpen;
   if (isStreetLikeScene()) updateStreetWalkGizmo();
   else if (colGizmo?.userData?.streetWalk) disposeColGizmo();
+  syncTruthDareCrowdUi();
 }
 
 function polyHandleHitR() {
