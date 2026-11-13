@@ -1,0 +1,13 @@
+{
+  "id": "ground-grass-day",
+  "kind": "object",
+  "w": 64,
+  "h": 64,
+  "name": "ground",
+  "state": "\u00c7imen_Day",
+  "size": "64x64",
+  "path": "assets/props/ground/grass/64x64/day",
+  "tileable": true,
+  "tileSize": 64,
+  "pixellab_tiles_pro": "6befe256-f618-4da8-8948-32cb77a2cb82"
+}

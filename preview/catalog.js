@@ -10,6 +10,7 @@ export const DIRS = [
 ];
 
 export const OBJ_CAT_ORDER = [
+  "ground",
   "roads",
   "buildings",
   "vehicles",
@@ -18,6 +19,7 @@ export const OBJ_CAT_ORDER = [
   "objects",
 ];
 export const OBJ_CAT_LABEL = {
+  ground: "Zemin",
   roads: "Roads",
   buildings: "Buildings",
   vehicles: "Vehicles",
@@ -26,10 +28,11 @@ export const OBJ_CAT_LABEL = {
   objects: "Misc",
 };
 
-/** Tileable flat roads live under props/roadTiles (and legacy props/road). */
+/** Ground tiles + roads. */
 export function objectCat(entry) {
   const path = entry.path || "";
-  if (/\/roadTiles\//i.test(path) || /\/props\/road\//i.test(path)) return "roads";
+  if (/\/props\/ground\//i.test(path)) return "ground";
+  if (/\/props\/road\//i.test(path)) return "roads";
   const parts = path.split("/");
   return parts[1] || "objects";
 }
@@ -66,8 +69,8 @@ export async function loadCatalog() {
     .map((o) => {
       const cat = objectCat(o);
       const label =
-        cat === "roads"
-          ? o.state || o.name || "road"
+        cat === "roads" || cat === "ground"
+          ? o.state || o.name || cat
           : [o.name, o.state].filter(Boolean).join(" · ");
       return {
         kind: "object",
@@ -76,8 +79,8 @@ export async function loadCatalog() {
         label,
         path: o.path,
         size: o.size || (o.w && o.h ? `${o.w}x${o.h}` : undefined),
-        tileable: !!o.tileable || /\/roadTiles\//i.test(o.path || ""),
-        tileSize: o.tileSize || (/\/roadTiles\//i.test(o.path || "") ? 64 : undefined),
+        tileable: !!o.tileable,
+        tileSize: o.tileSize,
         thumbs: thumbUrls(o.path),
       };
     });

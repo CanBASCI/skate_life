@@ -43,6 +43,9 @@ const dragGhost = document.getElementById("drag-ghost");
 let player = null;
 let lastTs = performance.now();
 let selected = null;
+/** @type {THREE.Object3D | null} */
+let selectionOutline = null;
+const SELECT_OUTLINE_COLOR = 0x3ddc6a;
 let catalogItemById = new Map();
 let placing = null; // catalog item while dragging from palette
 /** @type {{ x:number, z:number } | null} */
@@ -316,7 +319,8 @@ function defaultScale(item) {
   // tuned vs 96px character; E-ride / parked board same scale
   if (isSkateboardPath(item.path)) return 0.7;
   // roads / tileable paths — user prefers large default
-  if (isRoadTileItem(item) || /\/props\/road\//i.test(item.path || "")) return 4;
+  if (/\/props\/ground\//i.test(item.path || "")) return 2;
+  if (isRoadTileItem(item) || /\/props\/road\//i.test(item.path || "")) return 3;
   if (/americanschoolbus|schoolBus/i.test(item.path || "")) return 1.7;
   if (/\/ambulance\//i.test(item.path || "")) return 1.7;
   if (/boat|ferry/i.test(item.path || "")) return 1.5;
@@ -335,11 +339,11 @@ function isAnimalPath(path) {
 function usesGroundPlane(item) {
   if (item.kind !== "object") return false;
   const p = item.path || "";
-  return /\/props\/road\//i.test(p) || /\/roadTiles\//i.test(p);
+  return /\/props\/road\//i.test(p) || /\/props\/ground\//i.test(p);
 }
 
 function isRoadTileItem(item) {
-  return !!(item?.tileable || /\/roadTiles\//i.test(item?.path || ""));
+  return !!item?.tileable;
 }
 
 /** Snap tileable roads so segments meet edge-to-edge. */
@@ -733,7 +737,7 @@ function isVaultablePath(path) {
   if (/\/buildings\//i.test(p) || /\/vehicles\//i.test(p) || /\/interiors\//i.test(p)) {
     return false;
   }
-  if (/\/props\/road|roadTiles|\/balls\/|smallAnimals/i.test(p)) return false;
+  if (/\/props\/road|\/props\/ground|\/balls\/|smallAnimals/i.test(p)) return false;
   if (/outdoorpark|outdoorPark|\/bench|\/table/i.test(p)) return true;
   return (
     /\/props\//i.test(p) &&
@@ -932,9 +936,13 @@ function footprintOf(obj) {
   }
   let hw;
   let hd;
+  let cx = obj.position.x;
+  let cz = obj.position.z;
   if (/\/buildings\//i.test(p)) {
-    hw = w * 0.32;
-    hd = w * 0.22;
+    // Sprite foot is at the south (bottom) of the art — centered AABB stuck out too far in front.
+    hw = w * 0.3;
+    hd = w * 0.15;
+    cz -= hd * 0.65; // shift north so less collision hangs under the facade
   } else if (/\/interiors\//i.test(p)) {
     hw = w * 0.42;
     hd = h * 0.36;
@@ -942,7 +950,7 @@ function footprintOf(obj) {
     hw = w * 0.28;
     hd = Math.max(w * 0.2, h * 0.18);
   }
-  return { kind: "aabb", x: obj.position.x, z: obj.position.z, hw, hd };
+  return { kind: "aabb", x: cx, z: cz, hw, hd };
 }
 
 function circleHitsAabb(px, pz, radius, box) {
@@ -1516,6 +1524,7 @@ async function spawnItem(item, x, z, opts = {}) {
       alphaTest: 0.05,
       depthWrite: false,
     });
+    if (/\/buildings\//i.test(item.path || "")) patchBuildingSeeThrough(mat);
     obj = new THREE.Sprite(mat);
     obj.center.set(0.5, 0);
     obj.scale.set(w * scale, h * scale, 1);
@@ -1541,8 +1550,73 @@ async function spawnItem(item, x, z, opts = {}) {
   return obj;
 }
 
+function disposeSelectionOutline() {
+  if (!selectionOutline) return;
+  selectionOutline.parent?.remove(selectionOutline);
+  selectionOutline.traverse((n) => {
+    n.geometry?.dispose?.();
+    if (Array.isArray(n.material)) n.material.forEach((m) => m.dispose?.());
+    else n.material?.dispose?.();
+  });
+  selectionOutline = null;
+}
+
+/** Green border around the selected sprite / ground tile (local unit quad). */
+function attachSelectionOutline(obj) {
+  disposeSelectionOutline();
+  if (!obj) return;
+
+  const isGround = obj.userData?.layer === "ground";
+  // Sprite center=(0.5,0) → bottom-anchored; ground PlaneGeometry → centered
+  const corners = isGround
+    ? [
+        [-0.5, -0.5],
+        [0.5, -0.5],
+        [0.5, 0.5],
+        [-0.5, 0.5],
+      ]
+    : [
+        [-0.5, 0],
+        [0.5, 0],
+        [0.5, 1],
+        [-0.5, 1],
+      ];
+  const z = isGround ? 0.02 : 0.01;
+  const positions = [];
+  for (let i = 0; i < 4; i++) {
+    const [x0, y0] = corners[i];
+    const [x1, y1] = corners[(i + 1) % 4];
+    positions.push(x0, y0, z, x1, y1, z);
+  }
+
+  // Corner ticks (~18% of each edge) so the box reads clearly on busy sprites
+  const tick = 0.18;
+  for (const [x, y] of corners) {
+    const sx = x < 0 ? 1 : -1;
+    const sy = y < (isGround ? 0 : 0.5) ? 1 : -1;
+    positions.push(x, y, z, x + sx * tick, y, z);
+    positions.push(x, y, z, x, y + sy * tick, z);
+  }
+
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+  const mat = new THREE.LineBasicMaterial({
+    color: SELECT_OUTLINE_COLOR,
+    depthTest: false,
+    depthWrite: false,
+    transparent: true,
+    opacity: 0.95,
+  });
+  selectionOutline = new THREE.LineSegments(geo, mat);
+  selectionOutline.renderOrder = 100000;
+  selectionOutline.frustumCulled = false;
+  selectionOutline.userData.skipPick = true;
+  obj.add(selectionOutline);
+}
+
 function selectObject(obj) {
   selected = obj;
+  attachSelectionOutline(obj);
   if (!obj) {
     inspector.classList.add("hidden");
     return;
@@ -2310,6 +2384,91 @@ function updateVehiclePrompt() {
   }
 }
 
+/** Soft circular see-through around the player on building sprites (not the whole building). */
+const BUILDING_CUT_RADIUS_PX = 118;
+const BUILDING_CUT_OPACITY = 0.1;
+const _cutScreen = new THREE.Vector3();
+
+function patchBuildingSeeThrough(mat) {
+  if (!mat || mat.userData.seeThroughPatched) return;
+  mat.userData.seeThroughPatched = true;
+  mat.transparent = true;
+  mat.onBeforeCompile = (shader) => {
+    shader.uniforms.uPlayerScreen = { value: new THREE.Vector2(-9999, -9999) };
+    shader.uniforms.uCutRadius = { value: BUILDING_CUT_RADIUS_PX };
+    shader.uniforms.uCutEnabled = { value: 0 };
+    shader.uniforms.uCutOpacity = { value: BUILDING_CUT_OPACITY };
+    mat.userData.seeThrough = shader.uniforms;
+
+    shader.fragmentShader = shader.fragmentShader
+      .replace(
+        "void main() {",
+        `uniform vec2 uPlayerScreen;
+uniform float uCutRadius;
+uniform float uCutEnabled;
+uniform float uCutOpacity;
+void main() {`,
+      )
+      .replace(
+        "#include <alphatest_fragment>",
+        `if (uCutEnabled > 0.5) {
+	float cutD = distance(gl_FragCoord.xy, uPlayerScreen);
+	float cutM = smoothstep(uCutRadius * 0.42, uCutRadius, cutD);
+	diffuseColor.a *= mix(uCutOpacity, 1.0, cutM);
+}
+#include <alphatest_fragment>`,
+      );
+  };
+  mat.customProgramCacheKey = () => "buildingSeeThrough";
+  mat.needsUpdate = true;
+}
+
+function tickBuildingOcclusion() {
+  if (!player?.mesh) return;
+  const focus = occupiedVehicle || player.mesh;
+  const px = focus.position.x;
+  const pz = focus.position.z;
+
+  // Circle centered near character torso in screen space
+  _cutScreen.copy(focus.position);
+  const focusH = focus.scale?.y || player.mesh.scale?.y || 96;
+  _cutScreen.y += focusH * 0.42;
+  _cutScreen.project(camera);
+  const bufW = renderer.domElement.width;
+  const bufH = renderer.domElement.height;
+  const sx = (_cutScreen.x * 0.5 + 0.5) * bufW;
+  const sy = (_cutScreen.y * 0.5 + 0.5) * bufH;
+  const radius = BUILDING_CUT_RADIUS_PX * renderer.getPixelRatio();
+
+  for (const obj of pickables) {
+    const d = obj.userData;
+    if (!d || d.layer === "ground") continue;
+    if (!/\/buildings\//i.test(d.path || "")) continue;
+    const mat = obj.material;
+    if (!mat) continue;
+    if (!mat.userData.seeThroughPatched) patchBuildingSeeThrough(mat);
+    const u = mat.userData.seeThrough;
+    if (!u) continue;
+
+    // Keep material fully opaque; only the circular hole opens when behind the facade
+    mat.opacity = 1;
+
+    const w = (d.w || 64) * (d.scale || 1);
+    const h = (d.h || 64) * (d.scale || 1);
+    const bx = obj.position.x;
+    const bz = obj.position.z;
+    const behind =
+      Math.abs(px - bx) < w * 0.45 && pz < bz - 4 && pz > bz - h * 0.6;
+
+    u.uCutEnabled.value = behind ? 1 : 0;
+    u.uPlayerScreen.value.set(sx, sy);
+    u.uCutRadius.value = radius;
+    u.uCutOpacity.value = BUILDING_CUT_OPACITY;
+    mat.alphaTest = behind ? 0.02 : 0.05;
+    d._occluding = behind;
+  }
+}
+
 function tick(now) {
   const dt = Math.min(0.05, (now - lastTs) / 1000);
   lastTs = now;
@@ -2320,6 +2479,7 @@ function tick(now) {
     if (player.skating) syncSkateboardUnderPlayer();
     tickCompanions(dt);
     tickBallPhysics(dt);
+    tickBuildingOcclusion();
     if (!dragging && !placing) {
       const p = occupiedVehicle ? occupiedVehicle.position : player.mesh.position;
       const t = 1 - Math.pow(0.0008, dt);
