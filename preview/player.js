@@ -116,10 +116,11 @@ export function skateRiderFacing(travelDir) {
 const SKATE_SPRITE_CENTER_Y = 0.04;
 
 /**
- * Ground ring sits at mesh xz (sprite bottom). Art has ~15–18px pad under feet,
- * so the body reads north of the ring — nudge ring toward screen-up (-Z).
+ * Sprite is bottom-anchored at mesh xz, but art has pad under the shoes and the
+ * iso camera makes the painted feet read north of that anchor. Collision + ring
+ * use mesh.z + FEET_NUDGE_Z so the green disk sits under the visible feet.
  */
-const RING_NUDGE_Z = -16;
+export const FEET_NUDGE_Z = -28;
 
 /**
  * PixelLab drew dance east/west (and diagonals) smaller in the 96 canvas
@@ -206,11 +207,17 @@ export class Player {
     if (this.ring) this.ring.visible = on;
   }
 
-  /** Keep ground ring under the visible character (not raw sprite anchor). */
+  /** World XZ of the collision feet (under painted shoes). */
+  feetXZ(x = this.mesh?.position.x, z = this.mesh?.position.z) {
+    return { x: x ?? 0, z: (z ?? 0) + FEET_NUDGE_Z };
+  }
+
+  /** Collision disk under visible feet. Pass mesh xz (nudge applied here). */
   syncRing(x = this.mesh?.position.x, z = this.mesh?.position.z) {
     if (!this.ring || x == null || z == null) return;
-    this.ring.position.x = x;
-    this.ring.position.z = z + RING_NUDGE_Z;
+    const feet = this.feetXZ(x, z);
+    this.ring.position.x = feet.x;
+    this.ring.position.z = feet.z;
     this.ring.position.y = 0.2;
   }
 
@@ -229,9 +236,14 @@ export class Player {
       this.mesh.position.x = nx;
       this.mesh.position.z = nz;
     } else {
-      // axis-separate so you slide along walls
-      if (dx && !this.collides(nx, z0, this.radius)) this.mesh.position.x = nx;
-      if (dz && !this.collides(this.mesh.position.x, nz, this.radius)) {
+      // Collide at feet; move mesh anchor (axis-separate for wall slide)
+      if (dx && !this.collides(nx, z0 + FEET_NUDGE_Z, this.radius)) {
+        this.mesh.position.x = nx;
+      }
+      if (
+        dz &&
+        !this.collides(this.mesh.position.x, nz + FEET_NUDGE_Z, this.radius)
+      ) {
         this.mesh.position.z = nz;
       }
     }
@@ -280,12 +292,33 @@ export class Player {
     };
     this.scene.add(this.mesh);
 
-    this.ring = new THREE.Mesh(
-      new THREE.RingGeometry(40, 46, 32),
-      new THREE.MeshBasicMaterial({ color: 0xc6e86b, transparent: true, opacity: 0.75 }),
-    );
+    // Exact collision footprint at feet (same center + radius as tryMove / playerCollides)
+    const r = this.radius;
+    this.ring = new THREE.Group();
     this.ring.rotation.x = -Math.PI / 2;
-    this.ring.position.set(this.spawn.x, 0.2, this.spawn.z + RING_NUDGE_Z);
+    this.ring.position.set(this.spawn.x, 0.2, this.spawn.z + FEET_NUDGE_Z);
+    const fill = new THREE.Mesh(
+      new THREE.CircleGeometry(r, 48),
+      new THREE.MeshBasicMaterial({
+        color: 0x3ddc6a,
+        transparent: true,
+        opacity: 0.28,
+        depthWrite: false,
+      }),
+    );
+    const rim = new THREE.Mesh(
+      new THREE.RingGeometry(Math.max(1, r - 1.5), r + 0.5, 48),
+      new THREE.MeshBasicMaterial({
+        color: 0x9ef0a8,
+        transparent: true,
+        opacity: 0.9,
+        depthWrite: false,
+      }),
+    );
+    fill.renderOrder = 99990;
+    rim.renderOrder = 99991;
+    this.ring.add(fill, rim);
+    this.ring.userData.skipPick = true;
     this.scene.add(this.ring);
 
     window.addEventListener("keydown", this._boundKeyDown);

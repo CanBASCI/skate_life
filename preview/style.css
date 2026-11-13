@@ -201,11 +201,19 @@ body {
   image-rendering: pixelated;
 }
 
-#viewport-toggle {
+#view-controls {
   position: absolute;
   top: 10px;
   right: 12px;
   z-index: 4;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+#viewport-toggle,
+#bg-toggle {
   display: flex;
   gap: 4px;
   padding: 3px;
@@ -214,7 +222,8 @@ body {
   border-radius: 999px;
 }
 
-#viewport-toggle button {
+#viewport-toggle button,
+#bg-toggle button {
   appearance: none;
   border: 0;
   border-radius: 999px;
@@ -228,13 +237,23 @@ body {
   cursor: pointer;
 }
 
-#viewport-toggle button:hover {
+#viewport-toggle button:hover,
+#bg-toggle button:hover {
   color: var(--ink);
 }
 
-#viewport-toggle button.active {
+#viewport-toggle button.active,
+#bg-toggle button.active {
   background: #1c2a22;
   color: var(--accent);
+}
+
+#stage.bg-black {
+  background: #000;
+}
+
+#stage.bg-black.vp-9x16 #app {
+  box-shadow: 0 0 0 9999px #000e;
 }
 
 #hud {
@@ -410,6 +429,52 @@ body {
   min-width: 36px;
   color: var(--ink);
   font-variant-numeric: tabular-nums;
+}
+
+.insp-col {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #0a100d99;
+}
+
+.insp-col.hidden {
+  display: none;
+}
+
+.insp-check {
+  font-weight: 650;
+  color: var(--accent) !important;
+}
+
+.insp-check input {
+  accent-color: var(--accent);
+}
+
+.insp-col-hint {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.insp-col-reset {
+  appearance: none;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 4px 8px;
+  background: #121a16;
+  color: var(--ink);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.insp-col-reset:hover {
+  border-color: var(--accent);
+  color: var(--accent);
 }
 
 .dirs {

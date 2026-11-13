@@ -62,9 +62,13 @@ export async function loadCatalog() {
 
   const objects = (index.objects || [])
     .filter((o) => {
-      const s = `${o.state || ""} ${o.path || ""}`;
-      // night variants unused for now — day only in the palette
-      return !/night/i.test(s);
+      // Hide day/night *variants* only (…_Night, state=night, …/night/).
+      // Keep interiors named night_club / nightclub — those are content, not variants.
+      const state = (o.state || "").trim();
+      const path = (o.path || "").replace(/\\/g, "/");
+      if (/_Night$/i.test(state) || /^night$/i.test(state)) return false;
+      if (/\/night(\/|$)/i.test(path)) return false;
+      return true;
     })
     .map((o) => {
       const cat = objectCat(o);

@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
-import { Player, dirFromVector } from "./player.js?v=vaultMove";
+import { Player, dirFromVector, FEET_NUDGE_Z } from "./player.js?v=feetNudge";
 import {
   loadCatalog,
   groupByCat,
@@ -33,12 +33,30 @@ const stageEl = document.getElementById("stage");
 const app = document.getElementById("app");
 const inspector = document.getElementById("inspector");
 const viewportToggle = document.getElementById("viewport-toggle");
+const bgToggle = document.getElementById("bg-toggle");
 const VP_STORAGE_KEY = "skate_life_viewport";
+const BG_STORAGE_KEY = "skate_life_bg";
 /** @type {"fill" | "9x16"} */
 let viewportMode =
   localStorage.getItem(VP_STORAGE_KEY) === "9x16" ? "9x16" : "fill";
+/** @type {"grass" | "black"} */
+let bgMode = localStorage.getItem(BG_STORAGE_KEY) === "black" ? "black" : "grass";
 /** Fixed playable frame center for 9:16 (camera does not follow the player). */
 const MAP_VIEW = { x: 0, z: 200 };
+const BG_PRESETS = {
+  grass: {
+    clear: 0x1a2220,
+    fogNear: 1100,
+    fogFar: 2600,
+    plaza: 0x3a4a3c,
+  },
+  black: {
+    clear: 0x000000,
+    fogNear: 1400,
+    fogFar: 3200,
+    plaza: 0x0a0a0a,
+  },
+};
 const inspLabel = document.getElementById("insp-label");
 const inspX = document.getElementById("insp-x");
 const inspZ = document.getElementById("insp-z");
@@ -46,7 +64,17 @@ const inspScale = document.getElementById("insp-scale");
 const inspScaleVal = document.getElementById("insp-scale-val");
 const inspDirs = document.getElementById("insp-dirs");
 const inspDelete = document.getElementById("insp-delete");
+const inspCol = document.getElementById("insp-col");
+const inspColOn = document.getElementById("insp-col-on");
+const inspColReset = document.getElementById("insp-col-reset");
 const dragGhost = document.getElementById("drag-ghost");
+/** @type {THREE.Group | null} */
+let colGizmo = null;
+const COL_GIZMO_COLOR = 0x5ec8ff;
+const COL_HANDLE_HIT_R = 28;
+const COL_MAX_PTS = 16;
+/** @type {{ obj: THREE.Object3D, index: number, from: {fx:number,fz:number}[] } | null} */
+let colCornerDrag = null;
 
 let player = null;
 let lastTs = performance.now();
@@ -98,11 +126,15 @@ const renderer = new THREE.WebGLRenderer({
 });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.outputColorSpace = THREE.SRGBColorSpace;
-renderer.setClearColor(0x1a2220, 1);
+renderer.setClearColor(BG_PRESETS[bgMode].clear, 1);
 app.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
-scene.fog = new THREE.Fog(0x1a2220, 1100, 2600);
+scene.fog = new THREE.Fog(
+  BG_PRESETS[bgMode].clear,
+  BG_PRESETS[bgMode].fogNear,
+  BG_PRESETS[bgMode].fogFar,
+);
 
 let aspect = 1;
 const frustum = 420;
@@ -164,20 +196,45 @@ function makeGroundTexture() {
   return tex;
 }
 
+const grassGroundTex = makeGroundTexture();
+const grassGroundMat = new THREE.MeshBasicMaterial({ map: grassGroundTex });
+const blackGroundMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
 const ground = new THREE.Mesh(
   new THREE.PlaneGeometry(3600, 3600),
-  new THREE.MeshBasicMaterial({ map: makeGroundTexture() }),
+  bgMode === "black" ? blackGroundMat : grassGroundMat,
 );
 ground.rotation.x = -Math.PI / 2;
 scene.add(ground);
 
 const plaza = new THREE.Mesh(
   new THREE.PlaneGeometry(520, 220),
-  new THREE.MeshBasicMaterial({ color: 0x3a4a3c }),
+  new THREE.MeshBasicMaterial({ color: BG_PRESETS[bgMode].plaza }),
 );
 plaza.rotation.x = -Math.PI / 2;
 plaza.position.set(0, 0.05, 200);
 scene.add(plaza);
+
+function applyBackgroundMode(mode) {
+  bgMode = mode === "black" ? "black" : "grass";
+  try {
+    localStorage.setItem(BG_STORAGE_KEY, bgMode);
+  } catch {
+    /* */
+  }
+  const preset = BG_PRESETS[bgMode];
+  renderer.setClearColor(preset.clear, 1);
+  if (scene.fog) {
+    scene.fog.color.setHex(preset.clear);
+    scene.fog.near = preset.fogNear;
+    scene.fog.far = preset.fogFar;
+  }
+  ground.material = bgMode === "black" ? blackGroundMat : grassGroundMat;
+  plaza.material.color.setHex(preset.plaza);
+  stageEl?.classList.toggle("bg-black", bgMode === "black");
+  bgToggle?.querySelectorAll("button[data-bg]").forEach((btn) => {
+    btn.classList.toggle("active", btn.getAttribute("data-bg") === bgMode);
+  });
+}
 
 const loader = new THREE.TextureLoader();
 const pickables = [];
@@ -273,6 +330,12 @@ viewportToggle?.addEventListener("click", (e) => {
   if (!btn) return;
   applyViewportMode(btn.getAttribute("data-vp"));
 });
+bgToggle?.addEventListener("click", (e) => {
+  const btn = e.target.closest("button[data-bg]");
+  if (!btn) return;
+  applyBackgroundMode(btn.getAttribute("data-bg"));
+});
+applyBackgroundMode(bgMode);
 applyViewportMode(viewportMode);
 
 function tightTrimTexture(tex, thr = 1) {
@@ -381,9 +444,51 @@ function opaqueHits(hits, alphaThr = 8) {
   return out;
 }
 
+/** Cutaway room visual footprint — actors here must draw above the room art. */
+function interiorCoverOrder(px, pz) {
+  let best = 0;
+  for (const room of pickables) {
+    const d = room.userData;
+    if (!d || !isInteriorPath(d.path)) continue;
+    const w = (d.w || 64) * (d.scale || 1);
+    const h = (d.h || 64) * (d.scale || 1);
+    const bx = room.position.x;
+    const bz = room.position.z;
+    // Wide zone: full sprite width + most of the cutaway height (incl. north of foot)
+    const hw = w * 0.55;
+    const zSouth = bz + h * 0.12;
+    const zNorth = bz - h * 0.85;
+    if (Math.abs(px - bx) > hw || pz > zSouth || pz < zNorth) continue;
+    const roomBias = /night_club_inside/i.test(d.path) ? -4500 : -3500;
+    const roomOrder = Math.round(bz * 10 + roomBias);
+    best = Math.max(best, roomOrder + 200);
+  }
+  return best;
+}
+
+/** Player, pets, placed characters, animals — never under night_club_inside. */
+function isForegroundActor(obj) {
+  const d = obj?.userData;
+  if (!d) return false;
+  if (d.controllable || d.companion) return true;
+  if (d.kind === "character") return true;
+  if (isAnimalPath(d.path)) return true;
+  return false;
+}
+
 function syncDepth(obj) {
-  const layerBias = obj.userData?.layer === "ground" ? -10000 : 0;
+  const p = obj.userData?.path || "";
+  let layerBias = 0;
+  if (obj.userData?.layer === "ground") layerBias = -10000;
+  // Cutaway rooms stay behind characters / pets / props in the scene
+  else if (/night_club_inside/i.test(p)) layerBias = -4500;
+  else if (isInteriorPath(p)) layerBias = -3500;
+
   let order = Math.round(obj.position.z * 10 + layerBias);
+  if (isForegroundActor(obj)) {
+    const cover = interiorCoverOrder(obj.position.x, obj.position.z);
+    if (cover) order = Math.max(order, cover);
+  }
   // vault/jump: draw player in front of props/cars (sprites ignore depthTest paint order)
   if (
     obj.userData?.controllable &&
@@ -407,6 +512,7 @@ function defaultScale(item) {
   if (/boat|ferry/i.test(item.path || "")) return 1.5;
   if (/outdoorPark\/bench|outdoorpark\/bench/i.test(item.path || "")) return 0.8;
   if (/outdoorPark\/table|outdoorpark\/table/i.test(item.path || "")) return 1;
+  if (/night_club_inside/i.test(item.path || "")) return 2.8;
   return 1;
 }
 
@@ -562,7 +668,7 @@ function exitSkateboard() {
   for (const [ox, oz] of tryOffsets) {
     const nx = board.position.x + ox;
     const nz = board.position.z + oz;
-    if (!solidBlocked(nx, nz, pr)) {
+    if (!playerFeetCollidesAtMesh(nx, nz, pr)) {
       player.mesh.position.x = nx;
       player.mesh.position.z = nz;
       player.syncRing(nx, nz);
@@ -724,7 +830,7 @@ function exitVehicle() {
       const z = veh.position.z + dz * clearance * mul;
       // still ignore veh.solid (it's false while driving) — test footprint manually
       if (circleHitsAabb(x, z, pr, box)) continue;
-      if (solidBlocked(x, z, pr)) continue;
+      if (playerFeetCollidesAtMesh(x, z, pr)) continue;
       spot = { x, z };
       break;
     }
@@ -791,11 +897,183 @@ function driveVehicle(dt) {
   syncDepth(veh);
 }
 
-/** Buildings / vehicles / props / interiors block; roads, animals, balls, skateboards don't. */
+function isInteriorPath(path) {
+  return /\/interiors\//i.test(path || "");
+}
+
+function hasEditableCollision(path) {
+  return /night_club_inside/i.test(path || "");
+}
+
+function defaultColData() {
+  return {
+    enabled: false,
+    // Default rectangle in sprite fractions (relative to object foot)
+    pts: [
+      { fx: -0.42, fz: -0.45 },
+      { fx: 0.42, fz: -0.45 },
+      { fx: 0.42, fz: 0.12 },
+      { fx: -0.42, fz: 0.12 },
+    ],
+  };
+}
+
+function ensureColData(obj) {
+  const d = obj?.userData;
+  if (!d) return defaultColData();
+  if (!d.col) d.col = defaultColData();
+  const col = d.col;
+  if (!Array.isArray(col.pts) || col.pts.length < 3) {
+    col.pts = defaultColData().pts.map((p) => ({ ...p }));
+  }
+  return col;
+}
+
+function insertColPtOnEdge(obj, edgeIndex, wx, wz) {
+  const col = ensureColData(obj);
+  if (col.pts.length >= COL_MAX_PTS) return -1;
+  const { w, h } = colSpriteSize(obj);
+  if (!w || !h) return -1;
+  const pt = {
+    fx: (wx - obj.position.x) / w,
+    fz: (wz - obj.position.z) / h,
+  };
+  col.pts.splice(edgeIndex + 1, 0, pt);
+  return edgeIndex + 1;
+}
+
+function removeColPt(obj, index) {
+  const col = ensureColData(obj);
+  if (col.pts.length <= 3) return false;
+  if (index < 0 || index >= col.pts.length) return false;
+  col.pts.splice(index, 1);
+  return true;
+}
+
+function syncColSolid(obj) {
+  if (!obj?.userData || !hasEditableCollision(obj.userData.path)) return;
+  ensureColData(obj);
+  obj.userData.solid = false;
+}
+
+function colSpriteSize(obj) {
+  const d = obj.userData || {};
+  return {
+    w: (d.w || 32) * (d.scale || 1),
+    h: (d.h || 32) * (d.scale || 1),
+  };
+}
+
+/** 4 world XZ corners from stored fraction points. */
+function getColWorldPts(obj) {
+  const col = ensureColData(obj);
+  const { w, h } = colSpriteSize(obj);
+  return col.pts.map((p) => [
+    obj.position.x + (Number(p.fx) || 0) * w,
+    obj.position.z + (Number(p.fz) || 0) * h,
+  ]);
+}
+
+function setColWorldPt(obj, index, wx, wz) {
+  const col = ensureColData(obj);
+  const { w, h } = colSpriteSize(obj);
+  if (!w || !h) return;
+  col.pts[index] = {
+    fx: (wx - obj.position.x) / w,
+    fz: (wz - obj.position.z) / h,
+  };
+}
+
+function resetColPts(obj) {
+  const col = ensureColData(obj);
+  col.pts = defaultColData().pts.map((p) => ({ ...p }));
+}
+
+function colFootprint(obj) {
+  if (!obj?.userData?.col || !hasEditableCollision(obj.userData.path)) return null;
+  return { kind: "poly", pts: getColWorldPts(obj) };
+}
+
+function pointInPoly(px, pz, pts) {
+  // ray cast
+  let inside = false;
+  for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+    const [xi, zi] = pts[i];
+    const [xj, zj] = pts[j];
+    const hit =
+      zi > pz !== zj > pz &&
+      px < ((xj - xi) * (pz - zi)) / (zj - zi + 1e-12) + xi;
+    if (hit) inside = !inside;
+  }
+  return inside;
+}
+
+function distToSegment(px, pz, ax, az, bx, bz) {
+  const abx = bx - ax;
+  const abz = bz - az;
+  const apx = px - ax;
+  const apz = pz - az;
+  const ab2 = abx * abx + abz * abz || 1e-12;
+  let t = (apx * abx + apz * abz) / ab2;
+  t = Math.max(0, Math.min(1, t));
+  const qx = ax + abx * t;
+  const qz = az + abz * t;
+  return Math.hypot(px - qx, pz - qz);
+}
+
+function distToPolyEdge(px, pz, pts) {
+  let best = Infinity;
+  for (let i = 0; i < pts.length; i++) {
+    const [ax, az] = pts[i];
+    const [bx, bz] = pts[(i + 1) % pts.length];
+    best = Math.min(best, distToSegment(px, pz, ax, az, bx, bz));
+  }
+  return best;
+}
+
+function pointInCol(px, pz, box, inset = 0) {
+  if (!box?.pts?.length) return false;
+  if (!pointInPoly(px, pz, box.pts)) return false;
+  if (inset <= 0) return true;
+  return distToPolyEdge(px, pz, box.pts) >= inset;
+}
+
+/**
+ * night_club_inside col.enabled = stay inside the polygon.
+ * Once the player is in, leaving is blocked; outside can still walk in.
+ */
+function containmentBlocks(px, pz, radius) {
+  if (!player?.mesh) return false;
+  // px/pz are feet coords (see tryMove); current feet = mesh + nudge
+  const cx = player.mesh.position.x;
+  const cz = player.mesh.position.z + FEET_NUDGE_Z;
+  const r = Math.max(0, radius || 0);
+  for (const obj of pickables) {
+    const col = obj.userData?.col;
+    if (!col?.enabled || !hasEditableCollision(obj.userData?.path)) continue;
+    const box = colFootprint(obj);
+    if (!box) continue;
+    if (!pointInCol(cx, cz, box, 0)) continue;
+    if (!pointInCol(px, pz, box, r)) return true;
+  }
+  return false;
+}
+
+/** px/pz = feet world position (mesh.z + FEET_NUDGE_Z). */
+function playerCollides(px, pz, radius) {
+  return solidBlocked(px, pz, radius) || containmentBlocks(px, pz, radius);
+}
+
+function playerFeetCollidesAtMesh(mx, mz, radius) {
+  return playerCollides(mx, mz + FEET_NUDGE_Z, radius);
+}
+
+/** Buildings / vehicles / props block; interiors are walk-in rooms; roads/animals/balls/boards don't. */
 function isSolidItem(item) {
   if (!item || item.kind === "character") return false;
   const p = item.path || "";
   if (usesGroundPlane(item) || /\/props\/road\//i.test(p)) return false;
+  if (isInteriorPath(p)) return false; // cutaway rooms — walk onto the floor
   if (isAnimalPath(p)) return false;
   if (isBallPath(p)) return false;
   if (isSkateboardPath(p)) return false; // walk/stand on board — never trap on dismount
@@ -815,7 +1093,7 @@ function isVaultableCarPath(path) {
 function isVaultablePath(path) {
   const p = path || "";
   if (isVaultableCarPath(p)) return true;
-  if (/\/buildings\//i.test(p) || /\/vehicles\//i.test(p) || /\/interiors\//i.test(p)) {
+  if (/\/buildings\//i.test(p) || /\/vehicles\//i.test(p) || isInteriorPath(p)) {
     return false;
   }
   if (/\/props\/road|\/props\/ground|\/balls\/|smallAnimals/i.test(p)) return false;
@@ -850,7 +1128,7 @@ function findVaultForPlayer() {
   const fx = face[0];
   const fz = face[1];
   const px = player.mesh.position.x;
-  const pz = player.mesh.position.z;
+  const pz = player.mesh.position.z + FEET_NUDGE_Z;
   const pr = player.radius || 22;
   let best = null;
   let bestScore = Infinity;
@@ -877,11 +1155,11 @@ function findVaultForPlayer() {
   const clear = Math.max(box.hw || 20, box.hd || 20) + pr + 18;
   const landX = box.x + fx * clear;
   const landZ = box.z + fz * clear;
-  if (solidBlockedExcept(landX, landZ, pr, best)) {
+  if (solidBlockedExcept(landX, landZ + FEET_NUDGE_Z, pr, best)) {
     // try a bit further
     const landX2 = box.x + fx * clear * 1.35;
     const landZ2 = box.z + fz * clear * 1.35;
-    if (solidBlockedExcept(landX2, landZ2, pr, best)) return null;
+    if (solidBlockedExcept(landX2, landZ2 + FEET_NUDGE_Z, pr, best)) return null;
     return { landX: landX2, landZ: landZ2, ignore: best };
   }
   return { landX, landZ, ignore: best };
@@ -1024,7 +1302,8 @@ function footprintOf(obj) {
     hw = w * 0.3;
     hd = w * 0.15;
     cz -= hd * 0.65; // shift north so less collision hangs under the facade
-  } else if (/\/interiors\//i.test(p)) {
+  } else if (isInteriorPath(p)) {
+    // unused for collision (interiors are non-solid); kept for selection/overlap helpers
     hw = w * 0.42;
     hd = h * 0.36;
   } else {
@@ -1081,7 +1360,7 @@ function wantsIdle(item) {
   return (
     item.kind === "character" ||
     isAnimalPath(item.path) ||
-    /\/interiors\//i.test(item.path || "")
+    isInteriorPath(item.path)
   );
 }
 
@@ -1574,6 +1853,10 @@ async function spawnItem(item, x, z, opts = {}) {
     baseTile,
     tileSize,
   };
+  if (hasEditableCollision(item.path)) {
+    userData.col = defaultColData();
+    userData.solid = false; // containment zone when col.enabled
+  }
   if (userData.vehicle) {
     // all 8 facings (DIRS) scanned up front — collision switches with dir
     userData.alphaBoundsByDir = buildAlphaBoundsByDir(rotTextures);
@@ -1699,10 +1982,157 @@ function attachSelectionOutline(obj) {
   obj.add(selectionOutline);
 }
 
+function disposeColGizmo() {
+  if (!colGizmo) return;
+  colGizmo.traverse((n) => {
+    n.geometry?.dispose?.();
+    if (Array.isArray(n.material)) n.material.forEach((m) => m.dispose?.());
+    else n.material?.dispose?.();
+  });
+  colGizmo.parent?.remove(colGizmo);
+  colGizmo = null;
+}
+
+/** Outline + vertex handles + edge midpoints (drag mid → add vertex). */
+function updateColGizmo(obj) {
+  disposeColGizmo();
+  if (!obj || !hasEditableCollision(obj.userData?.path)) return;
+  const col = ensureColData(obj);
+  const corners = getColWorldPts(obj);
+  const n = corners.length;
+  const y = 0.14;
+  const opacity = col.enabled ? 0.95 : 0.45;
+
+  colGizmo = new THREE.Group();
+  colGizmo.userData.skipPick = true;
+  colGizmo.userData.colGizmo = true;
+
+  const positions = [];
+  for (let i = 0; i < n; i++) {
+    const [x0, z0] = corners[i];
+    const [x1, z1] = corners[(i + 1) % n];
+    positions.push(x0, y, z0, x1, y, z1);
+  }
+  const lineGeo = new THREE.BufferGeometry();
+  lineGeo.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+  const line = new THREE.LineSegments(
+    lineGeo,
+    new THREE.LineBasicMaterial({
+      color: COL_GIZMO_COLOR,
+      depthTest: false,
+      transparent: true,
+      opacity,
+    }),
+  );
+  line.renderOrder = 100001;
+  line.frustumCulled = false;
+  line.userData.skipPick = true;
+  colGizmo.add(line);
+
+  const handleMat = new THREE.MeshBasicMaterial({
+    color: 0xffffff,
+    depthTest: false,
+    transparent: true,
+    opacity: col.enabled ? 1 : 0.55,
+  });
+  const handleGeo = new THREE.CircleGeometry(10, 20);
+  for (let i = 0; i < n; i++) {
+    const [cx, cz] = corners[i];
+    const handle = new THREE.Mesh(handleGeo, handleMat.clone());
+    handle.rotation.x = -Math.PI / 2;
+    handle.position.set(cx, y + 0.02, cz);
+    handle.renderOrder = 100002;
+    handle.frustumCulled = false;
+    handle.userData.skipPick = true;
+    handle.userData.colCorner = i;
+    const rim = new THREE.Mesh(
+      new THREE.RingGeometry(8, 11, 20),
+      new THREE.MeshBasicMaterial({
+        color: COL_GIZMO_COLOR,
+        depthTest: false,
+        transparent: true,
+        opacity: col.enabled ? 1 : 0.5,
+      }),
+    );
+    rim.rotation.x = -Math.PI / 2;
+    rim.position.set(cx, y + 0.03, cz);
+    rim.renderOrder = 100003;
+    rim.frustumCulled = false;
+    rim.userData.skipPick = true;
+    rim.userData.colCorner = i;
+    colGizmo.add(handle, rim);
+  }
+
+  // Edge midpoints — smaller dots; drag to insert a new vertex
+  if (n < COL_MAX_PTS) {
+    const midMat = new THREE.MeshBasicMaterial({
+      color: COL_GIZMO_COLOR,
+      depthTest: false,
+      transparent: true,
+      opacity: col.enabled ? 0.85 : 0.4,
+    });
+    const midGeo = new THREE.CircleGeometry(6, 16);
+    for (let i = 0; i < n; i++) {
+      const [ax, az] = corners[i];
+      const [bx, bz] = corners[(i + 1) % n];
+      const mx = (ax + bx) * 0.5;
+      const mz = (az + bz) * 0.5;
+      const mid = new THREE.Mesh(midGeo, midMat.clone());
+      mid.rotation.x = -Math.PI / 2;
+      mid.position.set(mx, y + 0.025, mz);
+      mid.renderOrder = 100004;
+      mid.frustumCulled = false;
+      mid.userData.skipPick = true;
+      mid.userData.colEdge = i;
+      colGizmo.add(mid);
+    }
+  }
+
+  scene.add(colGizmo);
+}
+
+function hitColCorner(wx, wz, obj) {
+  if (!obj || !hasEditableCollision(obj.userData?.path)) return -1;
+  const pts = getColWorldPts(obj);
+  let best = -1;
+  let bestD = COL_HANDLE_HIT_R;
+  for (let i = 0; i < pts.length; i++) {
+    const d = Math.hypot(wx - pts[i][0], wz - pts[i][1]);
+    if (d < bestD) {
+      bestD = d;
+      best = i;
+    }
+  }
+  return best;
+}
+
+/** Edge index whose midpoint is near (wx,wz), or -1. */
+function hitColEdgeMid(wx, wz, obj) {
+  if (!obj || !hasEditableCollision(obj.userData?.path)) return -1;
+  const pts = getColWorldPts(obj);
+  if (pts.length >= COL_MAX_PTS) return -1;
+  let best = -1;
+  let bestD = COL_HANDLE_HIT_R * 0.85;
+  for (let i = 0; i < pts.length; i++) {
+    const [ax, az] = pts[i];
+    const [bx, bz] = pts[(i + 1) % pts.length];
+    const mx = (ax + bx) * 0.5;
+    const mz = (az + bz) * 0.5;
+    const d = Math.hypot(wx - mx, wz - mz);
+    if (d < bestD) {
+      bestD = d;
+      best = i;
+    }
+  }
+  return best;
+}
+
 function selectObject(obj) {
   selected = obj;
+  colCornerDrag = null;
   attachSelectionOutline(obj);
   if (!obj) {
+    disposeColGizmo();
     inspector.classList.add("hidden");
     return;
   }
@@ -1806,6 +2236,16 @@ function refreshInspector() {
   inspScale.value = d.scale;
   inspScaleVal.textContent = Number(d.scale).toFixed(2);
 
+  const colEditable = hasEditableCollision(d.path);
+  if (inspCol) inspCol.classList.toggle("hidden", !colEditable);
+  if (colEditable) {
+    const col = ensureColData(selected);
+    if (inspColOn) inspColOn.checked = !!col.enabled;
+    updateColGizmo(selected);
+  } else {
+    disposeColGizmo();
+  }
+
   inspDirs.innerHTML = "";
   inspDirs.style.gridTemplateAreas = `
     "nw n ne"
@@ -1857,6 +2297,7 @@ inspX.addEventListener("change", () => {
   const toX = Number(inspX.value) || 0;
   selected.position.x = toX;
   syncDepth(selected);
+  if (hasEditableCollision(selected.userData?.path)) updateColGizmo(selected);
   pushMoveUndo(selected, fromX, selected.position.z, toX, selected.position.z);
 });
 inspZ.addEventListener("change", () => {
@@ -1865,6 +2306,7 @@ inspZ.addEventListener("change", () => {
   const toZ = Number(inspZ.value) || 0;
   selected.position.z = toZ;
   syncDepth(selected);
+  if (hasEditableCollision(selected.userData?.path)) updateColGizmo(selected);
   pushMoveUndo(selected, selected.position.x, fromZ, selected.position.x, toZ);
 });
 let scaleBefore = null;
@@ -1881,6 +2323,7 @@ inspScale.addEventListener("input", () => {
     selected.userData.tileSize = base * selected.userData.scale;
   }
   applyScale(selected);
+  if (hasEditableCollision(selected.userData?.path)) updateColGizmo(selected);
 });
 inspScale.addEventListener("change", () => {
   if (!selected || scaleBefore == null) return;
@@ -1901,6 +2344,25 @@ inspScale.addEventListener("change", () => {
       else selectObject(obj);
     },
   });
+});
+
+function applyColInspector() {
+  if (!selected || !hasEditableCollision(selected.userData?.path)) return;
+  const col = ensureColData(selected);
+  col.enabled = !!inspColOn?.checked;
+  syncColSolid(selected);
+  updateColGizmo(selected);
+  statusEl.textContent = col.enabled
+    ? "İç alan açık — köşe sürükle · kenar ortası ekler · Alt+tık siler"
+    : "İç alan kapalı";
+}
+
+inspColOn?.addEventListener("change", applyColInspector);
+inspColReset?.addEventListener("click", () => {
+  if (!selected || !hasEditableCollision(selected.userData?.path)) return;
+  resetColPts(selected);
+  updateColGizmo(selected);
+  statusEl.textContent = "Collision karesi sıfırlandı";
 });
 
 /** Shift+arrows: append a same-scale road tile on that edge of the selection. */
@@ -1956,6 +2418,63 @@ function onPointerDown(event) {
   if (occupiedVehicle) return;
   // If a palette ghost is active but user grabbed a placed object, move that — don't spawn
   setPointerFromEvent(event);
+
+  // Collision polygon handles for night_club_inside (before object pick)
+  const gp0 = groundHit();
+  if (gp0 && selected && hasEditableCollision(selected.userData?.path)) {
+    const corner = hitColCorner(gp0.x, gp0.z, selected);
+    if (corner >= 0) {
+      if (placing) endPaletteDrag();
+      // Alt+click corner → remove vertex (min 3)
+      if (event.altKey) {
+        const from = ensureColData(selected).pts.map((p) => ({ fx: p.fx, fz: p.fz }));
+        if (removeColPt(selected, corner)) {
+          pushUndo({
+            undo() {
+              ensureColData(selected).pts = from.map((p) => ({ ...p }));
+              if (selected) updateColGizmo(selected);
+            },
+          });
+          updateColGizmo(selected);
+          statusEl.textContent = "Köşe silindi (Alt+tık)";
+        } else {
+          statusEl.textContent = "En az 3 köşe gerekli";
+        }
+        return;
+      }
+      const col = ensureColData(selected);
+      colCornerDrag = {
+        obj: selected,
+        index: corner,
+        from: col.pts.map((p) => ({ fx: p.fx, fz: p.fz })),
+      };
+      controls.enabled = false;
+      renderer.domElement.setPointerCapture(event.pointerId);
+      statusEl.textContent = `Köşe ${corner + 1} — sürükle · Alt+tık sil`;
+      return;
+    }
+    const edge = hitColEdgeMid(gp0.x, gp0.z, selected);
+    if (edge >= 0) {
+      if (placing) endPaletteDrag();
+      const from = ensureColData(selected).pts.map((p) => ({ fx: p.fx, fz: p.fz }));
+      const newIndex = insertColPtOnEdge(selected, edge, gp0.x, gp0.z);
+      if (newIndex < 0) {
+        statusEl.textContent = `En fazla ${COL_MAX_PTS} köşe`;
+        return;
+      }
+      colCornerDrag = {
+        obj: selected,
+        index: newIndex,
+        from,
+      };
+      controls.enabled = false;
+      renderer.domElement.setPointerCapture(event.pointerId);
+      updateColGizmo(selected);
+      statusEl.textContent = "Kenara nokta eklendi — sürükle";
+      return;
+    }
+  }
+
   raycaster.setFromCamera(pointer, camera);
   raycaster.camera = camera;
   const hits = opaqueHits(raycaster.intersectObjects(pickables, false));
@@ -1988,6 +2507,14 @@ function onPointerMove(event) {
     dragGhost.style.top = `${event.clientY}px`;
     return;
   }
+  if (colCornerDrag) {
+    setPointerFromEvent(event);
+    const gp = groundHit();
+    if (!gp) return;
+    setColWorldPt(colCornerDrag.obj, colCornerDrag.index, gp.x, gp.z);
+    updateColGizmo(colCornerDrag.obj);
+    return;
+  }
   if (!dragging) return;
   setPointerFromEvent(event);
   const gp = groundHit();
@@ -2007,10 +2534,35 @@ function onPointerMove(event) {
   if (selected === dragging) {
     inspX.value = Math.round(dragging.position.x);
     inspZ.value = Math.round(dragging.position.z);
+    if (hasEditableCollision(dragging.userData?.path)) updateColGizmo(dragging);
   }
 }
 
 async function onPointerUp(event) {
+  if (colCornerDrag) {
+    const { obj, from } = colCornerDrag;
+    const to = ensureColData(obj).pts.map((p) => ({ fx: p.fx, fz: p.fz }));
+    const changed =
+      from.length !== to.length ||
+      from.some((p, i) => p.fx !== to[i]?.fx || p.fz !== to[i]?.fz);
+    if (changed) {
+      pushUndo({
+        undo() {
+          ensureColData(obj).pts = from.map((p) => ({ ...p }));
+          if (selected === obj) updateColGizmo(obj);
+        },
+      });
+    }
+    colCornerDrag = null;
+    if (viewportMode !== "9x16") controls.enabled = true;
+    statusEl.textContent = "İç alan güncellendi";
+    try {
+      renderer.domElement.releasePointerCapture(event.pointerId);
+    } catch {
+      /* */
+    }
+    return;
+  }
   // Finish move first — never spawn a copy when relocating a placed object
   if (dragging) {
     // Optional snap only if Shift held on release (default: free like buildings)
@@ -2293,7 +2845,7 @@ async function boot() {
     x: 0,
     z: 200,
     syncDepth,
-    collides: solidBlocked,
+    collides: playerCollides,
     findVault: findVaultForPlayer,
     radius: 22,
   }).load();
@@ -2359,7 +2911,7 @@ function resolveBallVsSolid(ball, phy) {
 function kickBallsFromPlayer() {
   if (!player?.mesh) return;
   const px = player.mesh.position.x;
-  const pz = player.mesh.position.z;
+  const pz = player.mesh.position.z + FEET_NUDGE_Z;
   const pr = player.radius || 22;
   for (const ball of pickables) {
     const phy = ball.userData?.physics;
@@ -2575,6 +3127,10 @@ function tick(now) {
   const dt = Math.min(0.05, (now - lastTs) / 1000);
   lastTs = now;
   tickAnims(dt);
+  // Keep characters / pets above night_club_inside after moves
+  for (const obj of pickables) {
+    if (isForegroundActor(obj)) syncDepth(obj);
+  }
   if (player) {
     if (occupiedVehicle) driveVehicle(dt);
     else player.update(dt);
