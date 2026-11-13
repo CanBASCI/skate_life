@@ -50,7 +50,7 @@ let nearbyVehicle = null;
 let companion = null;
 const texCache = new Map(); // url -> Promise<Texture>
 
-const VEHICLE_ENTER_RANGE = 120;
+const VEHICLE_ENTER_RANGE = 160;
 
 const FACE_VEC = {
   south: [0, 1],
@@ -314,20 +314,25 @@ function isVehicleObj(obj) {
   return !!(obj?.userData?.vehicle || isVehiclePath(obj?.userData?.path));
 }
 
-function nearestVehicle(px, pz, range = VEHICLE_ENTER_RANGE) {
+function vehicleReach(obj) {
+  const w = (obj?.userData?.w || 96) * (obj?.userData?.scale || 1);
+  return Math.max(VEHICLE_ENTER_RANGE, w * 0.75);
+}
+
+function nearestVehicle(px, pz) {
   let best = null;
   let bestD = Infinity;
   for (const obj of pickables) {
     if (!isVehicleObj(obj)) continue;
     if (obj === occupiedVehicle) continue;
-    // distance to car body edge (not sprite origin) so E shows from all sides
-    const d = distToFootprint(px, pz, footprintOf(obj));
+    // center distance — footprint edge was missing the rear of tall billboards
+    const d = Math.hypot(px - obj.position.x, pz - obj.position.z);
     if (d < bestD) {
       bestD = d;
       best = obj;
     }
   }
-  return best && bestD <= range ? best : null;
+  return best && bestD <= vehicleReach(best) ? best : null;
 }
 
 const _promptWorld = new THREE.Vector3();
@@ -346,20 +351,22 @@ function showPromptAbove(obj, text) {
   }
   promptTextEl.textContent = text;
   const h = (obj.userData?.h || 48) * (obj.userData?.scale || 1);
-  _promptWorld.set(obj.position.x, Math.max(48, h * 0.72), obj.position.z);
-  // pull toward camera so DOM label sits in front of the car billboard on screen
+  // feet at y=0; car art rises on the billboard — label near upper body
+  _promptWorld.set(obj.position.x, Math.max(40, h * 0.5), obj.position.z);
   _toCam.subVectors(camera.position, _promptWorld).normalize();
-  _promptWorld.addScaledVector(_toCam, 55);
+  _promptWorld.addScaledVector(_toCam, 70);
   _promptNdc.copy(_promptWorld).project(camera);
-  if (_promptNdc.z > 1 || _promptNdc.z < -1) {
+  // ortho NDC.z is flaky for hide checks — only cull if clearly off-screen
+  if (Math.abs(_promptNdc.x) > 1.25 || Math.abs(_promptNdc.y) > 1.25) {
     hidePrompt();
     return;
   }
   const canvasRect = renderer.domElement.getBoundingClientRect();
-  const stageRect = promptEl.offsetParent?.getBoundingClientRect?.() || canvasRect;
+  const stageEl = document.getElementById("stage");
+  const stageRect = stageEl?.getBoundingClientRect?.() || canvasRect;
   const sx = ((_promptNdc.x + 1) / 2) * canvasRect.width + (canvasRect.left - stageRect.left);
   const sy =
-    ((-_promptNdc.y + 1) / 2) * canvasRect.height + (canvasRect.top - stageRect.top) - 18;
+    ((-_promptNdc.y + 1) / 2) * canvasRect.height + (canvasRect.top - stageRect.top) - 28;
   promptEl.style.left = `${sx}px`;
   promptEl.style.top = `${sy}px`;
   promptEl.classList.remove("hidden");
@@ -503,18 +510,21 @@ function footprintOf(obj) {
   const h = (d.h || 32) * (d.scale || 1);
   const p = d.path || "";
   if (/\/vehicles\//i.test(p) || d.vehicle) {
-    // Oriented box: long axis follows facing so you can't walk into the rear/front
+    // PixelLab cars: sprite feet = front bumper; body/rear rises up the billboard
+    // (toward -facing on the ground). Old box was too short and nudged forward,
+    // so the rear was hollow.
     const face = FACE_VEC[d.dir] || FACE_VEC.south;
     const fx = face[0];
     const fz = face[1];
     const px = -fz;
     const pz = fx;
-    const halfLen = w * 0.4;
-    const halfWid = w * 0.24;
+    const halfLen = w * 0.55;
+    const halfWid = w * 0.4;
+    const rearShift = w * 0.28; // center toward rear / sprite-up
     return {
       kind: "obb",
-      x: obj.position.x + fx * w * 0.14,
-      z: obj.position.z + fz * w * 0.14,
+      x: obj.position.x - fx * rearShift,
+      z: obj.position.z - fz * rearShift,
       fx,
       fz,
       px,
