@@ -471,20 +471,58 @@ body {
   font-size: 10px;
 }
 
-#chat-bar {
+#chat-dock {
   position: absolute;
   left: 50%;
   bottom: 12px;
   transform: translateX(-50%);
   z-index: 5;
   display: flex;
-  gap: 8px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
   width: min(420px, calc(100% - 24px));
+  pointer-events: none;
+}
+
+#chat-cmds {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 4px;
+  padding: 0 2px;
+  pointer-events: auto;
+}
+
+#chat-cmds button {
+  appearance: none;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 3px 7px;
+  background: #0a100de8;
+  color: var(--muted);
+  font: inherit;
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  line-height: 1.2;
+}
+
+#chat-cmds button:hover {
+  color: var(--accent);
+  border-color: #3a5244;
+}
+
+#chat-bar {
+  display: flex;
+  gap: 8px;
   padding: 6px;
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: 12px;
   backdrop-filter: blur(8px);
+  pointer-events: auto;
 }
 
 #chat-input {

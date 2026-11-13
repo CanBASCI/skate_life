@@ -1624,6 +1624,16 @@ chatInput?.addEventListener("focus", () => {
   player?.keys?.clear?.();
 });
 
+document.getElementById("chat-cmds")?.addEventListener("click", (e) => {
+  const btn = e.target.closest("button[data-cmd]");
+  if (!btn || !chatInput) return;
+  const cmd = btn.getAttribute("data-cmd");
+  if (!cmd) return;
+  e.preventDefault();
+  chatInput.value = cmd;
+  sendChatMessage();
+});
+
 function enterVehicle(veh) {
   if (!player?.mesh || !veh) return;
   occupiedVehicle = veh;
