@@ -29,8 +29,16 @@ const promptEl = document.getElementById("prompt");
 const promptTextEl = document.getElementById("prompt-text");
 const staminaEl = document.getElementById("stamina");
 const staminaFillEl = document.getElementById("stamina-fill");
+const stageEl = document.getElementById("stage");
 const app = document.getElementById("app");
 const inspector = document.getElementById("inspector");
+const viewportToggle = document.getElementById("viewport-toggle");
+const VP_STORAGE_KEY = "skate_life_viewport";
+/** @type {"fill" | "9x16"} */
+let viewportMode =
+  localStorage.getItem(VP_STORAGE_KEY) === "9x16" ? "9x16" : "fill";
+/** Fixed playable frame center for 9:16 (camera does not follow the player). */
+const MAP_VIEW = { x: 0, z: 200 };
 const inspLabel = document.getElementById("insp-label");
 const inspX = document.getElementById("insp-x");
 const inspZ = document.getElementById("insp-z");
@@ -180,10 +188,78 @@ const hitPoint = new THREE.Vector3();
 let dragging = null;
 let dragOffset = new THREE.Vector3();
 
+function syncCameraRig(target = null) {
+  if (target) controls.target.set(target.x, 0, target.z);
+  camera.position.set(
+    controls.target.x + CAM_OFFSET.x,
+    controls.target.y + CAM_OFFSET.y,
+    controls.target.z + CAM_OFFSET.z,
+  );
+  camera.lookAt(controls.target);
+  controls.update();
+}
+
+function setCameraFollowEnabled(on) {
+  controls.enablePan = on;
+  controls.enableRotate = on;
+  controls.enableZoom = on;
+  controls.enableDamping = on;
+}
+
+function applyViewportMode(mode) {
+  viewportMode = mode === "9x16" ? "9x16" : "fill";
+  try {
+    localStorage.setItem(VP_STORAGE_KEY, viewportMode);
+  } catch {
+    /* */
+  }
+  stageEl?.classList.toggle("vp-9x16", viewportMode === "9x16");
+  viewportToggle?.querySelectorAll("button[data-vp]").forEach((btn) => {
+    btn.classList.toggle("active", btn.getAttribute("data-vp") === viewportMode);
+  });
+  if (viewportMode === "9x16") {
+    // Whole map framed once; player walks inside the fixed 9:16 view (incl. corners).
+    setCameraFollowEnabled(false);
+    syncCameraRig(MAP_VIEW);
+  } else {
+    setCameraFollowEnabled(true);
+    const p = occupiedVehicle?.position || player?.mesh?.position;
+    if (p) syncCameraRig({ x: p.x, z: p.z });
+  }
+  resize();
+}
+
 function resize() {
-  const w = app.clientWidth || window.innerWidth;
-  const h = app.clientHeight || window.innerHeight;
-  aspect = w / h;
+  const sw = stageEl?.clientWidth || window.innerWidth;
+  const sh = stageEl?.clientHeight || window.innerHeight;
+  let w;
+  let h;
+  if (viewportMode === "9x16") {
+    const target = 9 / 16;
+    if (sw / Math.max(sh, 1) > target) {
+      h = sh;
+      w = Math.round(h * target);
+    } else {
+      w = sw;
+      h = Math.round(w / target);
+    }
+    app.style.width = `${w}px`;
+    app.style.height = `${h}px`;
+    app.style.left = `${Math.round((sw - w) / 2)}px`;
+    app.style.top = `${Math.round((sh - h) / 2)}px`;
+    app.style.right = "auto";
+    app.style.bottom = "auto";
+  } else {
+    app.style.width = "";
+    app.style.height = "";
+    app.style.left = "";
+    app.style.top = "";
+    app.style.right = "";
+    app.style.bottom = "";
+    w = app.clientWidth || sw;
+    h = app.clientHeight || sh;
+  }
+  aspect = w / Math.max(h, 1);
   camera.left = -frustum * aspect;
   camera.right = frustum * aspect;
   camera.top = frustum;
@@ -192,7 +268,12 @@ function resize() {
   renderer.setSize(w, h, false);
 }
 window.addEventListener("resize", resize);
-resize();
+viewportToggle?.addEventListener("click", (e) => {
+  const btn = e.target.closest("button[data-vp]");
+  if (!btn) return;
+  applyViewportMode(btn.getAttribute("data-vp"));
+});
+applyViewportMode(viewportMode);
 
 function tightTrimTexture(tex, thr = 1) {
   const img = tex.image;
@@ -1080,12 +1161,14 @@ async function loadAnimFrames(path, slug, dir) {
   return frames;
 }
 
-async function attachIdle(obj, path, dir) {
+async function attachIdle(obj, path, dir, { allowSouthFallback = true } = {}) {
   const slug = obj.userData.idleSlug || (await resolveIdleSlug(path));
   if (!slug) return false;
   obj.userData.idleSlug = slug;
   let frames = await loadAnimFrames(path, slug, dir);
-  if (!frames.length && dir !== "south") {
+  // Don't silently keep playing south idle for other facings when that dir has no clip —
+  // caller can show the static rotation instead.
+  if (!frames.length && allowSouthFallback && dir !== "south") {
     frames = await loadAnimFrames(path, slug, "south");
   }
   if (!frames.length) {
@@ -1402,15 +1485,17 @@ async function setDirection(obj, dir, { recordUndo = true } = {}) {
     });
   }
   d.dir = dir;
-  // Characters / pets with idle clips keep anim path
-  if ((d.idleSlug || d.anim) && !d.vehicle && !d.rotTextures?.[dir]) {
-    const ok = await attachIdle(obj, d.path, dir);
+  // Characters / pets: always reload idle for this facing.
+  // (Previously skipped when rotTextures[dir] existed → tickAnims kept south idle forever.)
+  if ((d.idleSlug || d.anim || d.kind === "character") && !d.vehicle && !d.ball) {
+    const ok = await attachIdle(obj, d.path, dir, { allowSouthFallback: false });
     if (ok) {
       refreshInspector();
       return;
     }
   }
   if (d.rotTextures?.[dir]) {
+    d.anim = null; // stop south idle from overwriting the facing sprite
     setMap(obj, d.rotTextures[dir]);
     refreshInspector();
     return;
@@ -2000,6 +2085,18 @@ window.addEventListener("keydown", (e) => {
     return;
   }
 
+  // Esc: clear selection / cancel palette placement
+  if (e.key === "Escape") {
+    e.preventDefault();
+    if (placing) endPaletteDrag();
+    if (dragging) {
+      dragging = null;
+      dragFrom = null;
+    }
+    if (selected) selectObject(null);
+    return;
+  }
+
   // E: skateboard / vehicle enter-exit (priority over rotate)
   if ((e.key === "e" || e.key === "E") && !e.repeat) {
     if (player?.skating && occupiedSkateboard) {
@@ -2201,8 +2298,13 @@ async function boot() {
     radius: 22,
   }).load();
   // player not in pickables editor list
-  controls.target.set(player.mesh.position.x, 0, player.mesh.position.z);
-  placeCamera(controls.target);
+  if (viewportMode === "9x16") {
+    setCameraFollowEnabled(false);
+    syncCameraRig(MAP_VIEW);
+  } else {
+    controls.target.set(player.mesh.position.x, 0, player.mesh.position.z);
+    placeCamera(controls.target);
+  }
   statusEl.textContent = "Hazır";
 }
 
@@ -2481,16 +2583,21 @@ function tick(now) {
     tickBallPhysics(dt);
     tickBuildingOcclusion();
     if (!dragging && !placing) {
-      const p = occupiedVehicle ? occupiedVehicle.position : player.mesh.position;
-      const t = 1 - Math.pow(0.0008, dt);
-      controls.target.x += (p.x - controls.target.x) * t;
-      controls.target.z += (p.z - controls.target.z) * t;
-      camera.position.x = controls.target.x + CAM_OFFSET.x;
-      camera.position.y = controls.target.y + CAM_OFFSET.y;
-      camera.position.z = controls.target.z + CAM_OFFSET.z;
+      if (viewportMode === "9x16") {
+        // Keep the map frame fixed — do not center on the character
+        syncCameraRig(MAP_VIEW);
+      } else {
+        const p = occupiedVehicle ? occupiedVehicle.position : player.mesh.position;
+        const t = 1 - Math.pow(0.0008, dt);
+        controls.target.x += (p.x - controls.target.x) * t;
+        controls.target.z += (p.z - controls.target.z) * t;
+        camera.position.x = controls.target.x + CAM_OFFSET.x;
+        camera.position.y = controls.target.y + CAM_OFFSET.y;
+        camera.position.z = controls.target.z + CAM_OFFSET.z;
+      }
     }
   }
-  controls.update();
+  if (viewportMode !== "9x16") controls.update();
   updateVehiclePrompt();
   updateStaminaBar();
   renderer.render(scene, camera);

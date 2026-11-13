@@ -183,6 +183,15 @@ body {
   position: absolute;
   inset: 0;
   z-index: 0;
+  overflow: hidden;
+  box-shadow: none;
+}
+
+#stage.vp-9x16 #app {
+  inset: auto;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: 0 0 0 9999px #0a100de6;
 }
 
 #app canvas {
@@ -190,6 +199,42 @@ body {
   width: 100%;
   height: 100%;
   image-rendering: pixelated;
+}
+
+#viewport-toggle {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  z-index: 4;
+  display: flex;
+  gap: 4px;
+  padding: 3px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+}
+
+#viewport-toggle button {
+  appearance: none;
+  border: 0;
+  border-radius: 999px;
+  padding: 5px 10px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+}
+
+#viewport-toggle button:hover {
+  color: var(--ink);
+}
+
+#viewport-toggle button.active {
+  background: #1c2a22;
+  color: var(--accent);
 }
 
 #hud {

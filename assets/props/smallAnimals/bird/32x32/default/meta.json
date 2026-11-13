@@ -3,5 +3,9 @@
   "name": "smallAnimals",
   "state": "bird",
   "size": "32x32",
-  "path": "assets/props/smallanimals/bird/32x32/default"
+  "path": "assets/props/smallAnimals/bird/32x32/default",
+  "animations": [
+    "bird_standing_idle",
+    "bird_walking"
+  ]
 }

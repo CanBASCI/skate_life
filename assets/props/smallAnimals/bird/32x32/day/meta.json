@@ -19,5 +19,10 @@
     1,
     32,
     31
+  ],
+  "size": "32x32",
+  "animations": [
+    "bird_standing_idle",
+    "bird_walking"
   ]
 }

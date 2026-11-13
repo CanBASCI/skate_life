@@ -174,19 +174,14 @@ def parse_character(text: str):
         mm = re.search(rf"(?m)^\s*{re.escape(d)}:\s*(https://\S+)", rot_section)
         if mm:
             rotations[d] = mm.group(1).strip().rstrip(")")
-    # animations: headers like "  idle — 8 dir ..."
+    # animations: legacy "  idle — 8 dir ..." OR new "  idle [group: uuid]"
     anims = {}
     anim_section = ""
     if "\nanimations" in text:
         anim_section = text.split("\nanimations", 1)[1]
         anim_section = re.split(r"\n(?:download|available_animations|actions):", anim_section, 1)[0]
-    for am in re.finditer(
-        r"(?m)^  ([A-Za-z0-9_\- ]+?) —[^\n]*\n(.*?)(?=^  [A-Za-z0-9_\- ]+? —|\Z)",
-        anim_section,
-        re.S,
-    ):
-        aname = am.group(1).strip()
-        block = am.group(2)
+
+    def _frames_from_block(block: str) -> dict:
         frames = {}
         for d in [*DIRS, "unknown"]:
             um = re.search(
@@ -199,8 +194,35 @@ def parse_character(text: str):
                     "i0": int(um.group(2)),
                     "i1": int(um.group(3)),
                 }
-        if frames:
-            anims[aname] = frames
+        return frames
+
+    # New PixelLab object format: "  idle [group: …]" + optional description
+    for am in re.finditer(
+        r"(?m)^  ([A-Za-z0-9_\-]+) \[group:[^\]]+\]\n(.*?)(?=^  [A-Za-z0-9_\-]+ \[group:|\Z)",
+        anim_section,
+        re.S,
+    ):
+        aname = am.group(1).strip()
+        block = am.group(2)
+        frames = _frames_from_block(block)
+        if not frames:
+            continue
+        desc = re.search(r"(?m)^    description:\s*(.+)$", block)
+        # Zip folders use description slug when present (e.g. cute_cat_idle), else group name
+        key = anim_slug(desc.group(1)) if desc else anim_slug(aname)
+        anims[key] = frames
+
+    # Legacy character format
+    if not anims:
+        for am in re.finditer(
+            r"(?m)^  ([A-Za-z0-9_\- ]+?) —[^\n]*\n(.*?)(?=^  [A-Za-z0-9_\- ]+? —|\Z)",
+            anim_section,
+            re.S,
+        ):
+            aname = am.group(1).strip()
+            frames = _frames_from_block(am.group(2))
+            if frames:
+                anims[aname] = frames
     return meta, rotations, anims
 
 
@@ -374,13 +396,15 @@ def object_out_path(row: dict) -> Path | None:
         return ROOT / "assets" / "buildings" / slug(name) / size / dn
 
     if name in {"lights", "smallAnimals", "outdoorPark", "road", "balls"}:
+        # Keep folder casing for smallAnimals (macOS-safe + matches existing tree)
+        prop_folder = "smallAnimals" if name == "smallAnimals" else slug(name)
         # state like trafficLight_Day / dog_3 / bench_Night / bird
         st = state or "default"
         m = re.match(r"^(.*?)_(Day|Night)$", st, re.I)
         if m:
             item, dn = m.group(1), m.group(2).lower()
-            return ROOT / "assets" / "props" / slug(name) / slug(item) / size / dn
-        return ROOT / "assets" / "props" / slug(name) / slug(st) / size / "default"
+            return ROOT / "assets" / "props" / prop_folder / slug(item) / size / dn
+        return ROOT / "assets" / "props" / prop_folder / slug(st) / size / "default"
 
     if name in {"skateboard"}:
         return ROOT / "assets" / "objects" / "skateboard" / size / slug(state or "default")
@@ -496,12 +520,21 @@ def sync_object(mcp: PixelLabMCP, row: dict, force: bool = False) -> str:
                 )
     written += fetch_jobs(anim_jobs)
 
+    # Discover animation folder names from extracted zip / disk
+    anim_names = sorted(
+        {
+            p.name
+            for p in (out / "animations").glob("*")
+            if p.is_dir()
+        }
+    ) if (out / "animations").exists() else sorted({anim_slug(a) for a in anims})
     meta = {
         "id": row["id"],
         "name": row["name"],
         "state": row.get("state"),
         "size": row["size"],
         "path": str(out.relative_to(ROOT)),
+        "animations": anim_names,
     }
     meta_path.write_text(json.dumps(meta, indent=2) + "\n")
     return f"ok+{written}"

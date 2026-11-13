@@ -3,5 +3,9 @@
   "name": "smallAnimals",
   "state": "cat",
   "size": "32x32",
-  "path": "assets/props/smallanimals/cat/32x32/default"
+  "path": "assets/props/smallAnimals/cat/32x32/default",
+  "animations": [
+    "cute_cat_idle",
+    "walk"
+  ]
 }

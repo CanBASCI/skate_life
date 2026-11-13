@@ -3,5 +3,10 @@
   "name": "smallAnimals",
   "state": "dog_2",
   "size": "32x32",
-  "path": "assets/props/smallanimals/dog_2/32x32/default"
+  "path": "assets/props/smallAnimals/dog_2/32x32/default",
+  "animations": [
+    "dog_standing_idle",
+    "walk",
+    "walking"
+  ]
 }

@@ -1259,103 +1259,6 @@
       "path": "assets/objects/skateboard/68x68/base"
     },
     {
-      "id": "abc05c2b-a10a-470f-9737-c55ad4abdb5e",
-      "name": "smallAnimals",
-      "state": "bird_2",
-      "size": "32x32",
-      "path": "assets/props/smallanimals/bird_2/32x32/default"
-    },
-    {
-      "id": "db23110f-481a-4f79-9a7c-98a6b99ddb5e",
-      "kind": "object",
-      "w": 32,
-      "h": 32,
-      "state": "bird_Day",
-      "name": "smallAnimals",
-      "path": "assets/props/smallAnimals/bird/32x32/day",
-      "canvasBeforeTrim": [
-        32,
-        32
-      ],
-      "canvasTrimmed": [
-        31,
-        30
-      ],
-      "trimBox": [
-        1,
-        1,
-        32,
-        31
-      ]
-    },
-    {
-      "id": "092ad00e-5a43-4e1c-9137-a539f68bfafd",
-      "name": "smallAnimals",
-      "state": "cat_2",
-      "size": "32x32",
-      "path": "assets/props/smallanimals/cat_2/32x32/default"
-    },
-    {
-      "id": "cd14dafa-9503-4a04-8d08-3dae5b794566",
-      "kind": "object",
-      "w": 32,
-      "h": 32,
-      "state": "cat_Day",
-      "name": "smallAnimals",
-      "path": "assets/props/smallAnimals/cat/32x32/day",
-      "canvasBeforeTrim": [
-        32,
-        32
-      ],
-      "canvasTrimmed": [
-        31,
-        30
-      ],
-      "trimBox": [
-        1,
-        1,
-        32,
-        31
-      ]
-    },
-    {
-      "id": "61e1b125-a232-426f-a44e-813b6637b383",
-      "name": "smallAnimals",
-      "state": "dog_2",
-      "size": "32x32",
-      "path": "assets/props/smallanimals/dog_2/32x32/default"
-    },
-    {
-      "id": "9729f0de-2b0b-413a-b3f6-d46ab6f543e9",
-      "name": "smallAnimals",
-      "state": "dog_3",
-      "size": "32x32",
-      "path": "assets/props/smallanimals/dog_3/32x32/default"
-    },
-    {
-      "id": "86dc40d3-5d28-4c56-812a-e9bb26e8a159",
-      "kind": "object",
-      "w": 32,
-      "h": 32,
-      "state": "dog_Day",
-      "name": "smallAnimals",
-      "path": "assets/props/smallAnimals/dog/32x32/day",
-      "canvasBeforeTrim": [
-        32,
-        32
-      ],
-      "canvasTrimmed": [
-        30,
-        30
-      ],
-      "trimBox": [
-        1,
-        1,
-        31,
-        31
-      ]
-    },
-    {
       "id": "f8481f4a-0a7a-4fb6-aae6-300dcda9c4a4",
       "kind": "object",
       "w": 256,
@@ -1760,6 +1663,119 @@
       "tileable": true,
       "tileSize": 64,
       "pixellab_tiles_pro": "6befe256-f618-4da8-8948-32cb77a2cb82"
+    },
+    {
+      "id": "db23110f-481a-4f79-9a7c-98a6b99ddb5e",
+      "name": "smallAnimals",
+      "state": "bird_Day",
+      "size": "32x32",
+      "path": "assets/props/smallAnimals/bird/32x32/day",
+      "animations": [
+        "bird_standing_idle",
+        "bird_walking"
+      ]
+    },
+    {
+      "id": "db23110f-481a-4f79-9a7c-98a6b99ddb5e",
+      "name": "smallAnimals",
+      "state": "bird",
+      "size": "32x32",
+      "path": "assets/props/smallAnimals/bird/32x32/default",
+      "animations": [
+        "bird_standing_idle",
+        "bird_walking"
+      ]
+    },
+    {
+      "id": "abc05c2b-a10a-470f-9737-c55ad4abdb5e",
+      "name": "smallAnimals",
+      "state": "bird_2",
+      "size": "32x32",
+      "path": "assets/props/smallAnimals/bird_2/32x32/default",
+      "animations": [
+        "bird_standing_idle",
+        "bird_walking"
+      ]
+    },
+    {
+      "id": "cd14dafa-9503-4a04-8d08-3dae5b794566",
+      "name": "smallAnimals",
+      "state": "cat_Day",
+      "size": "32x32",
+      "path": "assets/props/smallAnimals/cat/32x32/day",
+      "animations": [
+        "cute_cat_idle",
+        "walk"
+      ]
+    },
+    {
+      "id": "cd14dafa-9503-4a04-8d08-3dae5b794566",
+      "name": "smallAnimals",
+      "state": "cat",
+      "size": "32x32",
+      "path": "assets/props/smallAnimals/cat/32x32/default",
+      "animations": [
+        "cute_cat_idle",
+        "walk"
+      ]
+    },
+    {
+      "id": "092ad00e-5a43-4e1c-9137-a539f68bfafd",
+      "name": "smallAnimals",
+      "state": "cat_2",
+      "size": "32x32",
+      "path": "assets/props/smallAnimals/cat_2/32x32/default",
+      "animations": [
+        "cute_cat_idle",
+        "walk",
+        "walking"
+      ]
+    },
+    {
+      "id": "86dc40d3-5d28-4c56-812a-e9bb26e8a159",
+      "name": "smallAnimals",
+      "state": "dog_Day",
+      "size": "32x32",
+      "path": "assets/props/smallAnimals/dog/32x32/day",
+      "animations": [
+        "dog_idle",
+        "walk"
+      ]
+    },
+    {
+      "id": "86dc40d3-5d28-4c56-812a-e9bb26e8a159",
+      "name": "smallAnimals",
+      "state": "dog",
+      "size": "32x32",
+      "path": "assets/props/smallAnimals/dog/32x32/default",
+      "animations": [
+        "dog_idle",
+        "walk"
+      ]
+    },
+    {
+      "id": "61e1b125-a232-426f-a44e-813b6637b383",
+      "name": "smallAnimals",
+      "state": "dog_2",
+      "size": "32x32",
+      "path": "assets/props/smallAnimals/dog_2/32x32/default",
+      "animations": [
+        "dog_standing_idle",
+        "walk",
+        "walking"
+      ]
+    },
+    {
+      "id": "9729f0de-2b0b-413a-b3f6-d46ab6f543e9",
+      "name": "smallAnimals",
+      "state": "dog_3",
+      "size": "32x32",
+      "path": "assets/props/smallAnimals/dog_3/32x32/default",
+      "animations": [
+        "cute_fat_dog_idle",
+        "walk",
+        "walking"
+      ]
     }
   ]
 }
