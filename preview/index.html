@@ -6,7 +6,7 @@
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
     <meta http-equiv="Pragma" content="no-cache" />
     <title>skate_life — editor</title>
-    <link rel="stylesheet" href="./style.css?v=20251113chatCmds" />
+    <link rel="stylesheet" href="./style.css?v=20251114walkFit" />
     <script type="importmap">
       {
         "imports": {
@@ -43,6 +43,11 @@
           <div id="col-toggle" title="Karakter / pet collision alanı">
             <button type="button" data-col="show" class="active">Col göster</button>
             <button type="button" data-col="hide">Col gizle</button>
+          </div>
+          <div id="street-walk" class="hidden" title="Collision her zaman aktif (walkZone.enabled) — kutu sadece düzenleme çizgisini gösterir">
+            <label class="insp-check"><input id="street-walk-on" type="checkbox" /> Alan düzenle</label>
+            <button type="button" id="street-walk-fit">Görünüme sığdır</button>
+            <button type="button" id="street-walk-reset">Sıfırla</button>
           </div>
           <div id="scene-toggle" title="9:16 sahne düzeni JSON">
             <button type="button" id="scene-copy">JSON kopyala</button>
@@ -108,6 +113,6 @@
     <div id="stamina" class="hidden"><div id="stamina-fill"></div></div>
     <div id="drag-ghost" class="hidden"></div>
     <div id="world-labels"></div>
-    <script type="module" src="./main.js?v=20251113chatCmds"></script>
+    <script type="module" src="./main.js?v=20251114editOnly"></script>
   </body>
 </html>

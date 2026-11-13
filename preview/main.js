@@ -170,8 +170,11 @@ window.addEventListener("resize", () => {
   if (hudPos && hudEl) applyHudPos(hudPos.left, hudPos.top);
 });
 
-/** Street intro gather point (map center) — everyone walks here from post office. */
-let streetGatherTarget = { x: 0, z: 88 };
+/**
+ * Street gather from scene JSON `player` — garage exits walk here.
+ * Fixed until the scene is reloaded; does not follow Main while he moves.
+ */
+let streetGatherTarget = { x: -0.33, z: 188.96 };
 
 /** Free position of #hud after first drag (px, relative to #stage). */
 let hudPos = /** @type {{ left: number, top: number } | null} */ (null);
@@ -243,7 +246,9 @@ let colGizmo = null;
 const COL_GIZMO_COLOR = 0x5ec8ff;
 const COL_HANDLE_HIT_R = 28;
 const COL_MAX_PTS = 16;
-/** @type {{ obj: THREE.Object3D, index: number, from: {fx:number,fz:number}[] } | null} */
+/** Street walk zone can use more vertices than night_club. */
+const STREET_WALK_MAX_PTS = 32;
+/** @type {{ obj?: THREE.Object3D, street?: boolean, index: number, from: any } | null} */
 let colCornerDrag = null;
 
 let player = null;
@@ -285,8 +290,10 @@ const FACE_VEC = {
 const DRIVE_SPEED = 240;
 const DRIVE_BOOST = 340;
 const COMPANION_PATH = "assets/props/smallAnimals/dog/32x32/default";
-const COMPANION_FOLLOW_STOP = 38;
-const COMPANION_FOLLOW_START = 52;
+/** World units behind Main — was 38/52 stop/start, spawn/target ~40–42. */
+const COMPANION_FOLLOW_STOP = 24;
+const COMPANION_FOLLOW_START = 36;
+const COMPANION_OFFSET = 26;
 const COMPANION_SPEED = 105;
 
 const renderer = new THREE.WebGLRenderer({
@@ -864,7 +871,7 @@ function nearestSkateboard(px, pz) {
   let bestD = Infinity;
   for (const obj of pickables) {
     if (!isSkateboardObj(obj)) continue;
-    if (obj === occupiedSkateboard) continue;
+    if (obj === occupiedSkateboard || obj.userData?.rider) continue;
     if (!obj.visible) continue;
     const d = distToFootprint(px, pz, footprintOf(obj));
     if (d < bestD) {
@@ -887,25 +894,23 @@ const OLLIE_TIP_ROT = {
   "north-west": -0.28,
 };
 
-/** Keep board under feet while riding (skate-idle art has no board drawn in). */
-function syncSkateboardUnderPlayer() {
-  const board = occupiedSkateboard;
-  if (!board || !player?.mesh || !player.skating) return;
+/** Keep board under rider feet (Main or cast — other players). */
+function syncSkateboardUnderRider(rider) {
+  const board = findSkateRiddenBy(rider);
+  if (!board || !rider) return;
+  const isMain = rider === player?.mesh;
+  if (isMain && !player.skating) return;
+  if (!isMain && !rider.userData?.skating) return;
   board.visible = true;
-  const dir = player.facing || board.userData.dir || "";
+  const dir = (isMain ? player.facing : rider.userData.dir) || board.userData.dir || "";
   const face = FACE_VEC[dir] || FACE_VEC.south;
-  const u = player.ollieU || 0;
+  const u = isMain ? player.ollieU || 0 : rider.userData.ollieU || 0;
   const lift = Math.sin(Math.PI * u);
-  // shift board slightly toward nose so the travel-end reads up during ollie
   const nose = lift * 5;
-  board.position.x = player.mesh.position.x + face[0] * nose;
-  board.position.z = player.mesh.position.z + face[1] * nose;
-  // follow hop; nose a touch higher than feet at peak
-  board.position.y = (player.mesh.position.y || 0) + 0.05 + lift * 3;
-  if (player.facing && board.userData.dir !== player.facing) {
-    applyFacing(board, player.facing);
-  }
-  // east/west deck sits mid-canvas with empty pad below — lift sprite so deck meets feet
+  board.position.x = rider.position.x + face[0] * nose;
+  board.position.z = rider.position.z + face[1] * nose;
+  board.position.y = (rider.position.y || 0) + 0.05 + lift * 3;
+  if (dir && board.userData.dir !== dir) applyFacing(board, dir);
   if (board.isSprite) {
     const horiz = dir === "east" || dir === "west";
     board.center.set(0.5, horiz ? -0.07 : -0.02);
@@ -914,48 +919,76 @@ function syncSkateboardUnderPlayer() {
     board.material.rotation = lift * (OLLIE_TIP_ROT[dir] || 0);
   }
   syncDepth(board);
-  // character always paints above the deck
-  board.renderOrder = (player.mesh.renderOrder || 0) - 20;
+  board.renderOrder = (rider.renderOrder || 0) - 20;
 }
 
-function enterSkateboard(board) {
-  if (!player?.mesh || !board || player.skating) return;
-  occupiedSkateboard = board;
-  nearbySkateboard = null;
+function syncSkateboardUnderPlayer() {
+  if (player?.mesh) syncSkateboardUnderRider(player.mesh);
+}
+
+function enterSkateboard(board, rider = player?.mesh) {
+  if (!board || !rider || board.userData?.rider) return false;
+  const isMain = rider === player?.mesh;
+  if (isMain) {
+    if (!player || player.skating || player.driving) return false;
+    occupiedSkateboard = board;
+    nearbySkateboard = null;
+    if (board.userData.dir) player.facing = board.userData.dir;
+    player.startSkating();
+  } else {
+    if (rider.userData?.skating || rider.userData?.driving) return false;
+    clearNpcScriptMoves(rider);
+    rider.userData.skating = true;
+    rider.userData.sitting = false;
+    rider.userData.dancing = false;
+    if (board.userData.dir) {
+      rider.userData.dir = board.userData.dir;
+      applyFacing(rider, board.userData.dir);
+    }
+  }
+  board.userData.rider = rider;
   board.userData._solidBeforeSkate = !!board.userData.solid;
   board.userData.solid = false;
   board.visible = true;
-  player.mesh.position.x = board.position.x;
-  player.mesh.position.z = board.position.z;
-  player.syncRing(board.position.x, board.position.z);
-  if (board.userData.dir) player.facing = board.userData.dir;
-  player.startSkating();
-  syncSkateboardUnderPlayer();
+  rider.position.x = board.position.x;
+  rider.position.z = board.position.z;
+  rider.position.y = 0;
+  if (isMain) player.syncRing(board.position.x, board.position.z);
+  syncSkateboardUnderRider(rider);
   if (selected === board) selectObject(null);
   hidePrompt();
-  statusEl.textContent = "Kaykaydasın";
+  statusEl.textContent = isMain ? "Kaykaydasın" : "Karakter kaykaya bindi";
+  return true;
 }
 
-function exitSkateboard() {
-  const board = occupiedSkateboard;
-  if (!player?.mesh || !board) return;
-  const face = FACE_VEC[player.facing] || FACE_VEC.south;
+function exitSkateboard(rider = player?.mesh) {
+  if (!rider) return false;
+  const board = findSkateRiddenBy(rider);
+  if (!board) return false;
+  const isMain = rider === player?.mesh;
+  const facing = isMain ? player.facing : rider.userData.dir || "south";
+  const face = FACE_VEC[facing] || FACE_VEC.south;
   const side = [-face[1], face[0]];
-  // leave board at feet; step player slightly aside so you aren't glued on the deck
-  board.position.x = player.mesh.position.x;
-  board.position.z = player.mesh.position.z;
+  board.position.x = rider.position.x;
+  board.position.z = rider.position.z;
   board.position.y = 0;
-  if (player.facing) applyFacing(board, player.facing);
+  if (facing) applyFacing(board, facing);
   if (board.isSprite) board.center.set(0.5, 0);
   if (board.material) board.material.rotation = 0;
   board.userData.solid = false;
+  board.userData.rider = null;
   board.visible = true;
   syncDepth(board);
 
-  occupiedSkateboard = null;
-  player.stopSkating();
+  if (isMain) {
+    occupiedSkateboard = null;
+    player.stopSkating();
+  } else {
+    rider.userData.skating = false;
+    rider.userData.ollieU = 0;
+  }
 
-  const pr = player.radius || 22;
+  const pr = isMain ? player.radius || 22 : NPC_WALK_RADIUS;
   const tryOffsets = [
     [side[0] * (pr + 14), side[1] * (pr + 14)],
     [-side[0] * (pr + 14), -side[1] * (pr + 14)],
@@ -965,17 +998,23 @@ function exitSkateboard() {
   for (const [ox, oz] of tryOffsets) {
     const nx = board.position.x + ox;
     const nz = board.position.z + oz;
-    if (!playerFeetCollidesAtMesh(nx, nz, pr)) {
-      player.mesh.position.x = nx;
-      player.mesh.position.z = nz;
-      player.syncRing(nx, nz);
-      if (player.syncDepth) player.syncDepth(player.mesh);
+    const clear = isMain
+      ? !playerFeetCollidesAtMesh(nx, nz, pr)
+      : !actorBlocked(rider, nx, nz + FEET_NUDGE_Z, pr);
+    if (clear) {
+      rider.position.x = nx;
+      rider.position.z = nz;
+      if (isMain) {
+        player.syncRing(nx, nz);
+        if (player.syncDepth) player.syncDepth(player.mesh);
+      } else syncDepth(rider);
       break;
     }
   }
 
   hidePrompt();
   statusEl.textContent = "Hazır";
+  return true;
 }
 
 function nearestVehicle(px, pz) {
@@ -984,7 +1023,7 @@ function nearestVehicle(px, pz) {
   for (const obj of pickables) {
     if (!isVehicleObj(obj)) continue;
     if (obj.userData?.traffic) continue;
-    if (obj === occupiedVehicle) continue;
+    if (obj === occupiedVehicle || obj.userData?.driver) continue;
     // distance to car body edge (0 = touching / inside footprint)
     const d = distToFootprint(px, pz, footprintOf(obj));
     if (d < bestD) {
@@ -1243,6 +1282,11 @@ function enqueueNpcWalk(obj, dx, dz, dist, speed = 110, wait = 0) {
 
 function finishNpcWalk(obj) {
   if (!obj?.userData) return;
+  if (obj.userData.driving) return; // stay hidden in vehicle
+  if (obj.userData.skating) {
+    syncSkateboardUnderRider(obj);
+    return;
+  }
   const dir = obj.userData.dir || "south";
   attachIdle(obj, obj.userData.path, dir, { allowSouthFallback: true }).catch(
     () => {},
@@ -1254,20 +1298,56 @@ const NPC_WALK_RADIUS = 18;
 /** Axis-separate slide (same idea as Player.tryMove) — don't freeze on corners. */
 function npcTryStep(obj, dx, dz, radius = NPC_WALK_RADIUS) {
   if (!obj) return 0;
+  // Driving cast: move the vehicle instead of the hidden body
+  if (obj.userData?.driving) {
+    const veh = findVehicleDrivenBy(obj);
+    if (!veh) return 0;
+    return npcTryStepVehicle(veh, dx, dz, radius);
+  }
   const x0 = obj.position.x;
   const z0 = obj.position.z;
   const nx = x0 + dx;
   const nz = z0 + dz;
-  const blockedAt = (x, z) =>
-    solidBlocked(x, z, radius) || characterBlocked(x, z, CHAR_SEP_MIN * 0.85, obj);
+  const blockedAt = (x, z) => actorBlocked(obj, x, z, radius);
   if (dx && !blockedAt(nx, z0 + FEET_NUDGE_Z)) {
     obj.position.x = nx;
   }
   if (dz && !blockedAt(obj.position.x, nz + FEET_NUDGE_Z)) {
     obj.position.z = nz;
   }
-  if (obj.position.x !== x0 || obj.position.z !== z0) syncDepth(obj);
-  return Math.hypot(obj.position.x - x0, obj.position.z - z0);
+  const moved = Math.hypot(obj.position.x - x0, obj.position.z - z0);
+  // Frame delta for ball kick impulse (cast = other players)
+  obj.userData._moveDx = obj.position.x - x0;
+  obj.userData._moveDz = obj.position.z - z0;
+  if (moved > 0) {
+    syncDepth(obj);
+    if (obj.userData.skating) syncSkateboardUnderRider(obj);
+  }
+  return moved;
+}
+
+function npcTryStepVehicle(veh, dx, dz, radius = NPC_WALK_RADIUS) {
+  const x0 = veh.position.x;
+  const z0 = veh.position.z;
+  const nx = x0 + dx;
+  const nz = z0 + dz;
+  // Vehicles use solidBlockedExcept self
+  if (dx && !solidBlockedExcept(nx, z0, radius, veh)) veh.position.x = nx;
+  if (dz && !solidBlockedExcept(veh.position.x, nz, radius, veh)) veh.position.z = nz;
+  if (veh.position.x !== x0 || veh.position.z !== z0) syncDepth(veh);
+  return Math.hypot(veh.position.x - x0, veh.position.z - z0);
+}
+
+function findVehicleDrivenBy(rider) {
+  if (!rider) return null;
+  if (rider === player?.mesh) return occupiedVehicle;
+  return pickables.find((o) => o.userData?.driver === rider) || null;
+}
+
+function findSkateRiddenBy(rider) {
+  if (!rider) return null;
+  if (rider === player?.mesh) return occupiedSkateboard;
+  return pickables.find((o) => o.userData?.rider === rider) || null;
 }
 
 /** Push spawn out of solids (garage lip / trees) before scripted walk. */
@@ -1401,7 +1481,12 @@ async function handleChatCommand(raw) {
       statusEl.textContent = `${name}: jump`;
       return;
     }
-    statusEl.textContent = "Jump sadece Main için";
+    if (who.userData?.driving) {
+      statusEl.textContent = "Araçtayken zıplama yok";
+      return;
+    }
+    const ok = await attachJump(who, who.userData.path, who.userData.dir || "south");
+    statusEl.textContent = ok ? `${name}: jump` : "Bu karakterde jump yok";
     return;
   }
 
@@ -1423,27 +1508,43 @@ async function handleChatCommand(raw) {
     return;
   }
 
-  // /e — same as E when "Bin" prompt is active (nearby skate/vehicle)
+  // /e — mount nearby skate/vehicle (Main or selected cast)
   if (lower === "/e") {
-    if (!isPlayer) {
-      statusEl.textContent = "/e sadece Main için";
+    if (isPlayer) {
+      if (player.skating || occupiedVehicle) {
+        statusEl.textContent = "Zaten bindin — inmek için /stop";
+        return;
+      }
+      if (nearbySkateboard) {
+        enterSkateboard(nearbySkateboard, player.mesh);
+        statusEl.textContent = `${name}: kaykaya bindi`;
+        return;
+      }
+      if (nearbyVehicle) {
+        enterVehicle(nearbyVehicle, player.mesh);
+        statusEl.textContent = `${name}: araca bindi`;
+        return;
+      }
+      statusEl.textContent = "Bin yok — önce E/Bin çıkan kaykaya veya araca yaklaş";
       return;
     }
-    if (player.skating || occupiedVehicle) {
-      statusEl.textContent = "Zaten bindin — inmek için /stop";
+    if (who.userData?.skating || who.userData?.driving) {
+      statusEl.textContent = "Zaten bindi — inmek için /stop";
       return;
     }
-    if (nearbySkateboard) {
-      enterSkateboard(nearbySkateboard);
+    const board = nearestSkateboard(who.position.x, who.position.z);
+    const veh = nearestVehicle(who.position.x, who.position.z);
+    if (board) {
+      enterSkateboard(board, who);
       statusEl.textContent = `${name}: kaykaya bindi`;
       return;
     }
-    if (nearbyVehicle) {
-      enterVehicle(nearbyVehicle);
+    if (veh) {
+      enterVehicle(veh, who);
       statusEl.textContent = `${name}: araca bindi`;
       return;
     }
-    statusEl.textContent = "Bin yok — önce E/Bin çıkan kaykaya veya araca yaklaş";
+    statusEl.textContent = "Bin yok — karakteri kaykaya/araca yaklaştır";
     return;
   }
 
@@ -1451,12 +1552,12 @@ async function handleChatCommand(raw) {
     if (isPlayer) {
       // /stop = in (vehicle/skate) when mounted; else cancel dance/sit/walk
       if (player.skating && occupiedSkateboard) {
-        exitSkateboard();
+        exitSkateboard(player.mesh);
         statusEl.textContent = `${name}: kaykaydan indi`;
         return;
       }
       if (occupiedVehicle) {
-        exitVehicle();
+        exitVehicle(player.mesh);
         statusEl.textContent = `${name}: araçtan indi`;
         return;
       }
@@ -1464,7 +1565,18 @@ async function handleChatCommand(raw) {
       statusEl.textContent = `${name}: stop`;
       return;
     }
+    if (who.userData?.skating && findSkateRiddenBy(who)) {
+      exitSkateboard(who);
+      statusEl.textContent = `${name}: kaykaydan indi`;
+      return;
+    }
+    if (who.userData?.driving && findVehicleDrivenBy(who)) {
+      exitVehicle(who);
+      statusEl.textContent = `${name}: araçtan indi`;
+      return;
+    }
     clearNpcScriptMoves(who);
+    if (who.userData?.busy === "jump") finishNpcJump(who);
     if (who.userData?.dancing || who.userData?.animName === "dance") {
       await setCharacterDancing(who, false);
     }
@@ -1504,13 +1616,22 @@ async function handleChatCommand(raw) {
       return;
     }
     who.userData.dir = dirName;
+    if (who.userData.driving) {
+      const veh = findVehicleDrivenBy(who);
+      if (veh) applyFacing(veh, dirName);
+      enqueueNpcWalk(who, dx, dz, dist, 180);
+      statusEl.textContent = `${name}: sürüş ${dirName} × ${birim}`;
+      return;
+    }
     applyFacing(who, dirName);
     if (who.userData.sitting || /\/states\/sit/i.test(who.userData.path || "")) {
       await setCharacterSitPose(who, false);
     }
     who.userData.dancing = false;
-    await attachWalk(who, who.userData.path, dirName, { allowSouthFallback: true });
-    enqueueNpcWalk(who, dx, dz, dist, 110);
+    if (!who.userData.skating) {
+      await attachWalk(who, who.userData.path, dirName, { allowSouthFallback: true });
+    }
+    enqueueNpcWalk(who, dx, dz, dist, who.userData.skating ? 200 : 110);
     statusEl.textContent = `${name}: ${dirName} × ${birim}`;
     return;
   }
@@ -1634,28 +1755,44 @@ document.getElementById("chat-cmds")?.addEventListener("click", (e) => {
   sendChatMessage();
 });
 
-function enterVehicle(veh) {
-  if (!player?.mesh || !veh) return;
-  occupiedVehicle = veh;
-  nearbyVehicle = null;
-  player.driving = true;
-  player.setVisible(false);
-  if (companion) companion.visible = false;
+function enterVehicle(veh, rider = player?.mesh) {
+  if (!veh || !rider || veh.userData?.driver || veh === occupiedVehicle) return false;
+  const isMain = rider === player?.mesh;
+  if (isMain) {
+    if (!player || player.driving || player.skating) return false;
+    occupiedVehicle = veh;
+    nearbyVehicle = null;
+    player.driving = true;
+    player.setVisible(false);
+    if (companion) companion.visible = false;
+  } else {
+    if (rider.userData?.driving || rider.userData?.skating) return false;
+    clearNpcScriptMoves(rider);
+    rider.userData.driving = true;
+    rider.userData.skating = false;
+    rider.userData.dancing = false;
+    rider.userData.sitting = false;
+    rider.visible = false;
+  }
+  veh.userData.driver = rider;
   veh.userData._solidBeforeDrive = !!veh.userData.solid;
   veh.userData.solid = false;
   veh.userData.occupied = true;
   if (selected === veh) selectObject(null);
   hidePrompt();
-  statusEl.textContent = "Araçtasın";
+  statusEl.textContent = isMain ? "Araçtasın" : "Karakter araca bindi";
+  return true;
 }
 
-function exitVehicle() {
-  const veh = occupiedVehicle;
-  if (!player?.mesh || !veh) return;
+function exitVehicle(rider = player?.mesh) {
+  if (!rider) return false;
+  const veh = findVehicleDrivenBy(rider);
+  if (!veh) return false;
+  const isMain = rider === player?.mesh;
 
   // Place outside the vehicle footprint — old fixed 48px landed inside big car AABBs.
   const box = footprintOf(veh);
-  const pr = player.radius || 22;
+  const pr = isMain ? player.radius || 22 : NPC_WALK_RADIUS;
   const clearance = Math.max(box.hw, box.hd) + pr + 28;
   const face = veh.userData.dir || "south";
   const sideFirst = {
@@ -1686,9 +1823,11 @@ function exitVehicle() {
     for (const mul of [1, 1.35, 1.75, 2.3, 3]) {
       const x = veh.position.x + dx * clearance * mul;
       const z = veh.position.z + dz * clearance * mul;
-      // still ignore veh.solid (it's false while driving) — test footprint manually
       if (circleHitsAabb(x, z, pr, box)) continue;
-      if (playerFeetCollidesAtMesh(x, z, pr)) continue;
+      const blocked = isMain
+        ? playerFeetCollidesAtMesh(x, z, pr)
+        : actorBlocked(rider, x, z + FEET_NUDGE_Z, pr);
+      if (blocked) continue;
       spot = { x, z };
       break;
     }
@@ -1701,25 +1840,29 @@ function exitVehicle() {
     };
   }
 
-  player.mesh.position.set(spot.x, 0, spot.z);
-  player.syncRing(spot.x, spot.z);
-  player.driving = false;
-  player.setVisible(true);
-  if (companion) {
-    companion.visible = true;
-    companion.position.set(
-      spot.x - 28,
-      0,
-      spot.z - 28,
-    );
-    syncDepth(companion);
+  rider.position.set(spot.x, 0, spot.z);
+  if (isMain) {
+    player.syncRing(spot.x, spot.z);
+    player.driving = false;
+    player.setVisible(true);
+    if (companion) {
+      companion.visible = true;
+      companion.position.set(spot.x - 28, 0, spot.z - 28);
+      syncDepth(companion);
+    }
+    occupiedVehicle = null;
+    if (player.syncDepth) player.syncDepth(player.mesh);
+  } else {
+    rider.userData.driving = false;
+    rider.visible = true;
+    syncDepth(rider);
   }
   veh.userData.solid = veh.userData._solidBeforeDrive !== false;
   veh.userData.occupied = false;
-  occupiedVehicle = null;
+  veh.userData.driver = null;
   hidePrompt();
   statusEl.textContent = "Hazır";
-  if (player.syncDepth) player.syncDepth(player.mesh);
+  return true;
 }
 
 function driveVehicle(dt) {
@@ -1759,6 +1902,7 @@ function isInteriorPath(path) {
   return /\/interiors\//i.test(path || "");
 }
 
+/** Object-tied walkable polygon (night_club). Street uses sceneWalkZone instead. */
 function hasEditableCollision(path) {
   return /night_club_inside/i.test(path || "");
 }
@@ -1774,6 +1918,90 @@ function defaultColData() {
       { fx: -0.42, fz: 0.12 },
     ],
   };
+}
+
+/** Street scene: one shared walkable polygon (world XZ). Balls/skate ignore it. */
+/** @type {{ enabled: boolean, pts: [number, number][] }} */
+let sceneWalkZone = {
+  enabled: false,
+  pts: [],
+};
+
+const _walkRay = new THREE.Raycaster();
+const _walkNdc = new THREE.Vector2();
+const _walkHit = new THREE.Vector3();
+
+/** Ground XZ under a canvas UV (0..1). */
+function groundAtCanvasUv(u, v) {
+  if (!renderer?.domElement) return null;
+  _walkNdc.set(u * 2 - 1, -(v * 2 - 1));
+  _walkRay.setFromCamera(_walkNdc, camera);
+  return _walkRay.ray.intersectPlane(groundPlane, _walkHit)
+    ? [_walkHit.x, _walkHit.z]
+    : null;
+}
+
+/** Rectangle inset inside the current camera view (handles stay clickable). */
+function streetWalkPtsFromView(inset = 0.12) {
+  const a = inset;
+  const b = 1 - inset;
+  const corners = [
+    groundAtCanvasUv(a, a),
+    groundAtCanvasUv(b, a),
+    groundAtCanvasUv(b, b),
+    groundAtCanvasUv(a, b),
+  ];
+  if (corners.every(Boolean)) return corners;
+  // Fallback around player / gather if unproject fails
+  const cx = player?.mesh?.position.x ?? streetGatherTarget.x ?? 0;
+  const cz = player?.mesh?.position.z ?? streetGatherTarget.z ?? 88;
+  const hw = 160;
+  const hd = 140;
+  return [
+    [cx - hw, cz - hd],
+    [cx + hw, cz - hd],
+    [cx + hw, cz + hd],
+    [cx - hw, cz + hd],
+  ];
+}
+
+function defaultStreetWalkPts() {
+  return streetWalkPtsFromView(0.14);
+}
+
+function fitStreetWalkToView() {
+  sceneWalkZone.pts = streetWalkPtsFromView(0.14);
+  updateStreetWalkGizmo();
+  schedulePersistScene();
+  statusEl.textContent = "Street alan görünüme sığdırıldı — köşeleri sürükle";
+}
+
+function ensureStreetWalkZone() {
+  if (!Array.isArray(sceneWalkZone.pts) || sceneWalkZone.pts.length < 3) {
+    sceneWalkZone.pts = defaultStreetWalkPts();
+  }
+  return sceneWalkZone;
+}
+
+function streetWalkActive() {
+  return activeSceneId === "street" && !!ensureStreetWalkZone().enabled;
+}
+
+/** Checkbox: show edit gizmo only — does not turn collision on/off. */
+let streetWalkEditOpen = false;
+
+/** True if most zone corners project off the canvas (can't grab handles). */
+function streetWalkHandlesOffscreen() {
+  const z = ensureStreetWalkZone();
+  if (!z.pts?.length || !renderer?.domElement) return false;
+  camera.updateMatrixWorld(true);
+  let off = 0;
+  const _p = new THREE.Vector3();
+  for (const [x, zz] of z.pts) {
+    _p.set(x, 0, zz).project(camera);
+    if (Math.abs(_p.x) > 0.98 || Math.abs(_p.y) > 0.98) off += 1;
+  }
+  return off >= Math.ceil(z.pts.length * 0.5);
 }
 
 function ensureColData(obj) {
@@ -1897,24 +2125,48 @@ function pointInCol(px, pz, box, inset = 0) {
 }
 
 /**
- * night_club_inside col.enabled = stay inside the polygon.
- * Once the player is in, leaving is blocked; outside can still walk in.
+ * Walkable-zone: stay inside once entered (night_club object + street scene zone).
  */
-function containmentBlocks(px, pz, radius) {
-  if (!player?.mesh) return false;
-  // px/pz are feet coords (see tryMove); current feet = mesh + nudge
-  const cx = player.mesh.position.x;
-  const cz = player.mesh.position.z + FEET_NUDGE_Z;
+function containmentBlocksFor(fromX, fromZ, px, pz, radius) {
   const r = Math.max(0, radius || 0);
+  // Street: single scene polygon (characters). Balls clamped separately in physics.
+  if (streetWalkActive()) {
+    const pts = ensureStreetWalkZone().pts;
+    if (pointInPoly(fromX, fromZ, pts)) {
+      // leave blocked if feet would exit (with radius inset)
+      if (!pointInPoly(px, pz, pts)) return true;
+      if (r > 0 && distToPolyEdge(px, pz, pts) < r * 0.35) return true;
+    }
+  }
   for (const obj of pickables) {
     const col = obj.userData?.col;
     if (!col?.enabled || !hasEditableCollision(obj.userData?.path)) continue;
     const box = colFootprint(obj);
     if (!box) continue;
-    if (!pointInCol(cx, cz, box, 0)) continue;
+    if (!pointInCol(fromX, fromZ, box, 0)) continue;
     if (!pointInCol(px, pz, box, r)) return true;
   }
   return false;
+}
+
+function containmentBlocks(px, pz, radius) {
+  if (!player?.mesh) return false;
+  const cx = player.mesh.position.x;
+  const cz = player.mesh.position.z + FEET_NUDGE_Z;
+  return containmentBlocksFor(cx, cz, px, pz, radius);
+}
+
+/** Same blockers Main uses — solids, rooms, 9:16 frame, other cast. */
+function actorBlocked(obj, px, pz, radius) {
+  const r = radius || NPC_WALK_RADIUS;
+  const fromX = obj.position.x;
+  const fromZ = obj.position.z + FEET_NUDGE_Z;
+  return (
+    solidBlocked(px, pz, r) ||
+    containmentBlocksFor(fromX, fromZ, px, pz, r) ||
+    viewBoundsBlock(px, pz, r) ||
+    characterBlocked(px, pz, Math.max(r * 0.7, CHAR_SEP_MIN * 0.85), obj)
+  );
 }
 
 const _viewClampA = new THREE.Vector3();
@@ -2106,10 +2358,12 @@ function isVaultableObj(obj) {
   return isVaultablePath(d.path);
 }
 
-function solidBlockedExcept(px, pz, radius, except) {
+function solidBlockedExcept(px, pz, radius, except, { physics = false } = {}) {
+  if (!physics && streetWalkActive()) return false;
   for (const obj of pickables) {
     if (obj === except) continue;
     if (!obj.userData?.solid) continue;
+    if (obj.userData.skateboard || isSkateboardPath(obj.userData.path)) continue;
     if (circleHitsAabb(px, pz, radius, footprintOf(obj))) return true;
   }
   return false;
@@ -2312,6 +2566,10 @@ function footprintOf(obj) {
 }
 
 function circleHitsAabb(px, pz, radius, box) {
+  if (box.kind === "poly" && box.pts?.length) {
+    if (pointInPoly(px, pz, box.pts)) return true;
+    return distToPolyEdge(px, pz, box.pts) < radius;
+  }
   if (box.kind === "obb") {
     const dx = px - box.x;
     const dz = pz - box.z;
@@ -2332,6 +2590,10 @@ function circleHitsAabb(px, pz, radius, box) {
 
 /** Distance from point to footprint surface (0 if inside). */
 function distToFootprint(px, pz, box) {
+  if (box.kind === "poly" && box.pts?.length) {
+    if (pointInPoly(px, pz, box.pts)) return 0;
+    return distToPolyEdge(px, pz, box.pts);
+  }
   if (box.kind === "obb") {
     const dx = px - box.x;
     const dz = pz - box.z;
@@ -2346,9 +2608,16 @@ function distToFootprint(px, pz, box) {
   return Math.hypot(ox, oz);
 }
 
-function solidBlocked(px, pz, radius) {
+/**
+ * Prop/building solids. On street with walk-zone on: characters ignore these
+ * (only the zone matters). Balls/skate keep physics via { physics: true }.
+ */
+function solidBlocked(px, pz, radius, { physics = false } = {}) {
+  if (!physics && streetWalkActive()) return false;
   for (const obj of pickables) {
     if (!obj.userData?.solid) continue;
+    // Skateboards never solid-block characters
+    if (obj.userData.skateboard || isSkateboardPath(obj.userData.path)) continue;
     if (circleHitsAabb(px, pz, radius, footprintOf(obj))) return true;
   }
   return false;
@@ -2587,6 +2856,75 @@ async function attachWalk(obj, path, dir, { allowSouthFallback = true } = {}) {
   return true;
 }
 
+async function resolveJumpSlug(path) {
+  const listed = await listAnimSlugs(path);
+  const hit =
+    listed.find((a) => /^jump$/i.test(a)) ||
+    listed.find((a) => /jump|two-footed-jump/i.test(a));
+  if (hit) return hit;
+  try {
+    const meta = await fetch(assetUrl(`${path}/meta.json`)).then((r) => r.json());
+    const anims = meta.animations || [];
+    return (
+      anims.find((a) => /^jump$/i.test(a)) ||
+      anims.find((a) => /jump/i.test(a)) ||
+      null
+    );
+  } catch {
+    return null;
+  }
+}
+
+/** One-shot jump for cast (other players) — same idea as Main startJump. */
+async function attachJump(obj, path, dir, { allowSouthFallback = true } = {}) {
+  if (!obj?.userData || obj.userData.kind !== "character") return false;
+  if (obj.userData.driving || obj.userData.busy === "jump") return false;
+  const slug = (await resolveJumpSlug(path)) || "jump";
+  let frames = await loadAnimFrames(path, slug, dir);
+  if (!frames.length && allowSouthFallback && dir !== "south") {
+    frames = await loadAnimFrames(path, slug, "south");
+  }
+  if (!frames.length) {
+    frames = await loadAnimFrames(path, slug, "unknown");
+  }
+  if (!frames.length) return false;
+  clearNpcScriptMoves(obj);
+  obj.userData.dancing = false;
+  obj.userData.sitting = false;
+  obj.userData.busy = "jump";
+  obj.userData.ollieU = 0;
+  obj.userData.animName = "jump";
+  obj.userData.anim = {
+    frames,
+    frame: 0,
+    accum: 0,
+    fps: 14,
+    dir,
+    once: true,
+  };
+  setMap(obj, frames[0]);
+  return true;
+}
+
+function finishNpcJump(obj) {
+  if (!obj?.userData) return;
+  obj.userData.busy = null;
+  obj.userData.ollieU = 0;
+  obj.position.y = 0;
+  const dir = obj.userData.dir || "south";
+  if (obj.userData.skating) {
+    // stay on board — back to idle-ish walk frames if any; else idle
+    attachIdle(obj, obj.userData.path, dir, { allowSouthFallback: true }).catch(
+      () => {},
+    );
+    syncSkateboardUnderRider(obj);
+  } else {
+    attachIdle(obj, obj.userData.path, dir, { allowSouthFallback: true }).catch(
+      () => {},
+    );
+  }
+}
+
 /** Load idle+walk clips for all dirs (companion pet). */
 async function attachPetClips(obj, path) {
   const idleSlug = (await resolveIdleSlug(path)) || "dog_idle";
@@ -2603,8 +2941,8 @@ async function attachPetClips(obj, path) {
       if (!clips.walk[dir].length) {
         clips.walk[dir] = clips.idle[dir];
       }
-    }),
-  );
+      }),
+    );
   obj.userData.idleSlug = idleSlug;
   obj.userData.walkSlug = walkSlug;
   obj.userData.clips = clips;
@@ -2664,8 +3002,8 @@ async function spawnCompanion() {
     "north-east": [-Math.SQRT1_2, Math.SQRT1_2],
     "north-west": [Math.SQRT1_2, Math.SQRT1_2],
   }[facing] || [0, -1];
-  const x = player.mesh.position.x + behind[0] * 42;
-  const z = player.mesh.position.z + behind[1] * 42;
+  const x = player.mesh.position.x + behind[0] * COMPANION_OFFSET;
+  const z = player.mesh.position.z + behind[1] * COMPANION_OFFSET;
   statusEl.textContent = "Pet geliyor…";
   const item = {
     kind: "object",
@@ -2716,8 +3054,8 @@ function tickCompanions(dt) {
     "north-east": [-Math.SQRT1_2, Math.SQRT1_2],
     "north-west": [Math.SQRT1_2, Math.SQRT1_2],
   }[face] || [0, -1];
-  const tx = px + behind[0] * 40;
-  const tz = pz + behind[1] * 40;
+  const tx = px + behind[0] * COMPANION_OFFSET;
+  const tz = pz + behind[1] * COMPANION_OFFSET;
   const dx = tx - companion.position.x;
   const dz = tz - companion.position.z;
   const dist = Math.hypot(dx, dz);
@@ -2978,9 +3316,9 @@ async function spawnItem(item, x, z, opts = {}) {
     catalogKey: `${item.id}:${item.path}`,
     label: item.label,
     path: item.path,
-    w,
-    h,
-    scale,
+      w,
+      h,
+      scale,
     dir,
     dirs,
     rotTextures,
@@ -3002,7 +3340,7 @@ async function spawnItem(item, x, z, opts = {}) {
   }
   if (hasEditableCollision(item.path)) {
     userData.col = defaultColData();
-    userData.solid = false; // containment zone when col.enabled
+    userData.solid = false;
   }
   if (userData.vehicle) {
     // all 8 facings (DIRS) scanned up front — collision switches with dir
@@ -3033,12 +3371,12 @@ async function spawnItem(item, x, z, opts = {}) {
     obj.scale.set(w * scale, h * scale, 1);
     userData.layer = "ground";
   } else {
-    const mat = new THREE.SpriteMaterial({
-      map: tex,
-      transparent: true,
-      alphaTest: 0.05,
-      depthWrite: false,
-    });
+  const mat = new THREE.SpriteMaterial({
+    map: tex,
+    transparent: true,
+    alphaTest: 0.05,
+    depthWrite: false,
+  });
     if (/\/buildings\//i.test(item.path || "")) patchBuildingSeeThrough(mat);
     obj = new THREE.Sprite(mat);
     obj.center.set(0.5, 0);
@@ -3064,7 +3402,7 @@ async function spawnItem(item, x, z, opts = {}) {
     statusEl.textContent = "Hazır";
   }
 
-  // Street: newly dropped cast member exits garage → orta (same as Main)
+  // Street: new cast exits garage → scene JSON player spot (not live Main)
   if (
     activeSceneId === "street" &&
     item.kind === "character" &&
@@ -3072,11 +3410,12 @@ async function spawnItem(item, x, z, opts = {}) {
     !opts.traffic &&
     opts.playEntrance !== false
   ) {
+    const home = streetGatherTarget;
     const ang = Math.random() * Math.PI * 2;
     const rad = 18 + Math.random() * 16;
     const slot = {
-      x: streetGatherTarget.x + Math.cos(ang) * rad,
-      z: streetGatherTarget.z + Math.sin(ang) * rad,
+      x: home.x + Math.cos(ang) * rad,
+      z: home.z + Math.sin(ang) * rad,
     };
     beginPostOfficeEntrance(obj, slot, { stagger: 0.15 });
     statusEl.textContent = "Postane garajından ortaya geliyor…";
@@ -3093,7 +3432,7 @@ function roundSceneNum(n, digits = 2) {
   return Math.round(Number(n) * p) / p;
 }
 
-/** Snapshot walkable-zone collision (night_club_inside polygon). */
+/** Snapshot night_club walkable polygon. */
 function serializeCol(obj) {
   if (!hasEditableCollision(obj?.userData?.path)) return null;
   const col = ensureColData(obj);
@@ -3120,10 +3459,41 @@ function applySerializedCol(obj, colData) {
   syncColSolid(obj);
 }
 
+function serializeWalkZone() {
+  if (activeSceneId !== "street") return undefined;
+  const z = ensureStreetWalkZone();
+  return {
+    enabled: !!z.enabled,
+    pts: z.pts.map(([x, zz]) => [roundSceneNum(x), roundSceneNum(zz)]),
+  };
+}
+
+function applyWalkZone(data) {
+  if (!data || typeof data !== "object") {
+    sceneWalkZone = { enabled: false, pts: defaultStreetWalkPts() };
+    return;
+  }
+  const pts = Array.isArray(data.pts)
+    ? data.pts
+        .map((p) => {
+          if (Array.isArray(p) && p.length >= 2) return [Number(p[0]), Number(p[1])];
+          if (p && Number.isFinite(Number(p.x)) && Number.isFinite(Number(p.z))) {
+            return [Number(p.x), Number(p.z)];
+          }
+          return null;
+        })
+        .filter(Boolean)
+    : [];
+  sceneWalkZone = {
+    enabled: !!data.enabled,
+    pts: pts.length >= 3 ? pts : defaultStreetWalkPts(),
+  };
+}
+
 function serializeScene() {
   const objects = [];
   for (const obj of pickables) {
-    const d = obj.userData;
+  const d = obj.userData;
     if (!d?.editable || d.companion) continue;
     const entry = {
       kind: d.kind || "object",
@@ -3145,7 +3515,7 @@ function serializeScene() {
     if (col) entry.col = col;
     objects.push(entry);
   }
-  return {
+  const out = {
     version: 1,
     revision: sceneRevision || 0,
     sceneId: activeSceneId || undefined,
@@ -3162,6 +3532,9 @@ function serializeScene() {
       : { x: 0, z: 200, facing: "south" },
     objects,
   };
+  const wz = serializeWalkZone();
+  if (wz) out.walkZone = wz;
+  return out;
 }
 
 function persistScene() {
@@ -3478,12 +3851,15 @@ function beginPostOfficeEntrance(obj, dest, { stagger = 0, isPlayer = false } = 
   return true;
 }
 
-/** Street play: Main + placed cast all exit garage and gather at orta (same point). */
+/** Street play: Main + cast exit garage → JSON player home (fixed gather). */
 function startStreetPostOfficeEntrances(gather) {
   const post = findScenePostOffice();
   if (!post) return false;
-  const dest = gather || streetGatherTarget;
-  streetGatherTarget = { x: dest.x, z: dest.z };
+  // Only refresh gather when scene load passes JSON player; never from live Main
+  if (gather && Number.isFinite(gather.x) && Number.isFinite(gather.z)) {
+    streetGatherTarget = { x: gather.x, z: gather.z };
+  }
+  const dest = { x: streetGatherTarget.x, z: streetGatherTarget.z };
   clearNpcScriptMoves();
   let n = 0;
   if (player?.mesh) {
@@ -3523,6 +3899,8 @@ async function loadScene(data, { persist = true } = {}) {
       applyViewportMode(data.viewport);
     }
     clearEditableSceneObjects();
+    applyWalkZone(activeSceneId === "street" ? data.walkZone : null);
+    syncStreetWalkUi();
     if (player?.mesh && data.player) {
       player.mesh.position.x = Number(data.player.x) || 0;
       player.mesh.position.z = Number(data.player.z) || 200;
@@ -3558,12 +3936,15 @@ async function loadScene(data, { persist = true } = {}) {
     selectObject(null);
     if (persist) persistScene();
     syncTrafficForScene();
-    // Street: Main + cast exit garage → orta (scene player / gather point)
+    // Street: Main + cast → JSON player home; later spawns use same fixed point
     if (activeSceneId === "street") {
       const dest = data.player
-        ? { x: Number(data.player.x) || 0, z: Number(data.player.z) || 88 }
-        : { x: 0, z: 88 };
-      streetGatherTarget = { ...dest };
+        ? {
+            x: Number(data.player.x) || -0.33,
+            z: Number(data.player.z) || 188.96,
+          }
+        : { x: -0.33, z: 188.96 };
+      streetGatherTarget = { x: dest.x, z: dest.z };
       if (!startStreetPostOfficeEntrances(dest)) {
         statusEl.textContent =
           missing > 0
@@ -3636,6 +4017,8 @@ async function clearSavedScene() {
     disposeTrafficLaneGizmo();
     activeSceneId = null;
     highlightSceneSlot(null);
+    applyWalkZone(null);
+    syncStreetWalkUi();
     clearEditableSceneObjects();
     try {
       localStorage.removeItem(SCENE_STORAGE_KEY);
@@ -3806,19 +4189,26 @@ function disposeColGizmo() {
   colGizmo = null;
 }
 
-/** Outline + vertex handles + edge midpoints (drag mid → add vertex). */
-function updateColGizmo(obj) {
+function buildPolyGizmo(corners, enabled, { street = false } = {}) {
   disposeColGizmo();
-  if (!obj || !hasEditableCollision(obj.userData?.path)) return;
-  const col = ensureColData(obj);
-  const corners = getColWorldPts(obj);
   const n = corners.length;
+  if (n < 3) return;
   const y = 0.14;
-  const opacity = col.enabled ? 0.95 : 0.45;
+  const opacity = enabled ? 0.95 : 0.45;
+  // Street handles bigger so they stay easy to grab in 9:16
+  const handleR = street ? 16 : 10;
+  const rimInner = street ? 13 : 8;
+  const rimOuter = street ? 18 : 11;
+  const midR = street ? 12 : 6;
+  const hitR = street ? COL_HANDLE_HIT_R * 1.65 : COL_HANDLE_HIT_R;
+  const maxPts = street ? STREET_WALK_MAX_PTS : COL_MAX_PTS;
 
   colGizmo = new THREE.Group();
   colGizmo.userData.skipPick = true;
   colGizmo.userData.colGizmo = true;
+  colGizmo.userData.streetWalk = !!street;
+  colGizmo.userData.handleHitR = hitR;
+  colGizmo.userData.maxPts = maxPts;
 
   const positions = [];
   for (let i = 0; i < n; i++) {
@@ -3846,9 +4236,9 @@ function updateColGizmo(obj) {
     color: 0xffffff,
     depthTest: false,
     transparent: true,
-    opacity: col.enabled ? 1 : 0.55,
+    opacity: enabled ? 1 : 0.55,
   });
-  const handleGeo = new THREE.CircleGeometry(10, 20);
+  const handleGeo = new THREE.CircleGeometry(handleR, 20);
   for (let i = 0; i < n; i++) {
     const [cx, cz] = corners[i];
     const handle = new THREE.Mesh(handleGeo, handleMat.clone());
@@ -3859,12 +4249,12 @@ function updateColGizmo(obj) {
     handle.userData.skipPick = true;
     handle.userData.colCorner = i;
     const rim = new THREE.Mesh(
-      new THREE.RingGeometry(8, 11, 20),
+      new THREE.RingGeometry(rimInner, rimOuter, 20),
       new THREE.MeshBasicMaterial({
         color: COL_GIZMO_COLOR,
         depthTest: false,
         transparent: true,
-        opacity: col.enabled ? 1 : 0.5,
+        opacity: enabled ? 1 : 0.5,
       }),
     );
     rim.rotation.x = -Math.PI / 2;
@@ -3876,15 +4266,15 @@ function updateColGizmo(obj) {
     colGizmo.add(handle, rim);
   }
 
-  // Edge midpoints — smaller dots; drag to insert a new vertex
-  if (n < COL_MAX_PTS) {
+  // Edge midpoints — click/drag to insert a new vertex (street: brighter + larger)
+  if (n < maxPts) {
     const midMat = new THREE.MeshBasicMaterial({
-      color: COL_GIZMO_COLOR,
+      color: street ? 0xffe08a : COL_GIZMO_COLOR,
       depthTest: false,
       transparent: true,
-      opacity: col.enabled ? 0.85 : 0.4,
+      opacity: enabled ? (street ? 1 : 0.85) : 0.4,
     });
-    const midGeo = new THREE.CircleGeometry(6, 16);
+    const midGeo = new THREE.CircleGeometry(midR, 16);
     for (let i = 0; i < n; i++) {
       const [ax, az] = corners[i];
       const [bx, bz] = corners[(i + 1) % n];
@@ -3898,17 +4288,77 @@ function updateColGizmo(obj) {
       mid.userData.skipPick = true;
       mid.userData.colEdge = i;
       colGizmo.add(mid);
+      if (street) {
+        const midRim = new THREE.Mesh(
+          new THREE.RingGeometry(midR + 1, midR + 4, 16),
+          new THREE.MeshBasicMaterial({
+            color: 0xffc857,
+            depthTest: false,
+            transparent: true,
+            opacity: enabled ? 0.95 : 0.35,
+          }),
+        );
+        midRim.rotation.x = -Math.PI / 2;
+        midRim.position.set(mx, y + 0.03, mz);
+        midRim.renderOrder = 100005;
+        midRim.frustumCulled = false;
+        midRim.userData.skipPick = true;
+        midRim.userData.colEdge = i;
+        colGizmo.add(midRim);
+      }
     }
   }
 
   scene.add(colGizmo);
 }
 
-function hitColCorner(wx, wz, obj) {
-  if (!obj || !hasEditableCollision(obj.userData?.path)) return -1;
-  const pts = getColWorldPts(obj);
+/** Outline + vertex handles for night_club object col. */
+function updateColGizmo(obj) {
+  if (!obj || !hasEditableCollision(obj.userData?.path)) {
+    if (activeSceneId === "street") updateStreetWalkGizmo();
+    else disposeColGizmo();
+    return;
+  }
+  const col = ensureColData(obj);
+  buildPolyGizmo(getColWorldPts(obj), !!col.enabled, { street: false });
+}
+
+function updateStreetWalkGizmo() {
+  if (activeSceneId !== "street") {
+    if (colGizmo?.userData?.streetWalk) disposeColGizmo();
+    return;
+  }
+  // Prefer night_club-style object gizmo if that object is selected
+  if (selected && hasEditableCollision(selected.userData?.path)) return;
+  const z = ensureStreetWalkZone();
+  // Gizmo only while editing — collision stays on via walkZone.enabled
+  if (!streetWalkEditOpen) {
+    if (colGizmo?.userData?.streetWalk) disposeColGizmo();
+    return;
+  }
+  buildPolyGizmo(
+    z.pts.map(([x, zz]) => [x, zz]),
+    true,
+    { street: true },
+  );
+}
+
+function syncStreetWalkUi() {
+  const panel = document.getElementById("street-walk");
+  if (panel) panel.classList.toggle("hidden", activeSceneId !== "street");
+  const on = document.getElementById("street-walk-on");
+  if (on) on.checked = !!streetWalkEditOpen;
+  if (activeSceneId === "street") updateStreetWalkGizmo();
+  else if (colGizmo?.userData?.streetWalk) disposeColGizmo();
+}
+
+function polyHandleHitR() {
+  return colGizmo?.userData?.handleHitR || COL_HANDLE_HIT_R;
+}
+
+function hitPolyCorner(wx, wz, pts) {
   let best = -1;
-  let bestD = COL_HANDLE_HIT_R;
+  let bestD = polyHandleHitR();
   for (let i = 0; i < pts.length; i++) {
     const d = Math.hypot(wx - pts[i][0], wz - pts[i][1]);
     if (d < bestD) {
@@ -3919,13 +4369,11 @@ function hitColCorner(wx, wz, obj) {
   return best;
 }
 
-/** Edge index whose midpoint is near (wx,wz), or -1. */
-function hitColEdgeMid(wx, wz, obj) {
-  if (!obj || !hasEditableCollision(obj.userData?.path)) return -1;
-  const pts = getColWorldPts(obj);
-  if (pts.length >= COL_MAX_PTS) return -1;
+function hitPolyEdgeMid(wx, wz, pts) {
+  const maxPts = colGizmo?.userData?.maxPts || COL_MAX_PTS;
+  if (pts.length >= maxPts) return -1;
   let best = -1;
-  let bestD = COL_HANDLE_HIT_R * 0.85;
+  let bestD = polyHandleHitR() * 0.9;
   for (let i = 0; i < pts.length; i++) {
     const [ax, az] = pts[i];
     const [bx, bz] = pts[(i + 1) % pts.length];
@@ -3940,13 +4388,54 @@ function hitColEdgeMid(wx, wz, obj) {
   return best;
 }
 
+/**
+ * Hit any point along an edge (not only the midpoint) — returns
+ * { edge, x, z } so street edges are easy to split on the right/long sides.
+ */
+function hitPolyEdgeAnywhere(wx, wz, pts) {
+  const maxPts = colGizmo?.userData?.maxPts || COL_MAX_PTS;
+  if (pts.length >= maxPts) return null;
+  const maxD = polyHandleHitR() * 1.15;
+  let best = null;
+  let bestD = maxD;
+  for (let i = 0; i < pts.length; i++) {
+    const [ax, az] = pts[i];
+    const [bx, bz] = pts[(i + 1) % pts.length];
+    const abx = bx - ax;
+    const abz = bz - az;
+    const ab2 = abx * abx + abz * abz || 1e-12;
+    let t = ((wx - ax) * abx + (wz - az) * abz) / ab2;
+    t = Math.max(0.08, Math.min(0.92, t)); // keep away from corners
+    const qx = ax + abx * t;
+    const qz = az + abz * t;
+    const d = Math.hypot(wx - qx, wz - qz);
+    if (d < bestD) {
+      bestD = d;
+      best = { edge: i, x: qx, z: qz };
+    }
+  }
+  return best;
+}
+
+function hitColCorner(wx, wz, obj) {
+  if (!obj || !hasEditableCollision(obj.userData?.path)) return -1;
+  return hitPolyCorner(wx, wz, getColWorldPts(obj));
+}
+
+/** Edge index whose midpoint is near (wx,wz), or -1. */
+function hitColEdgeMid(wx, wz, obj) {
+  if (!obj || !hasEditableCollision(obj.userData?.path)) return -1;
+  return hitPolyEdgeMid(wx, wz, getColWorldPts(obj));
+}
+
 function selectObject(obj) {
   selected = obj;
   colCornerDrag = null;
   attachSelectionOutline(obj);
   if (!obj) {
-    disposeColGizmo();
     inspector.classList.add("hidden");
+    if (activeSceneId === "street") updateStreetWalkGizmo();
+    else disposeColGizmo();
     return;
   }
   inspector.classList.remove("hidden");
@@ -4062,6 +4551,8 @@ function refreshInspector() {
     const col = ensureColData(selected);
     if (inspColOn) inspColOn.checked = !!col.enabled;
     updateColGizmo(selected);
+  } else if (activeSceneId === "street") {
+    updateStreetWalkGizmo();
   } else {
     disposeColGizmo();
   }
@@ -4230,6 +4721,41 @@ inspColReset?.addEventListener("click", () => {
   statusEl.textContent = "Collision karesi sıfırlandı";
 });
 
+document.getElementById("street-walk-on")?.addEventListener("change", (e) => {
+  if (activeSceneId !== "street") return;
+  streetWalkEditOpen = !!e.target.checked;
+  const zone = ensureStreetWalkZone();
+  // Editing does not toggle collision — keep walkZone.enabled as saved
+  if (!zone.enabled && zone.pts.length >= 3) zone.enabled = true;
+  if (streetWalkEditOpen && streetWalkHandlesOffscreen()) {
+    // Don't destroy saved shape — only nudge if somehow empty
+    if (zone.pts.length < 3) zone.pts = streetWalkPtsFromView(0.14);
+  }
+  updateStreetWalkGizmo();
+  statusEl.textContent = streetWalkEditOpen
+    ? "Alan düzenleme açık — köşe/sarı nokta sürükle · collision zaten aktif"
+    : "Alan gizlendi — collision çalışmaya devam eder";
+});
+
+document.getElementById("street-walk-fit")?.addEventListener("click", () => {
+  if (activeSceneId !== "street") return;
+  streetWalkEditOpen = true;
+  const on = document.getElementById("street-walk-on");
+  if (on) on.checked = true;
+  ensureStreetWalkZone().enabled = true;
+  fitStreetWalkToView();
+});
+
+document.getElementById("street-walk-reset")?.addEventListener("click", () => {
+  if (activeSceneId !== "street") return;
+  streetWalkEditOpen = true;
+  const on = document.getElementById("street-walk-on");
+  if (on) on.checked = true;
+  ensureStreetWalkZone().enabled = true;
+  fitStreetWalkToView();
+  statusEl.textContent = "Street alan görünüme sıfırlandı";
+});
+
 /** Shift+arrows: append a same-scale road tile on that edge of the selection. */
 async function extendSelectedRoad(dx, dz) {
   const src = selected;
@@ -4284,13 +4810,12 @@ function onPointerDown(event) {
   // If a palette ghost is active but user grabbed a placed object, move that — don't spawn
   setPointerFromEvent(event);
 
-  // Collision polygon handles for night_club_inside (before object pick)
+  // Collision polygon handles (night_club object OR street walk zone)
   const gp0 = groundHit();
   if (gp0 && selected && hasEditableCollision(selected.userData?.path)) {
     const corner = hitColCorner(gp0.x, gp0.z, selected);
     if (corner >= 0) {
       if (placing) endPaletteDrag();
-      // Alt+click corner → remove vertex (min 3)
       if (event.altKey) {
         const from = ensureColData(selected).pts.map((p) => ({ fx: p.fx, fz: p.fz }));
         if (removeColPt(selected, corner)) {
@@ -4338,6 +4863,69 @@ function onPointerDown(event) {
       statusEl.textContent = "Kenara nokta eklendi — sürükle";
       return;
     }
+  } else if (gp0 && activeSceneId === "street" && colGizmo?.userData?.streetWalk) {
+    const zone = ensureStreetWalkZone();
+    const corner = hitPolyCorner(gp0.x, gp0.z, zone.pts);
+    if (corner >= 0) {
+      if (placing) endPaletteDrag();
+      if (event.altKey) {
+        if (zone.pts.length <= 3) {
+          statusEl.textContent = "En az 3 köşe gerekli";
+          return;
+        }
+        const from = zone.pts.map((p) => [...p]);
+        zone.pts.splice(corner, 1);
+        pushUndo({
+          undo() {
+            sceneWalkZone.pts = from.map((p) => [...p]);
+            updateStreetWalkGizmo();
+          },
+        });
+        updateStreetWalkGizmo();
+        schedulePersistScene();
+        statusEl.textContent = "Köşe silindi (Alt+tık)";
+        return;
+      }
+      colCornerDrag = {
+        street: true,
+        index: corner,
+        from: zone.pts.map((p) => [...p]),
+      };
+      controls.enabled = false;
+      renderer.domElement.setPointerCapture(event.pointerId);
+      statusEl.textContent = `Street alan köşe ${corner + 1} — sürükle`;
+      return;
+    }
+    // Prefer midpoint dots, else click anywhere on the edge line
+    let edge = hitPolyEdgeMid(gp0.x, gp0.z, zone.pts);
+    let insertAt = edge >= 0 ? [gp0.x, gp0.z] : null;
+    if (edge < 0) {
+      const along = hitPolyEdgeAnywhere(gp0.x, gp0.z, zone.pts);
+      if (along) {
+        edge = along.edge;
+        insertAt = [along.x, along.z];
+      }
+    }
+    if (edge >= 0 && insertAt) {
+      if (placing) endPaletteDrag();
+      if (zone.pts.length >= STREET_WALK_MAX_PTS) {
+        statusEl.textContent = `En fazla ${STREET_WALK_MAX_PTS} köşe`;
+        return;
+      }
+      const from = zone.pts.map((p) => [...p]);
+      zone.pts.splice(edge + 1, 0, insertAt);
+      colCornerDrag = {
+        street: true,
+        index: edge + 1,
+        from,
+      };
+      controls.enabled = false;
+      renderer.domElement.setPointerCapture(event.pointerId);
+      updateStreetWalkGizmo();
+      schedulePersistScene();
+      statusEl.textContent = "Street alan — kenara nokta eklendi (sarı nokta / kenar çizgisi)";
+      return;
+    }
   }
 
   raycaster.setFromCamera(pointer, camera);
@@ -4376,6 +4964,12 @@ function onPointerMove(event) {
     setPointerFromEvent(event);
     const gp = groundHit();
     if (!gp) return;
+    if (colCornerDrag.street) {
+      const zone = ensureStreetWalkZone();
+      zone.pts[colCornerDrag.index] = [gp.x, gp.z];
+      updateStreetWalkGizmo();
+      return;
+    }
     setColWorldPt(colCornerDrag.obj, colCornerDrag.index, gp.x, gp.z);
     updateColGizmo(colCornerDrag.obj);
     return;
@@ -4405,6 +4999,32 @@ function onPointerMove(event) {
 
 async function onPointerUp(event) {
   if (colCornerDrag) {
+    if (colCornerDrag.street) {
+      const from = colCornerDrag.from;
+      const to = ensureStreetWalkZone().pts.map((p) => [...p]);
+      const changed =
+        from.length !== to.length ||
+        from.some((p, i) => p[0] !== to[i]?.[0] || p[1] !== to[i]?.[1]);
+      if (changed) {
+        pushUndo({
+          undo() {
+            sceneWalkZone.pts = from.map((p) => [...p]);
+            updateStreetWalkGizmo();
+            schedulePersistScene();
+          },
+        });
+        schedulePersistScene();
+      }
+      colCornerDrag = null;
+      if (viewportMode !== "9x16") controls.enabled = true;
+      statusEl.textContent = "Street yürüyüş alanı güncellendi";
+      try {
+        renderer.domElement.releasePointerCapture(event.pointerId);
+      } catch {
+        /* */
+      }
+      return;
+    }
     const { obj, from } = colCornerDrag;
     const to = ensureColData(obj).pts.map((p) => ({ fx: p.fx, fz: p.fz }));
     const changed =
@@ -4460,11 +5080,11 @@ async function onPointerUp(event) {
       );
     }
     dragFrom = null;
-    dragging = null;
-    controls.enabled = true;
-    try {
-      renderer.domElement.releasePointerCapture(event.pointerId);
-    } catch {
+  dragging = null;
+  controls.enabled = true;
+  try {
+    renderer.domElement.releasePointerCapture(event.pointerId);
+  } catch {
       /* */
     }
     return;
@@ -4757,7 +5377,7 @@ async function boot() {
     ) {
       await loadScene(localData, { persist: false });
     }
-  } catch (err) {
+      } catch (err) {
     console.warn("scene restore", err);
   }
 
@@ -4775,15 +5395,33 @@ function tickAnims(dt) {
     if (!anim?.frames?.length) continue;
     anim.accum += dt;
     const step = 1 / (anim.fps || 3.5);
+    let ended = false;
     while (anim.accum >= step) {
       anim.accum -= step;
-      anim.frame = (anim.frame + 1) % anim.frames.length;
+      if (anim.once) {
+        if (anim.frame < anim.frames.length - 1) anim.frame += 1;
+        else {
+          ended = true;
+          break;
+        }
+      } else {
+        anim.frame = (anim.frame + 1) % anim.frames.length;
+      }
+    }
+    if (obj.userData.busy === "jump" && anim.once) {
+      const u =
+        anim.frames.length > 1 ? anim.frame / (anim.frames.length - 1) : 1;
+      obj.userData.ollieU = u;
+      const hop = obj.userData.skating ? 26 : 16;
+      obj.position.y = Math.sin(Math.PI * u) * hop;
+      if (obj.userData.skating) syncSkateboardUnderRider(obj);
     }
     const tex = anim.frames[anim.frame];
     if (obj.material.map !== tex) {
       obj.material.map = tex;
       obj.material.needsUpdate = true;
     }
+    if (ended && obj.userData.busy === "jump") finishNpcJump(obj);
   }
 }
 
@@ -4812,34 +5450,116 @@ function resolveBallVsSolid(ball, phy) {
   }
 }
 
-function kickBallsFromPlayer() {
-  if (!player?.mesh) return;
-  const px = player.mesh.position.x;
-  const pz = player.mesh.position.z + FEET_NUDGE_Z;
-  const pr = player.radius || 22;
-  for (const ball of pickables) {
-    const phy = ball.userData?.physics;
-    if (!ball.userData?.ball || !phy) continue;
-    const dx = ball.position.x - px;
-    const dz = ball.position.z - pz;
-    const dist = Math.hypot(dx, dz) || 0.0001;
-    const minDist = pr + phy.r;
-    if (dist >= minDist) continue;
-    // separate so we don't stick inside the player
-    const push = (minDist - dist) / dist;
-    ball.position.x += dx * push;
-    ball.position.z += dz * push;
-    const nx = dx / dist;
-    const nz = dz / dist;
-    const move = Math.hypot(player.vx || 0, player.vz || 0);
-    const impulse = BALL_KICK * (0.35 + move * 18);
-    phy.vx += nx * impulse + (player.vx || 0) * 28;
-    phy.vz += nz * impulse + (player.vz || 0) * 28;
+/** Closest boundary point + outward normal for a polygon. */
+function closestPolyEdgeHit(px, pz, pts) {
+  let bestD = Infinity;
+  let best = null;
+  for (let i = 0; i < pts.length; i++) {
+    const [ax, az] = pts[i];
+    const [bx, bz] = pts[(i + 1) % pts.length];
+    const abx = bx - ax;
+    const abz = bz - az;
+    const ab2 = abx * abx + abz * abz || 1e-12;
+    let t = ((px - ax) * abx + (pz - az) * abz) / ab2;
+    t = Math.max(0, Math.min(1, t));
+    const qx = ax + abx * t;
+    const qz = az + abz * t;
+    const d = Math.hypot(px - qx, pz - qz);
+    if (d >= bestD) continue;
+    bestD = d;
+    let nx = -(bz - az);
+    let nz = bx - ax;
+    const len = Math.hypot(nx, nz) || 1;
+    nx /= len;
+    nz /= len;
+    // Ensure outward: a step along normal from edge mid should leave the poly
+    const mx = (ax + bx) * 0.5 + nx * 3;
+    const mz = (az + bz) * 0.5 + nz * 3;
+    if (pointInPoly(mx, mz, pts)) {
+      nx = -nx;
+      nz = -nz;
+    }
+    best = { qx, qz, nx, nz, d: bestD };
+  }
+  return best;
+}
+
+/** Keep balls inside street walkZone — bounce off the boundary. */
+function resolveBallVsWalkZone(ball, phy) {
+  if (!streetWalkActive()) return;
+  const pts = ensureStreetWalkZone().pts;
+  if (!pts?.length) return;
+  const r = Math.max(6, phy.r || 10);
+  const x = ball.position.x;
+  const z = ball.position.z;
+  const hit = closestPolyEdgeHit(x, z, pts);
+  if (!hit) return;
+  const inside = pointInPoly(x, z, pts);
+  if (!inside || hit.d < r) {
+    const inset = r + 1;
+    ball.position.x = hit.qx - hit.nx * inset;
+    ball.position.z = hit.qz - hit.nz * inset;
+    // Reflect outward velocity component
+    const vn = phy.vx * hit.nx + phy.vz * hit.nz;
+    if (vn > 0) {
+      phy.vx -= (1 + BALL_BOUNCE) * vn * hit.nx;
+      phy.vz -= (1 + BALL_BOUNCE) * vn * hit.nz;
+    }
+  }
+}
+
+/** Kick balls from Main + cast (other players) — same feet collision. */
+function kickBallsFromActors() {
+  const actors = [];
+  if (player?.mesh && !player.driving && player.mesh.visible !== false) {
+    actors.push({
+      x: player.mesh.position.x,
+      z: player.mesh.position.z + FEET_NUDGE_Z,
+      r: player.radius || 22,
+      vx: player.vx || 0,
+      vz: player.vz || 0,
+    });
+  }
+  for (const obj of pickables) {
+    if (obj.userData?.kind !== "character") continue;
+    if (obj.visible === false || obj.userData?.driving) continue;
+    const dx = obj.userData._moveDx || 0;
+    const dz = obj.userData._moveDz || 0;
+    // Approximate velocity from last script step (units/frame → /sec ~ *60)
+    actors.push({
+      x: obj.position.x,
+      z: obj.position.z + FEET_NUDGE_Z,
+      r: NPC_WALK_RADIUS,
+      vx: dx * 60,
+      vz: dz * 60,
+    });
+    obj.userData._moveDx = 0;
+    obj.userData._moveDz = 0;
+  }
+  for (const a of actors) {
+    for (const ball of pickables) {
+      const phy = ball.userData?.physics;
+      if (!ball.userData?.ball || !phy) continue;
+      const dx = ball.position.x - a.x;
+      const dz = ball.position.z - a.z;
+      const dist = Math.hypot(dx, dz) || 0.0001;
+      const minDist = a.r + phy.r;
+      if (dist >= minDist) continue;
+      const push = (minDist - dist) / dist;
+      ball.position.x += dx * push;
+      ball.position.z += dz * push;
+      const nx = dx / dist;
+      const nz = dz / dist;
+      const move = Math.hypot(a.vx, a.vz);
+      const impulse = BALL_KICK * (0.35 + move * 18);
+      phy.vx += nx * impulse + a.vx * 28;
+      phy.vz += nz * impulse + a.vz * 28;
+    }
   }
 }
 
 function tickBallPhysics(dt) {
-  kickBallsFromPlayer();
+  kickBallsFromActors();
   const damp = Math.exp(-BALL_FRICTION * dt);
   for (const ball of pickables) {
     const phy = ball.userData?.physics;
@@ -4859,6 +5579,7 @@ function tickBallPhysics(dt) {
       phy.vz = 0;
     }
     resolveBallVsSolid(ball, phy);
+    resolveBallVsWalkZone(ball, phy);
     // ball ↔ ball
     for (const other of pickables) {
       if (other === ball || !other.userData?.ball) continue;
@@ -5055,14 +5776,14 @@ function tick(now) {
         syncCameraRig(MAP_VIEW);
       } else {
         const p = occupiedVehicle ? occupiedVehicle.position : player.mesh.position;
-        const t = 1 - Math.pow(0.0008, dt);
-        controls.target.x += (p.x - controls.target.x) * t;
-        controls.target.z += (p.z - controls.target.z) * t;
-        camera.position.x = controls.target.x + CAM_OFFSET.x;
-        camera.position.y = controls.target.y + CAM_OFFSET.y;
-        camera.position.z = controls.target.z + CAM_OFFSET.z;
-      }
+      const t = 1 - Math.pow(0.0008, dt);
+      controls.target.x += (p.x - controls.target.x) * t;
+      controls.target.z += (p.z - controls.target.z) * t;
+      camera.position.x = controls.target.x + CAM_OFFSET.x;
+      camera.position.y = controls.target.y + CAM_OFFSET.y;
+      camera.position.z = controls.target.z + CAM_OFFSET.z;
     }
+  }
   }
   if (viewportMode !== "9x16") controls.update();
   updateVehiclePrompt();

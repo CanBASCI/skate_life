@@ -210,6 +210,54 @@ body {
   flex-direction: column;
   align-items: flex-end;
   gap: 6px;
+  max-height: calc(100% - 20px);
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-bottom: 4px;
+  pointer-events: auto;
+}
+
+#street-walk {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+#street-walk.hidden {
+  display: none;
+}
+
+#street-walk .insp-check {
+  margin: 0;
+  gap: 6px;
+  color: var(--ink);
+  font-size: 11px;
+}
+
+#street-walk-reset,
+#street-walk-fit {
+  appearance: none;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 3px 8px;
+  background: #1c2a22;
+  color: var(--accent);
+  font: inherit;
+  font-size: 10px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+#street-walk-reset:hover,
+#street-walk-fit:hover {
+  border-color: var(--accent);
 }
 
 #viewport-toggle,
