@@ -1201,14 +1201,18 @@
         22,
         256,
         227
-      ]
+      ],
+      "tileable": true,
+      "tileSize": 256
     },
     {
       "id": "18eb27e9-632e-42db-a6a3-7efad873c2ed",
       "name": "road",
       "state": "road_Night",
       "size": "256x256",
-      "path": "assets/props/road/road/256x256/night"
+      "path": "assets/props/road/road/256x256/night",
+      "tileable": true,
+      "tileSize": 256
     },
     {
       "id": "68e39e19-eb3e-4552-9a09-ddc77425e27d",
@@ -1833,6 +1837,28 @@
       "path": "assets/props/roadTiles/64x64/t_w",
       "tileable": true,
       "tileSize": 64
+    },
+    {
+      "id": "road-straight-ends-day",
+      "kind": "object",
+      "w": 256,
+      "h": 256,
+      "state": "D\u00fcz u\u00e7 Day (perspektifli)",
+      "name": "roadStraightEnds",
+      "path": "assets/props/road/roadStraightEnds/256x256/day",
+      "tileable": true,
+      "tileSize": 256
+    },
+    {
+      "id": "road-straight-ends-night",
+      "kind": "object",
+      "w": 256,
+      "h": 256,
+      "state": "D\u00fcz u\u00e7 Night (perspektifli)",
+      "name": "roadStraightEnds",
+      "path": "assets/props/road/roadStraightEnds/256x256/night",
+      "tileable": true,
+      "tileSize": 256
     }
   ]
 }

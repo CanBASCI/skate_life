@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
-import { Player, dirFromVector } from "./player.js?v=skateOllieTip";
+import { Player, dirFromVector } from "./player.js?v=vaultMove";
 import {
   loadCatalog,
   groupByCat,
@@ -45,6 +45,11 @@ let lastTs = performance.now();
 let selected = null;
 let catalogItemById = new Map();
 let placing = null; // catalog item while dragging from palette
+/** @type {{ x:number, z:number } | null} */
+let dragFrom = null;
+/** @type {{ undo:()=>void, discard?:()=>void }[]} */
+const undoStack = [];
+const UNDO_MAX = 60;
 /** @type {THREE.Object3D | null} */
 let occupiedVehicle = null;
 let nearbyVehicle = null;
@@ -272,6 +277,12 @@ async function loadAnyTexture(urls) {
 function opaqueHits(hits, alphaThr = 8) {
   const out = [];
   for (const hit of hits) {
+    const ud = hit.object?.userData;
+    // Flat / tileable roads: pick by mesh so drag-move works reliably
+    if (ud?.layer === "ground" || ud?.tileable) {
+      out.push(hit);
+      continue;
+    }
     if (!hit.uv) continue;
     const map = hit.object.material?.map;
     const data = map?.userData?.alpha;
@@ -304,6 +315,8 @@ function defaultScale(item) {
   if (item.kind === "object" && item.path.includes("/buildings/")) return BUILDING_SCALE;
   // tuned vs 96px character; E-ride / parked board same scale
   if (isSkateboardPath(item.path)) return 0.7;
+  // roads / tileable paths — user prefers large default
+  if (isRoadTileItem(item) || /\/props\/road\//i.test(item.path || "")) return 4;
   return 1;
 }
 
@@ -421,8 +434,7 @@ function enterSkateboard(board) {
   board.visible = true;
   player.mesh.position.x = board.position.x;
   player.mesh.position.z = board.position.z;
-  player.ring.position.x = board.position.x;
-  player.ring.position.z = board.position.z;
+  player.syncRing(board.position.x, board.position.z);
   if (board.userData.dir) player.facing = board.userData.dir;
   player.startSkating();
   syncSkateboardUnderPlayer();
@@ -463,8 +475,7 @@ function exitSkateboard() {
     if (!solidBlocked(nx, nz, pr)) {
       player.mesh.position.x = nx;
       player.mesh.position.z = nz;
-      player.ring.position.x = nx;
-      player.ring.position.z = nz;
+      player.syncRing(nx, nz);
       if (player.syncDepth) player.syncDepth(player.mesh);
       break;
     }
@@ -637,8 +648,7 @@ function exitVehicle() {
   }
 
   player.mesh.position.set(spot.x, 0, spot.z);
-  player.ring.position.x = spot.x;
-  player.ring.position.z = spot.z;
+  player.syncRing(spot.x, spot.z);
   player.driving = false;
   player.setVisible(true);
   if (companion) {
@@ -1366,9 +1376,18 @@ function setMap(obj, tex) {
   applyScale(obj);
 }
 
-async function setDirection(obj, dir) {
+async function setDirection(obj, dir, { recordUndo = true } = {}) {
   const d = obj.userData;
   if (!d.dirs?.includes(dir) && !d.rotTextures?.[dir]) return;
+  const prevDir = d.dir;
+  if (prevDir === dir) return;
+  if (recordUndo && obj.userData?.editable) {
+    pushUndo({
+      undo() {
+        setDirection(obj, prevDir, { recordUndo: false });
+      },
+    });
+  }
   d.dir = dir;
   // Characters / pets with idle clips keep anim path
   if ((d.idleSlug || d.anim) && !d.vehicle && !d.rotTextures?.[dir]) {
@@ -1409,7 +1428,7 @@ async function setDirection(obj, dir) {
   }
 }
 
-async function spawnItem(item, x, z) {
+async function spawnItem(item, x, z, opts = {}) {
   const { tex } = await loadAnyTexture(item.thumbs);
   let dirs = await probeDirs(item.path);
   // Vehicles/buildings/skateboard: always try full 8-dir atlas
@@ -1424,20 +1443,20 @@ async function spawnItem(item, x, z) {
   const fromTex = DIRS.filter((d) => rotTextures[d]);
   if (fromTex.length) dirs = fromTex;
   else if (rotTextures.unknown) dirs = ["unknown"];
-  const scale = defaultScale(item);
+  const scale = opts.scale != null ? Number(opts.scale) : defaultScale(item);
   const w = tex.image.width;
   const h = tex.image.height;
   const tileable = isRoadTileItem(item);
-  const tileSize = (item.tileSize || w || 64) * scale;
-  if (tileable) {
-    const sn = snapRoadPos(x, z, tileSize);
-    x = sn.x;
-    z = sn.z;
-  }
-  const dir = dirs.includes("south") ? "south" : dirs[0] || "south";
+  const baseTile = item.tileSize || w || 64;
+  const tileSize = baseTile * scale;
+  // exactPos / free drop: no grid snap (Shift+ok extend uses exactPos)
+  const dir =
+    (opts.dir && dirs.includes(opts.dir) && opts.dir) ||
+    (dirs.includes("south") ? "south" : dirs[0] || "south");
   const userData = {
     kind: item.kind,
     catalogId: item.id,
+    catalogKey: `${item.id}:${item.path}`,
     label: item.label,
     path: item.path,
     w,
@@ -1454,6 +1473,7 @@ async function spawnItem(item, x, z) {
     skateboard: isSkateboardPath(item.path),
     vaultable: isVaultablePath(item.path),
     tileable,
+    baseTile,
     tileSize,
   };
   if (userData.vehicle) {
@@ -1512,6 +1532,7 @@ async function spawnItem(item, x, z) {
   }
 
   selectObject(obj);
+  if (opts.recordUndo !== false) pushSpawnUndo(obj);
   return obj;
 }
 
@@ -1523,6 +1544,93 @@ function selectObject(obj) {
   }
   inspector.classList.remove("hidden");
   refreshInspector();
+}
+
+function pushUndo(entry) {
+  undoStack.push(entry);
+  while (undoStack.length > UNDO_MAX) {
+    const old = undoStack.shift();
+    try {
+      old.discard?.();
+    } catch {
+      /* */
+    }
+  }
+}
+
+function disposePlacedObject(obj) {
+  if (!obj) return;
+  obj.material?.map?.dispose?.();
+  obj.material?.dispose?.();
+  obj.geometry?.dispose?.();
+}
+
+function detachPlacedObject(obj) {
+  if (!obj) return;
+  if (selected === obj) selectObject(null);
+  if (companion === obj) companion = null;
+  scene.remove(obj);
+  const i = pickables.indexOf(obj);
+  if (i >= 0) pickables.splice(i, 1);
+}
+
+function attachPlacedObject(obj) {
+  if (!obj) return;
+  if (!obj.parent) scene.add(obj);
+  if (!pickables.includes(obj)) pickables.push(obj);
+  syncDepth(obj);
+}
+
+function undoLast() {
+  const entry = undoStack.pop();
+  if (!entry) {
+    statusEl.textContent = "Geri alınacak bir şey yok";
+    return;
+  }
+  try {
+    entry.undo();
+    statusEl.textContent = "Geri alındı";
+  } catch (err) {
+    console.warn("undo", err);
+    statusEl.textContent = "Geri alma başarısız";
+  }
+}
+
+function pushSpawnUndo(obj) {
+  if (!obj) return;
+  pushUndo({
+    undo() {
+      detachPlacedObject(obj);
+      disposePlacedObject(obj);
+    },
+  });
+}
+
+function pushMoveUndo(obj, fromX, fromZ, toX, toZ) {
+  if (!obj) return;
+  if (fromX === toX && fromZ === toZ) return;
+  pushUndo({
+    undo() {
+      obj.position.x = fromX;
+      obj.position.z = fromZ;
+      syncDepth(obj);
+      if (selected === obj) refreshInspector();
+      else selectObject(obj);
+    },
+  });
+}
+
+function pushDeleteUndo(obj) {
+  if (!obj) return;
+  pushUndo({
+    undo() {
+      attachPlacedObject(obj);
+      selectObject(obj);
+    },
+    discard() {
+      disposePlacedObject(obj);
+    },
+  });
 }
 
 function refreshInspector() {
@@ -1581,30 +1689,91 @@ function refreshInspector() {
 
 inspX.addEventListener("change", () => {
   if (!selected) return;
-  selected.position.x = Number(inspX.value) || 0;
+  const fromX = selected.position.x;
+  const toX = Number(inspX.value) || 0;
+  selected.position.x = toX;
   syncDepth(selected);
+  pushMoveUndo(selected, fromX, selected.position.z, toX, selected.position.z);
 });
 inspZ.addEventListener("change", () => {
   if (!selected) return;
-  selected.position.z = Number(inspZ.value) || 0;
+  const fromZ = selected.position.z;
+  const toZ = Number(inspZ.value) || 0;
+  selected.position.z = toZ;
   syncDepth(selected);
+  pushMoveUndo(selected, selected.position.x, fromZ, selected.position.x, toZ);
+});
+let scaleBefore = null;
+inspScale.addEventListener("pointerdown", () => {
+  if (!selected) return;
+  scaleBefore = selected.userData.scale;
 });
 inspScale.addEventListener("input", () => {
   if (!selected) return;
   selected.userData.scale = Number(inspScale.value);
   inspScaleVal.textContent = selected.userData.scale.toFixed(2);
+  if (selected.userData.tileable) {
+    const base = selected.userData.baseTile || selected.userData.w || 64;
+    selected.userData.tileSize = base * selected.userData.scale;
+  }
   applyScale(selected);
 });
+inspScale.addEventListener("change", () => {
+  if (!selected || scaleBefore == null) return;
+  const obj = selected;
+  const from = scaleBefore;
+  const to = obj.userData.scale;
+  scaleBefore = null;
+  if (from === to) return;
+  pushUndo({
+    undo() {
+      obj.userData.scale = from;
+      if (obj.userData.tileable) {
+        const base = obj.userData.baseTile || obj.userData.w || 64;
+        obj.userData.tileSize = base * from;
+      }
+      applyScale(obj);
+      if (selected === obj) refreshInspector();
+      else selectObject(obj);
+    },
+  });
+});
+
+/** Shift+arrows: append a same-scale road tile on that edge of the selection. */
+async function extendSelectedRoad(dx, dz) {
+  const src = selected;
+  if (!src?.userData?.tileable || !src.userData.editable) return false;
+  const d = src.userData;
+  const stepX = (d.w || 64) * (d.scale || 1);
+  const stepZ = (d.h || 64) * (d.scale || 1);
+  const x = src.position.x + dx * stepX;
+  const z = src.position.z + dz * stepZ;
+  const item =
+    catalogItemById.get(d.catalogKey) ||
+    catalogItemById.get(`${d.catalogId}:${d.path}`) ||
+    [...catalogItemById.values()].find((it) => it.path === d.path);
+  if (!item) {
+    statusEl.textContent = "Yol kataloğu bulunamadı";
+    return false;
+  }
+  statusEl.textContent = "Yol ekleniyor…";
+  try {
+    await spawnItem(item, x, z, { scale: d.scale, dir: d.dir, exactPos: true });
+    statusEl.textContent = "Yol eklendi";
+  } catch (err) {
+    console.warn(err);
+    statusEl.textContent = "Yol eklenemedi";
+    return false;
+  }
+  return true;
+}
 inspDelete.addEventListener("click", () => {
   if (!selected || !selected.userData.editable) return;
-  if (selected === companion) companion = null;
   if (selected === occupiedVehicle) return;
-  scene.remove(selected);
-  const i = pickables.indexOf(selected);
-  if (i >= 0) pickables.splice(i, 1);
-  selected.material?.map?.dispose?.();
-  selected.material?.dispose?.();
-  selectObject(null);
+  const obj = selected;
+  detachPlacedObject(obj);
+  pushDeleteUndo(obj);
+  statusEl.textContent = "Silindi (Ctrl+Z geri alır)";
 });
 
 function setPointerFromEvent(event) {
@@ -1620,22 +1789,27 @@ function groundHit() {
 
 function onPointerDown(event) {
   if (event.button !== 0) return;
-  if (placing) return;
   if (occupiedVehicle) return;
+  // If a palette ghost is active but user grabbed a placed object, move that — don't spawn
   setPointerFromEvent(event);
   raycaster.setFromCamera(pointer, camera);
   raycaster.camera = camera;
   const hits = opaqueHits(raycaster.intersectObjects(pickables, false));
   if (!hits.length) {
+    if (placing) return; // keep palette-drag → canvas drop flow
     selectObject(null);
     return;
   }
   const obj = hits[0].object;
   if (!obj.userData.editable || obj.userData.occupied) {
+    if (placing) return;
     selectObject(null);
     return;
   }
+  // Moving an existing piece cancels pending palette place
+  if (placing) endPaletteDrag();
   dragging = obj;
+  dragFrom = { x: obj.position.x, z: obj.position.z };
   selectObject(obj);
   controls.enabled = false;
   const gp = groundHit();
@@ -1654,12 +1828,14 @@ function onPointerMove(event) {
   setPointerFromEvent(event);
   const gp = groundHit();
   if (!gp) return;
+  // Free placement (like buildings). Hold Shift to snap roads to tile grid.
   let nx = gp.x + dragOffset.x;
   let nz = gp.z + dragOffset.z;
-  if (dragging.userData?.tileable) {
-    const sn = snapRoadPos(nx, nz, dragging.userData.tileSize || 64);
-    nx = sn.x;
-    nz = sn.z;
+  if (dragging.userData?.tileable && event.shiftKey) {
+    const stepX = (dragging.userData.w || 64) * (dragging.userData.scale || 1);
+    const stepZ = (dragging.userData.h || 64) * (dragging.userData.scale || 1);
+    nx = Math.round(nx / stepX) * stepX;
+    nz = Math.round(nz / stepZ) * stepZ;
   }
   dragging.position.x = nx;
   dragging.position.z = nz;
@@ -1671,6 +1847,40 @@ function onPointerMove(event) {
 }
 
 async function onPointerUp(event) {
+  // Finish move first — never spawn a copy when relocating a placed object
+  if (dragging) {
+    // Optional snap only if Shift held on release (default: free like buildings)
+    if (dragging.userData?.tileable && event.shiftKey) {
+      const stepX = (dragging.userData.w || 64) * (dragging.userData.scale || 1);
+      const stepZ = (dragging.userData.h || 64) * (dragging.userData.scale || 1);
+      dragging.position.x = Math.round(dragging.position.x / stepX) * stepX;
+      dragging.position.z = Math.round(dragging.position.z / stepZ) * stepZ;
+      syncDepth(dragging);
+    }
+    if (selected === dragging) {
+      inspX.value = Math.round(dragging.position.x);
+      inspZ.value = Math.round(dragging.position.z);
+    }
+    if (dragFrom) {
+      pushMoveUndo(
+        dragging,
+        dragFrom.x,
+        dragFrom.z,
+        dragging.position.x,
+        dragging.position.z,
+      );
+    }
+    dragFrom = null;
+    dragging = null;
+    controls.enabled = true;
+    try {
+      renderer.domElement.releasePointerCapture(event.pointerId);
+    } catch {
+      /* */
+    }
+    return;
+  }
+
   if (placing) {
     setPointerFromEvent(event);
     const gp = groundHit();
@@ -1679,39 +1889,13 @@ async function onPointerUp(event) {
     if (gp) {
       statusEl.textContent = "Yerleştiriliyor…";
       try {
-        let x = gp.x;
-        let z = gp.z;
-        if (isRoadTileItem(item)) {
-          const sn = snapRoadPos(x, z, (item.tileSize || 64) * defaultScale(item));
-          x = sn.x;
-          z = sn.z;
-        }
-        await spawnItem(item, x, z);
+        await spawnItem(item, gp.x, gp.z);
         statusEl.textContent = "Hazır";
       } catch (err) {
         console.warn(err);
         statusEl.textContent = "Yüklenemedi";
       }
     }
-    return;
-  }
-  if (!dragging) return;
-  if (dragging.userData?.tileable) {
-    const sn = snapRoadPos(
-      dragging.position.x,
-      dragging.position.z,
-      dragging.userData.tileSize || 64,
-    );
-    dragging.position.x = sn.x;
-    dragging.position.z = sn.z;
-    syncDepth(dragging);
-  }
-  dragging = null;
-  controls.enabled = true;
-  try {
-    renderer.domElement.releasePointerCapture(event.pointerId);
-  } catch {
-    /* */
   }
 }
 
@@ -1722,6 +1906,13 @@ renderer.domElement.addEventListener("pointercancel", onPointerUp);
 
 window.addEventListener("keydown", (e) => {
   if (e.target.matches?.("input, textarea")) return;
+
+  // Ctrl/Cmd+Z — undo editor actions (place / move / delete / rotate / scale)
+  if ((e.ctrlKey || e.metaKey) && (e.key === "z" || e.key === "Z") && !e.shiftKey) {
+    e.preventDefault();
+    undoLast();
+    return;
+  }
 
   // P: spawn / dismiss companion pet
   if ((e.key === "p" || e.key === "P") && !e.repeat) {
@@ -1756,6 +1947,22 @@ window.addEventListener("keydown", (e) => {
 
   if (!selected || !selected.userData.editable) return;
   if (occupiedVehicle || player?.skating) return;
+
+  // Shift+←/→/↑/↓: extend tileable road from selected edge (keeps Boyut + yön)
+  if (e.shiftKey && selected.userData.tileable && !e.repeat) {
+    let dx = 0;
+    let dz = 0;
+    if (e.key === "ArrowRight") dx = 1;
+    else if (e.key === "ArrowLeft") dx = -1;
+    else if (e.key === "ArrowUp") dz = -1;
+    else if (e.key === "ArrowDown") dz = 1;
+    if (dx || dz) {
+      e.preventDefault();
+      extendSelectedRoad(dx, dz);
+      return;
+    }
+  }
+
   // clockwise compass so Q/E steps N→NE→E→… (not jumping to odd diagonals)
   const TURN_DIRS = [
     "north",

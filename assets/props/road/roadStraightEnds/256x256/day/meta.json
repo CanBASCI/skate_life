@@ -1,0 +1,10 @@
+{
+  "id": "road-straight-ends-day",
+  "name": "roadStraightEnds",
+  "state": "roadStraightEnds_Day",
+  "size": "256x256",
+  "path": "assets/props/road/roadStraightEnds/256x256/day",
+  "tileable": true,
+  "tileSize": 256,
+  "note": "Original road_Day look; only E/W ends straightened for tiling. Perspective kept."
+}

@@ -116,6 +116,12 @@ export function skateRiderFacing(travelDir) {
 const SKATE_SPRITE_CENTER_Y = 0.04;
 
 /**
+ * Ground ring sits at mesh xz (sprite bottom). Art has ~15–18px pad under feet,
+ * so the body reads north of the ring — nudge ring toward screen-up (-Z).
+ */
+const RING_NUDGE_Z = -16;
+
+/**
  * PixelLab drew dance east/west (and diagonals) smaller in the 96 canvas
  * (~54px tall vs south ~64px). Boost those dirs so visual size matches south.
  */
@@ -200,6 +206,14 @@ export class Player {
     if (this.ring) this.ring.visible = on;
   }
 
+  /** Keep ground ring under the visible character (not raw sprite anchor). */
+  syncRing(x = this.mesh?.position.x, z = this.mesh?.position.z) {
+    if (!this.ring || x == null || z == null) return;
+    this.ring.position.x = x;
+    this.ring.position.z = z + RING_NUDGE_Z;
+    this.ring.position.y = 0.2;
+  }
+
   tryMove(dx, dz) {
     if (!this.mesh) return;
     if (!dx && !dz) {
@@ -271,7 +285,7 @@ export class Player {
       new THREE.MeshBasicMaterial({ color: 0xc6e86b, transparent: true, opacity: 0.75 }),
     );
     this.ring.rotation.x = -Math.PI / 2;
-    this.ring.position.set(this.spawn.x, 0.2, this.spawn.z);
+    this.ring.position.set(this.spawn.x, 0.2, this.spawn.z + RING_NUDGE_Z);
     this.scene.add(this.ring);
 
     window.addEventListener("keydown", this._boundKeyDown);
@@ -460,13 +474,14 @@ export class Player {
       else if (crouch) speed = CROUCH_SPEED;
       else if (canSprint) speed = RUN_SPEED;
       else speed = WALK_SPEED;
-    } else if (this.busy === "jump") {
+    } else if (this.busy === "jump" || (this.busy === "vault" && !this.vaultMove)) {
+      // jump / free vault: keep moving in held WASD dir (like Space)
       speed = moving
-        ? (this.skating ? SKATE_SPEED * 0.9 : WALK_SPEED * 0.85)
+        ? (this.skating ? SKATE_SPEED * 0.9 : WALK_SPEED * 0.95)
         : 0;
     }
 
-    // vault: lerp over obstacle (ignore its collision)
+    // vault over obstacle: lerp to far side
     if (this.busy === "vault" && this.vaultMove) {
       const vm = this.vaultMove;
       vm.t += dt;
@@ -476,17 +491,16 @@ export class Player {
       const z0 = this.mesh.position.z;
       this.mesh.position.x = vm.fromX + (vm.toX - vm.fromX) * s;
       this.mesh.position.z = vm.fromZ + (vm.toZ - vm.fromZ) * s;
-      // slight lift so vault reads “over” the object
       this.mesh.position.y = Math.sin(Math.PI * u) * 18;
       this.vx = this.mesh.position.x - x0;
       this.vz = this.mesh.position.z - z0;
     } else {
-      if (this.busy === "jump") {
-        // ollie arc — board syncs to this.y / ollieU while skating
-        const jcfg = SETS.jump;
+      if (this.busy === "jump" || (this.busy === "vault" && !this.vaultMove)) {
+        const jcfg = SETS[this.busy] || SETS.jump;
         const u = Math.min(1, (this.frame + this.accum * jcfg.fps) / jcfg.frames);
-        this.ollieU = u;
-        this.mesh.position.y = Math.sin(Math.PI * u) * (this.skating ? 26 : 16);
+        this.ollieU = this.busy === "jump" ? u : 0;
+        const hop = this.busy === "jump" ? (this.skating ? 26 : 16) : 14;
+        this.mesh.position.y = Math.sin(Math.PI * u) * hop;
       } else {
         this.ollieU = 0;
         if (this.mesh.position.y !== 0) this.mesh.position.y = 0;
@@ -496,8 +510,7 @@ export class Player {
       }
     }
 
-    this.ring.position.x = this.mesh.position.x;
-    this.ring.position.z = this.mesh.position.z;
+    this.syncRing();
 
     const cfg = SETS[this.anim];
     const fps =
