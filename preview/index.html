@@ -6,7 +6,7 @@
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
     <meta http-equiv="Pragma" content="no-cache" />
     <title>skate_life — editor</title>
-    <link rel="stylesheet" href="./style.css?v=20251113inspFreeDrag" />
+    <link rel="stylesheet" href="./style.css?v=20251113prompt10" />
     <script type="importmap">
       {
         "imports": {
@@ -78,7 +78,7 @@
           <button type="button" id="insp-delete" class="danger">Sil</button>
         </div>
         <div id="chat-bar">
-          <input id="chat-input" type="text" maxlength="48" autocomplete="off" placeholder="Mesaj veya /R3 /dance /jump /sit /stop…" />
+          <input id="chat-input" type="text" maxlength="48" autocomplete="off" placeholder="Mesaj veya /R3 /dance /jump /sit /e /stop…" />
           <button type="button" id="chat-send">Gönder</button>
         </div>
       </main>
@@ -93,10 +93,10 @@
     </div>
 
     <!-- fixed overlay: always above WebGL canvas / sprites -->
-    <div id="prompt" class="hidden"><kbd>E</kbd> <span id="prompt-text">Bin</span></div>
+    <div id="prompt" class="hidden"><kbd id="prompt-key">/E</kbd> <span id="prompt-text">bin</span></div>
     <div id="stamina" class="hidden"><div id="stamina-fill"></div></div>
     <div id="drag-ghost" class="hidden"></div>
     <div id="world-labels"></div>
-    <script type="module" src="./main.js?v=20251113hudDrag"></script>
+    <script type="module" src="./main.js?v=20251113namePad3"></script>
   </body>
 </html>

@@ -406,6 +406,18 @@ def object_out_path(row: dict) -> Path | None:
             return ROOT / "assets" / "props" / prop_folder / slug(item) / size / dn
         return ROOT / "assets" / "props" / prop_folder / slug(st) / size / "default"
 
+    # Standalone park props named at top level in PixelLab (e.g. "tree")
+    if name in {"tree"}:
+        return (
+            ROOT
+            / "assets"
+            / "props"
+            / "outdoorPark"
+            / slug(name)
+            / size
+            / slug(state or "default")
+        )
+
     if name in {"skateboard"}:
         return ROOT / "assets" / "objects" / "skateboard" / size / slug(state or "default")
 

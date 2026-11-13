@@ -495,6 +495,290 @@
   ],
   "objects": [
     {
+      "id": "11d82a70-1368-49ac-b2f4-d74b06501d4f",
+      "name": "vehicles",
+      "state": "ambulance_Day",
+      "size": "170x170",
+      "path": "assets/vehicles/ambulance/168x168/day",
+      "replaces": "7752487f-fd99-433c-abda-b15364885caa",
+      "note": "regenerated: true E/W side profiles"
+    },
+    {
+      "id": "3d518fba-fc31-4aa8-b80c-866138fcfbf5",
+      "name": "vehicles",
+      "state": "ambulance_Night",
+      "size": "170x170",
+      "path": "assets/vehicles/ambulance/168x168/night",
+      "source_day": "11d82a70-1368-49ac-b2f4-d74b06501d4f"
+    },
+    {
+      "id": "38046849-2689-4e3a-aef3-f907b1603df5",
+      "name": "vehicles",
+      "state": "americanSchoolBus_Day",
+      "size": "168x168",
+      "path": "assets/vehicles/americanschoolbus/168x168/day"
+    },
+    {
+      "id": "0ec13038-daeb-4dbb-a1bd-999d1f3d6ea5",
+      "name": "vehicles",
+      "state": "americanSchoolBus_Night",
+      "size": "168x168",
+      "path": "assets/vehicles/americanschoolbus/168x168/night"
+    },
+    {
+      "id": "2537df49-4251-430c-bc7e-1f1857e6e814",
+      "kind": "object",
+      "w": 168,
+      "h": 168,
+      "state": "car_Day",
+      "name": "vehicles",
+      "path": "assets/vehicles/car/168x168/day",
+      "canvasBeforeTrim": [
+        168,
+        168
+      ],
+      "canvasTrimmed": [
+        96,
+        116
+      ],
+      "trimBox": [
+        10,
+        24,
+        157,
+        145
+      ],
+      "trimMode": "per-frame-tight"
+    },
+    {
+      "id": "8e857539-f9ab-47c2-b0b8-a0c689f90948",
+      "name": "vehicles",
+      "state": "car_Night",
+      "size": "168x168",
+      "path": "assets/vehicles/car/168x168/night"
+    },
+    {
+      "id": "34ae5e0f-8af8-4469-872b-7589ecd483b3",
+      "name": "vehicles",
+      "state": "car_2_Day",
+      "size": "168x168",
+      "path": "assets/vehicles/car_2/168x168/day"
+    },
+    {
+      "id": "e3135b16-8670-49a6-af81-8c0d4da64f4d",
+      "name": "vehicles",
+      "state": "car_2_Night",
+      "size": "168x168",
+      "path": "assets/vehicles/car_2/168x168/night"
+    },
+    {
+      "id": "0e527171-dc2f-4862-8d17-61ecfedffb50",
+      "name": "vehicles",
+      "state": "car_3_Day",
+      "size": "168x168",
+      "path": "assets/vehicles/car_3/168x168/day"
+    },
+    {
+      "id": "7181a582-7a7a-4b48-8f3b-4c45eb57ee8c",
+      "name": "vehicles",
+      "state": "car_3_Night",
+      "size": "168x168",
+      "path": "assets/vehicles/car_3/168x168/night"
+    },
+    {
+      "id": "13c42195-bbfd-4cfe-bae3-f0849237fb24",
+      "name": "vehicles",
+      "state": "car_4_Day",
+      "size": "168x168",
+      "path": "assets/vehicles/car_4/168x168/day"
+    },
+    {
+      "id": "24022396-76ef-4eb7-8383-0344264c5714",
+      "name": "vehicles",
+      "state": "car_4_Night",
+      "size": "168x168",
+      "path": "assets/vehicles/car_4/168x168/night"
+    },
+    {
+      "id": "cca460f0-2ff7-4a21-8624-9b092347d504",
+      "name": "vehicles",
+      "state": "car_5_Day",
+      "size": "168x168",
+      "path": "assets/vehicles/car_5/168x168/day"
+    },
+    {
+      "id": "1b1b3d35-e352-409a-907a-dd94cdd13ef1",
+      "name": "vehicles",
+      "state": "car_5_Night",
+      "size": "168x168",
+      "path": "assets/vehicles/car_5/168x168/night"
+    },
+    {
+      "id": "1c4eb834-aa56-4204-90fa-4d787de7efd6",
+      "name": "vehicles",
+      "state": "fishingBoat_Day",
+      "size": "168x168",
+      "path": "assets/vehicles/fishingboat/168x168/day"
+    },
+    {
+      "id": "40600f4f-4cc5-48d8-985d-a0c3538331c9",
+      "name": "vehicles",
+      "state": "fishingBoat_Night",
+      "size": "168x168",
+      "path": "assets/vehicles/fishingboat/168x168/night"
+    },
+    {
+      "id": "57887af1-6edf-40bb-8185-1d482694e894",
+      "kind": "object",
+      "w": 168,
+      "h": 168,
+      "state": "jeep_Day",
+      "name": "vehicles",
+      "path": "assets/vehicles/jeep/168x168/day",
+      "canvasBeforeTrim": [
+        168,
+        168
+      ],
+      "canvasTrimmed": [
+        83,
+        119
+      ],
+      "trimBox": [
+        10,
+        21,
+        157,
+        148
+      ],
+      "trimMode": "per-frame-tight"
+    },
+    {
+      "id": "3f418965-9f59-4e74-b717-d6c8fd1b9c4c",
+      "name": "vehicles",
+      "state": "motorboat_Day",
+      "size": "168x168",
+      "path": "assets/vehicles/motorboat/168x168/day"
+    },
+    {
+      "id": "e40aa23a-40e7-4ab7-9feb-6ab20affac1b",
+      "name": "vehicles",
+      "state": "motorboat_Night",
+      "size": "168x168",
+      "path": "assets/vehicles/motorboat/168x168/night"
+    },
+    {
+      "id": "135b524b-9c78-4076-9ad6-e5bf13c9c4f8",
+      "name": "vehicles",
+      "state": "passenger_ferry_Day",
+      "size": "168x168",
+      "path": "assets/vehicles/passenger_ferry/168x168/day"
+    },
+    {
+      "id": "0fae2a21-0f62-4509-97dd-8937c1df6f1a",
+      "name": "vehicles",
+      "state": "passenger_ferry_Night",
+      "size": "168x168",
+      "path": "assets/vehicles/passenger_ferry/168x168/night"
+    },
+    {
+      "id": "5df31d10-1d62-4c62-ba7a-e786797aaea0",
+      "kind": "object",
+      "w": 168,
+      "h": 168,
+      "state": "pickup_Day",
+      "name": "vehicles",
+      "path": "assets/vehicles/pickup/168x168/day",
+      "canvasBeforeTrim": [
+        168,
+        168
+      ],
+      "canvasTrimmed": [
+        87,
+        114
+      ],
+      "trimBox": [
+        10,
+        24,
+        156,
+        143
+      ],
+      "trimMode": "per-frame-tight"
+    },
+    {
+      "id": "161c25f4-a738-41f9-b5b9-9d23df16afcc",
+      "name": "vehicles",
+      "state": "pickup_Night",
+      "size": "168x168",
+      "path": "assets/vehicles/pickup/168x168/night"
+    },
+    {
+      "id": "e66cc731-f6d0-4e5a-a1e8-60ab66fba3af",
+      "name": "vehicles",
+      "state": "pickup_2_Day",
+      "size": "168x168",
+      "path": "assets/vehicles/pickup_2/168x168/day"
+    },
+    {
+      "id": "dbd323d7-c4e2-4391-8546-3f14fe819539",
+      "name": "vehicles",
+      "state": "pickup_2_Night",
+      "size": "168x168",
+      "path": "assets/vehicles/pickup_2/168x168/night"
+    },
+    {
+      "id": "7c2a0aec-06db-436e-babe-f22036c54450",
+      "kind": "object",
+      "w": 168,
+      "h": 168,
+      "state": "police_Day",
+      "name": "vehicles",
+      "path": "assets/vehicles/police/168x168/day",
+      "canvasBeforeTrim": [
+        168,
+        168
+      ],
+      "canvasTrimmed": [
+        87,
+        116
+      ],
+      "trimBox": [
+        7,
+        20,
+        154,
+        141
+      ],
+      "trimMode": "per-frame-tight"
+    },
+    {
+      "id": "61627e0d-c8a7-424e-93bd-fa2e4660a253",
+      "name": "vehicles",
+      "state": "police_Night",
+      "size": "168x168",
+      "path": "assets/vehicles/police/168x168/night"
+    },
+    {
+      "id": "38046849-2689-4e3a-aef3-f907b1603df5",
+      "kind": "object",
+      "w": 168,
+      "h": 168,
+      "state": "americanSchoolBus_Day",
+      "name": "vehicles",
+      "path": "assets/vehicles/schoolBus/168x168/day",
+      "canvasBeforeTrim": [
+        168,
+        168
+      ],
+      "canvasTrimmed": [
+        80,
+        127
+      ],
+      "trimBox": [
+        5,
+        12,
+        160,
+        147
+      ],
+      "trimMode": "per-frame-tight"
+    },
+    {
       "id": "df82558b-9c85-4598-95df-3f2223d94ca0",
       "name": "5floorBuilding",
       "state": "day",
@@ -507,80 +791,6 @@
       "state": "night",
       "size": "256x256",
       "path": "assets/buildings/5floorbuilding/256x256/night"
-    },
-    {
-      "id": "e7f357cb-164e-4142-8939-18e76f6bd19d",
-      "name": "Isometric high school bui...",
-      "state": "night",
-      "size": "256x256",
-      "path": "assets/buildings/highSchool/256x256/night"
-    },
-    {
-      "id": "b0922e88-e0f0-4a16-ad16-aea1387d7bbe",
-      "kind": "object",
-      "w": 256,
-      "h": 256,
-      "state": "day",
-      "name": "Isometric high school building with yellow school",
-      "path": "assets/buildings/highSchool/256x256/day",
-      "canvasBeforeTrim": [
-        256,
-        256
-      ],
-      "canvasTrimmed": [
-        234,
-        199
-      ],
-      "trimBox": [
-        11,
-        34,
-        245,
-        233
-      ]
-    },
-    {
-      "id": "81afdafa-e299-423d-ba43-372176109707",
-      "name": "Isometric police station ...",
-      "state": "night",
-      "size": "256x256",
-      "path": "assets/buildings/policeStation/256x256/night"
-    },
-    {
-      "id": "9c8cbd08-8ae0-44b3-a6b7-ce732a51bb78",
-      "kind": "object",
-      "w": 256,
-      "h": 256,
-      "state": "day",
-      "name": "Isometric police station building with patrol cars",
-      "path": "assets/buildings/policeStation/256x256/day",
-      "canvasBeforeTrim": [
-        256,
-        256
-      ],
-      "canvasTrimmed": [
-        241,
-        200
-      ],
-      "trimBox": [
-        8,
-        30,
-        249,
-        230
-      ]
-    },
-    {
-      "id": "1bd2c765-5ffd-41db-adcd-fce626c69078",
-      "name": "Isometric university camp...",
-      "state": "day",
-      "size": "256x256",
-      "path": "assets/buildings/university/256x256/day"
-    },
-    {
-      "id": "8867bae4-5617-477a-8671-661e20e29879",
-      "name": "Isometric university camp...",
-      "state": "night",
-      "size": "256x256",
-      "path": "assets/buildings/university/256x256/night"
     },
     {
       "id": "8a4c6583-69fc-4dec-937d-de0a5655415d",
@@ -609,66 +819,6 @@
       "state": "night",
       "size": "256x256",
       "path": "assets/buildings/amusementpark/256x256/night"
-    },
-    {
-      "id": "a141d75e-bf04-42f9-88e8-d94a70cde90e",
-      "name": "balls",
-      "state": "baskerball_Night",
-      "size": "32x32",
-      "path": "assets/props/balls/baskerball/32x32/night"
-    },
-    {
-      "id": "0c185fd2-fd73-45b5-9215-dc0ef23c3381",
-      "kind": "object",
-      "w": 32,
-      "h": 32,
-      "state": "basketball_Day",
-      "name": "balls",
-      "path": "assets/props/balls/basketball/32x32/day",
-      "canvasBeforeTrim": [
-        32,
-        32
-      ],
-      "canvasTrimmed": [
-        22,
-        22
-      ],
-      "trimBox": [
-        5,
-        6,
-        27,
-        28
-      ]
-    },
-    {
-      "id": "bc9c4190-994f-4710-9061-2e97aea39d23",
-      "kind": "object",
-      "w": 32,
-      "h": 32,
-      "state": "football_Day",
-      "name": "balls",
-      "path": "assets/props/balls/football/32x32/day",
-      "canvasBeforeTrim": [
-        32,
-        32
-      ],
-      "canvasTrimmed": [
-        20,
-        20
-      ],
-      "trimBox": [
-        6,
-        6,
-        26,
-        26
-      ]
-    },
-    {
-      "id": "2b29e57c-be2f-4672-aaa1-49495f6e997a",
-      "name": "balls",
-      "state": "football_Night",
-      "size": "32x32",
-      "path": "assets/props/balls/football/32x32/night"
     },
     {
       "id": "0406ea49-229e-4946-8418-3a3ddbfc8f25",
@@ -861,13 +1011,6 @@
       "path": "assets/buildings/footballstadium/256x256/night"
     },
     {
-      "id": "bb449830-8304-4d45-991f-b44212e02644",
-      "name": "gas station, vibrant vivi...",
-      "state": null,
-      "size": "256x256",
-      "path": "assets/objects/misc/gas_station_vibrant_vivi/256x256/default"
-    },
-    {
       "id": "d0a4ec51-8dae-4fbf-a6f1-6e3e57b60ce6",
       "kind": "object",
       "w": 256,
@@ -940,6 +1083,36 @@
       "path": "assets/buildings/gothicchurch/256x256/night"
     },
     {
+      "id": "b0922e88-e0f0-4a16-ad16-aea1387d7bbe",
+      "kind": "object",
+      "w": 256,
+      "h": 256,
+      "state": "day",
+      "name": "Isometric high school building with yellow school",
+      "path": "assets/buildings/highSchool/256x256/day",
+      "canvasBeforeTrim": [
+        256,
+        256
+      ],
+      "canvasTrimmed": [
+        234,
+        199
+      ],
+      "trimBox": [
+        11,
+        34,
+        245,
+        233
+      ]
+    },
+    {
+      "id": "e7f357cb-164e-4142-8939-18e76f6bd19d",
+      "name": "Isometric high school bui...",
+      "state": "night",
+      "size": "256x256",
+      "path": "assets/buildings/highSchool/256x256/night"
+    },
+    {
       "id": "456f3674-01d2-4c94-b66f-0dff2a4af083",
       "kind": "object",
       "w": 256,
@@ -968,13 +1141,6 @@
       "state": "night",
       "size": "256x256",
       "path": "assets/buildings/hospital/256x256/night"
-    },
-    {
-      "id": "e47fe1f5-6b5f-4e20-9574-a23858a749e7",
-      "name": "inside",
-      "state": null,
-      "size": "256x256",
-      "path": "assets/interiors/inside/256x256/default"
     },
     {
       "id": "e2af539f-1d7c-4a2e-9a61-da491b8a3e45",
@@ -1007,36 +1173,6 @@
       "path": "assets/buildings/library/256x256/night"
     },
     {
-      "id": "2e1456d8-375f-48c0-8a95-225304148120",
-      "kind": "object",
-      "w": 128,
-      "h": 128,
-      "state": "trafficLight_Day",
-      "name": "lights",
-      "path": "assets/props/lights/trafficLight/128x128/day",
-      "canvasBeforeTrim": [
-        128,
-        128
-      ],
-      "canvasTrimmed": [
-        31,
-        107
-      ],
-      "trimBox": [
-        48,
-        10,
-        79,
-        117
-      ]
-    },
-    {
-      "id": "481512f5-24e6-4e36-afb3-cdc3d1656ea3",
-      "name": "lights",
-      "state": "trafficLight_Night",
-      "size": "128x128",
-      "path": "assets/props/lights/trafficlight/128x128/night"
-    },
-    {
       "id": "7d3aa23b-e62d-46db-b65c-2d2aeae3be25",
       "name": "modernLuxuryVilla",
       "state": "day",
@@ -1065,80 +1201,6 @@
       "path": "assets/buildings/nightclub/256x256/night"
     },
     {
-      "id": "9031a7cf-e8bd-4f36-b6cf-4dce2129440a",
-      "name": "night_club_inside",
-      "state": null,
-      "size": "256x256",
-      "path": "assets/interiors/night_club_inside/256x256/default"
-    },
-    {
-      "id": "5e384d8a-a9ac-42c8-b27e-0165adc0d670",
-      "name": "nightclub interior, wide ...",
-      "state": null,
-      "size": "256x256",
-      "path": "assets/interiors/nightclub_interior_wide/256x256/default"
-    },
-    {
-      "id": "468b842d-e086-4352-866e-50288fc0b035",
-      "kind": "object",
-      "w": 96,
-      "h": 96,
-      "state": "bench_Day",
-      "name": "outdoorPark",
-      "path": "assets/props/outdoorPark/bench/96x96/day",
-      "canvasBeforeTrim": [
-        96,
-        96
-      ],
-      "canvasTrimmed": [
-        88,
-        83
-      ],
-      "trimBox": [
-        4,
-        7,
-        92,
-        90
-      ]
-    },
-    {
-      "id": "66b33123-ec87-4a5a-a7f3-315b4074d086",
-      "name": "outdoorPark",
-      "state": "bench_Night",
-      "size": "96x96",
-      "path": "assets/props/outdoorpark/bench/96x96/night"
-    },
-    {
-      "id": "fddfeb71-0299-4ed1-8581-eb5da7545b49",
-      "kind": "object",
-      "w": 96,
-      "h": 96,
-      "state": "table_Day",
-      "name": "outdoorPark",
-      "path": "assets/props/outdoorPark/table/96x96/day",
-      "canvasBeforeTrim": [
-        96,
-        96
-      ],
-      "canvasTrimmed": [
-        87,
-        83
-      ],
-      "trimBox": [
-        5,
-        7,
-        92,
-        90
-      ]
-    },
-    {
-      "id": "3f766d55-ce97-427e-8609-3b7cfab3d1f3",
-      "name": "outdoorPark",
-      "state": "table_Night",
-      "size": "96x96",
-      "path": "assets/props/outdoorpark/table/96x96/night"
-    },
-    {
       "id": "bb3f3793-d960-4e7d-bb75-211cf6608ac1",
       "name": "petShop",
       "state": "day",
@@ -1153,6 +1215,36 @@
       "path": "assets/buildings/petshop/256x256/night"
     },
     {
+      "id": "9c8cbd08-8ae0-44b3-a6b7-ce732a51bb78",
+      "kind": "object",
+      "w": 256,
+      "h": 256,
+      "state": "day",
+      "name": "Isometric police station building with patrol cars",
+      "path": "assets/buildings/policeStation/256x256/day",
+      "canvasBeforeTrim": [
+        256,
+        256
+      ],
+      "canvasTrimmed": [
+        241,
+        200
+      ],
+      "trimBox": [
+        8,
+        30,
+        249,
+        230
+      ]
+    },
+    {
+      "id": "81afdafa-e299-423d-ba43-372176109707",
+      "name": "Isometric police station ...",
+      "state": "night",
+      "size": "256x256",
+      "path": "assets/buildings/policeStation/256x256/night"
+    },
+    {
       "id": "0999ff4c-83b5-470b-9124-8dad14bace43",
       "name": "postOffice",
       "state": "day",
@@ -1165,61 +1257,6 @@
       "state": "night",
       "size": "256x256",
       "path": "assets/buildings/postoffice/256x256/night"
-    },
-    {
-      "id": "487ec03a-3466-48fe-90c4-2b1c2ac5c35c",
-      "name": "road",
-      "state": "bridge_Day",
-      "size": "256x256",
-      "path": "assets/props/road/bridge/256x256/day"
-    },
-    {
-      "id": "38523cda-b29d-4d3d-9b50-66f2eb24b997",
-      "name": "road",
-      "state": "bridge_Night",
-      "size": "256x256",
-      "path": "assets/props/road/bridge/256x256/night"
-    },
-    {
-      "id": "855407f6-1092-4800-af78-9f1dead2af55",
-      "kind": "object",
-      "w": 256,
-      "h": 256,
-      "state": "road_Day",
-      "name": "road",
-      "path": "assets/props/road/road/256x256/day",
-      "canvasBeforeTrim": [
-        256,
-        256
-      ],
-      "canvasTrimmed": [
-        256,
-        205
-      ],
-      "trimBox": [
-        0,
-        22,
-        256,
-        227
-      ],
-      "tileable": true,
-      "tileSize": 256
-    },
-    {
-      "id": "18eb27e9-632e-42db-a6a3-7efad873c2ed",
-      "name": "road",
-      "state": "road_Night",
-      "size": "256x256",
-      "path": "assets/props/road/road/256x256/night",
-      "tileable": true,
-      "tileSize": 256
-    },
-    {
-      "id": "68e39e19-eb3e-4552-9a09-ddc77425e27d",
-      "name": "side view side-scroller n...",
-      "state": null,
-      "size": "256x256",
-      "path": "assets/interiors/side_view_side-scroller_n/256x256/default"
     },
     {
       "id": "be0390ec-42ce-4a93-a002-4ea8c34532b2",
@@ -1250,13 +1287,6 @@
       "state": "night",
       "size": "256x256",
       "path": "assets/buildings/singlehouse/256x256/night"
-    },
-    {
-      "id": "2c0c672d-7165-47d0-99f5-3b27bbf9b586",
-      "name": "skateboard",
-      "state": "base",
-      "size": "68x68",
-      "path": "assets/objects/skateboard/68x68/base"
     },
     {
       "id": "f8481f4a-0a7a-4fb6-aae6-300dcda9c4a4",
@@ -1347,293 +1377,88 @@
       "path": "assets/buildings/theater/256x256/night"
     },
     {
-      "id": "3d518fba-fc31-4aa8-b80c-866138fcfbf5",
-      "name": "vehicles",
-      "state": "ambulance_Night",
-      "size": "170x170",
-      "path": "assets/vehicles/ambulance/168x168/night"
+      "id": "1bd2c765-5ffd-41db-adcd-fce626c69078",
+      "name": "Isometric university camp...",
+      "state": "day",
+      "size": "256x256",
+      "path": "assets/buildings/university/256x256/day"
     },
     {
-      "id": "11d82a70-1368-49ac-b2f4-d74b06501d4f",
-      "state": "ambulance_Day",
-      "name": "vehicles",
-      "path": "assets/vehicles/ambulance/168x168/day",
-      "size": "170x170"
+      "id": "8867bae4-5617-477a-8671-661e20e29879",
+      "name": "Isometric university camp...",
+      "state": "night",
+      "size": "256x256",
+      "path": "assets/buildings/university/256x256/night"
     },
     {
-      "id": "38046849-2689-4e3a-aef3-f907b1603df5",
-      "name": "vehicles",
-      "state": "americanSchoolBus_Day",
-      "size": "168x168",
-      "path": "assets/vehicles/americanschoolbus/168x168/day"
+      "id": "a141d75e-bf04-42f9-88e8-d94a70cde90e",
+      "name": "balls",
+      "state": "baskerball_Night",
+      "size": "32x32",
+      "path": "assets/props/balls/baskerball/32x32/night"
     },
     {
-      "id": "0ec13038-daeb-4dbb-a1bd-999d1f3d6ea5",
-      "name": "vehicles",
-      "state": "americanSchoolBus_Night",
-      "size": "168x168",
-      "path": "assets/vehicles/americanschoolbus/168x168/night"
-    },
-    {
-      "id": "34ae5e0f-8af8-4469-872b-7589ecd483b3",
-      "name": "vehicles",
-      "state": "car_2_Day",
-      "size": "168x168",
-      "path": "assets/vehicles/car_2/168x168/day"
-    },
-    {
-      "id": "e3135b16-8670-49a6-af81-8c0d4da64f4d",
-      "name": "vehicles",
-      "state": "car_2_Night",
-      "size": "168x168",
-      "path": "assets/vehicles/car_2/168x168/night"
-    },
-    {
-      "id": "0e527171-dc2f-4862-8d17-61ecfedffb50",
-      "name": "vehicles",
-      "state": "car_3_Day",
-      "size": "168x168",
-      "path": "assets/vehicles/car_3/168x168/day"
-    },
-    {
-      "id": "7181a582-7a7a-4b48-8f3b-4c45eb57ee8c",
-      "name": "vehicles",
-      "state": "car_3_Night",
-      "size": "168x168",
-      "path": "assets/vehicles/car_3/168x168/night"
-    },
-    {
-      "id": "13c42195-bbfd-4cfe-bae3-f0849237fb24",
-      "name": "vehicles",
-      "state": "car_4_Day",
-      "size": "168x168",
-      "path": "assets/vehicles/car_4/168x168/day"
-    },
-    {
-      "id": "24022396-76ef-4eb7-8383-0344264c5714",
-      "name": "vehicles",
-      "state": "car_4_Night",
-      "size": "168x168",
-      "path": "assets/vehicles/car_4/168x168/night"
-    },
-    {
-      "id": "cca460f0-2ff7-4a21-8624-9b092347d504",
-      "name": "vehicles",
-      "state": "car_5_Day",
-      "size": "168x168",
-      "path": "assets/vehicles/car_5/168x168/day"
-    },
-    {
-      "id": "1b1b3d35-e352-409a-907a-dd94cdd13ef1",
-      "name": "vehicles",
-      "state": "car_5_Night",
-      "size": "168x168",
-      "path": "assets/vehicles/car_5/168x168/night"
-    },
-    {
-      "id": "2537df49-4251-430c-bc7e-1f1857e6e814",
+      "id": "0c185fd2-fd73-45b5-9215-dc0ef23c3381",
       "kind": "object",
-      "w": 168,
-      "h": 168,
-      "state": "car_Day",
-      "name": "vehicles",
-      "path": "assets/vehicles/car/168x168/day",
+      "w": 32,
+      "h": 32,
+      "state": "basketball_Day",
+      "name": "balls",
+      "path": "assets/props/balls/basketball/32x32/day",
       "canvasBeforeTrim": [
-        168,
-        168
+        32,
+        32
       ],
       "canvasTrimmed": [
-        96,
-        116
+        22,
+        22
       ],
       "trimBox": [
-        10,
-        24,
-        157,
-        145
-      ],
-      "trimMode": "per-frame-tight"
+        5,
+        6,
+        27,
+        28
+      ]
     },
     {
-      "id": "8e857539-f9ab-47c2-b0b8-a0c689f90948",
-      "name": "vehicles",
-      "state": "car_Night",
-      "size": "168x168",
-      "path": "assets/vehicles/car/168x168/night"
-    },
-    {
-      "id": "1c4eb834-aa56-4204-90fa-4d787de7efd6",
-      "name": "vehicles",
-      "state": "fishingBoat_Day",
-      "size": "168x168",
-      "path": "assets/vehicles/fishingboat/168x168/day"
-    },
-    {
-      "id": "40600f4f-4cc5-48d8-985d-a0c3538331c9",
-      "name": "vehicles",
-      "state": "fishingBoat_Night",
-      "size": "168x168",
-      "path": "assets/vehicles/fishingboat/168x168/night"
-    },
-    {
-      "id": "57887af1-6edf-40bb-8185-1d482694e894",
+      "id": "bc9c4190-994f-4710-9061-2e97aea39d23",
       "kind": "object",
-      "w": 168,
-      "h": 168,
-      "state": "jeep_Day",
-      "name": "vehicles",
-      "path": "assets/vehicles/jeep/168x168/day",
+      "w": 32,
+      "h": 32,
+      "state": "football_Day",
+      "name": "balls",
+      "path": "assets/props/balls/football/32x32/day",
       "canvasBeforeTrim": [
-        168,
-        168
+        32,
+        32
       ],
       "canvasTrimmed": [
-        83,
-        119
-      ],
-      "trimBox": [
-        10,
-        21,
-        157,
-        148
-      ],
-      "trimMode": "per-frame-tight"
-    },
-    {
-      "id": "3f418965-9f59-4e74-b717-d6c8fd1b9c4c",
-      "name": "vehicles",
-      "state": "motorboat_Day",
-      "size": "168x168",
-      "path": "assets/vehicles/motorboat/168x168/day"
-    },
-    {
-      "id": "e40aa23a-40e7-4ab7-9feb-6ab20affac1b",
-      "name": "vehicles",
-      "state": "motorboat_Night",
-      "size": "168x168",
-      "path": "assets/vehicles/motorboat/168x168/night"
-    },
-    {
-      "id": "135b524b-9c78-4076-9ad6-e5bf13c9c4f8",
-      "name": "vehicles",
-      "state": "passenger_ferry_Day",
-      "size": "168x168",
-      "path": "assets/vehicles/passenger_ferry/168x168/day"
-    },
-    {
-      "id": "0fae2a21-0f62-4509-97dd-8937c1df6f1a",
-      "name": "vehicles",
-      "state": "passenger_ferry_Night",
-      "size": "168x168",
-      "path": "assets/vehicles/passenger_ferry/168x168/night"
-    },
-    {
-      "id": "e66cc731-f6d0-4e5a-a1e8-60ab66fba3af",
-      "name": "vehicles",
-      "state": "pickup_2_Day",
-      "size": "168x168",
-      "path": "assets/vehicles/pickup_2/168x168/day"
-    },
-    {
-      "id": "dbd323d7-c4e2-4391-8546-3f14fe819539",
-      "name": "vehicles",
-      "state": "pickup_2_Night",
-      "size": "168x168",
-      "path": "assets/vehicles/pickup_2/168x168/night"
-    },
-    {
-      "id": "5df31d10-1d62-4c62-ba7a-e786797aaea0",
-      "kind": "object",
-      "w": 168,
-      "h": 168,
-      "state": "pickup_Day",
-      "name": "vehicles",
-      "path": "assets/vehicles/pickup/168x168/day",
-      "canvasBeforeTrim": [
-        168,
-        168
-      ],
-      "canvasTrimmed": [
-        87,
-        114
-      ],
-      "trimBox": [
-        10,
-        24,
-        156,
-        143
-      ],
-      "trimMode": "per-frame-tight"
-    },
-    {
-      "id": "161c25f4-a738-41f9-b5b9-9d23df16afcc",
-      "name": "vehicles",
-      "state": "pickup_Night",
-      "size": "168x168",
-      "path": "assets/vehicles/pickup/168x168/night"
-    },
-    {
-      "id": "7c2a0aec-06db-436e-babe-f22036c54450",
-      "kind": "object",
-      "w": 168,
-      "h": 168,
-      "state": "police_Day",
-      "name": "vehicles",
-      "path": "assets/vehicles/police/168x168/day",
-      "canvasBeforeTrim": [
-        168,
-        168
-      ],
-      "canvasTrimmed": [
-        87,
-        116
-      ],
-      "trimBox": [
-        7,
         20,
-        154,
-        141
+        20
       ],
-      "trimMode": "per-frame-tight"
+      "trimBox": [
+        6,
+        6,
+        26,
+        26
+      ]
     },
     {
-      "id": "61627e0d-c8a7-424e-93bd-fa2e4660a253",
-      "name": "vehicles",
-      "state": "police_Night",
-      "size": "168x168",
-      "path": "assets/vehicles/police/168x168/night"
+      "id": "2b29e57c-be2f-4672-aaa1-49495f6e997a",
+      "name": "balls",
+      "state": "football_Night",
+      "size": "32x32",
+      "path": "assets/props/balls/football/32x32/night"
     },
     {
-      "id": "road-straight-ends-day",
-      "kind": "object",
-      "w": 256,
-      "h": 256,
-      "state": "D\u00fcz u\u00e7 Day (perspektifli)",
-      "name": "roadStraightEnds",
-      "path": "assets/props/road/roadStraightEnds/256x256/day",
-      "tileable": true,
-      "tileSize": 256
-    },
-    {
-      "id": "road-straight-ends-night",
-      "kind": "object",
-      "w": 256,
-      "h": 256,
-      "state": "D\u00fcz u\u00e7 Night (perspektifli)",
-      "name": "roadStraightEnds",
-      "path": "assets/props/road/roadStraightEnds/256x256/night",
-      "tileable": true,
-      "tileSize": 256
-    },
-    {
-      "id": "ground-grass-day",
+      "id": "ground-concrete-day",
       "kind": "object",
       "w": 64,
       "h": 64,
       "name": "ground",
-      "state": "\u00c7imen_Day",
+      "state": "Beton_Day",
       "size": "64x64",
-      "path": "assets/props/ground/grass/64x64/day",
+      "path": "assets/props/ground/concrete/64x64/day",
       "tileable": true,
       "tileSize": 64,
       "pixellab_tiles_pro": "6befe256-f618-4da8-8948-32cb77a2cb82"
@@ -1652,24 +1477,202 @@
       "pixellab_tiles_pro": "6befe256-f618-4da8-8948-32cb77a2cb82"
     },
     {
-      "id": "ground-concrete-day",
+      "id": "ground-grass-day",
       "kind": "object",
       "w": 64,
       "h": 64,
       "name": "ground",
-      "state": "Beton_Day",
+      "state": "\u00c7imen_Day",
       "size": "64x64",
-      "path": "assets/props/ground/concrete/64x64/day",
+      "path": "assets/props/ground/grass/64x64/day",
       "tileable": true,
       "tileSize": 64,
       "pixellab_tiles_pro": "6befe256-f618-4da8-8948-32cb77a2cb82"
     },
     {
+      "id": "2e1456d8-375f-48c0-8a95-225304148120",
+      "kind": "object",
+      "w": 128,
+      "h": 128,
+      "state": "trafficLight_Day",
+      "name": "lights",
+      "path": "assets/props/lights/trafficLight/128x128/day",
+      "canvasBeforeTrim": [
+        128,
+        128
+      ],
+      "canvasTrimmed": [
+        31,
+        107
+      ],
+      "trimBox": [
+        48,
+        10,
+        79,
+        117
+      ]
+    },
+    {
+      "id": "481512f5-24e6-4e36-afb3-cdc3d1656ea3",
+      "name": "lights",
+      "state": "trafficLight_Night",
+      "size": "128x128",
+      "path": "assets/props/lights/trafficlight/128x128/night"
+    },
+    {
+      "id": "468b842d-e086-4352-866e-50288fc0b035",
+      "kind": "object",
+      "w": 96,
+      "h": 96,
+      "state": "bench_Day",
+      "name": "outdoorPark",
+      "path": "assets/props/outdoorPark/bench/96x96/day",
+      "canvasBeforeTrim": [
+        96,
+        96
+      ],
+      "canvasTrimmed": [
+        88,
+        83
+      ],
+      "trimBox": [
+        4,
+        7,
+        92,
+        90
+      ]
+    },
+    {
+      "id": "66b33123-ec87-4a5a-a7f3-315b4074d086",
+      "name": "outdoorPark",
+      "state": "bench_Night",
+      "size": "96x96",
+      "path": "assets/props/outdoorpark/bench/96x96/night"
+    },
+    {
+      "id": "fddfeb71-0299-4ed1-8581-eb5da7545b49",
+      "kind": "object",
+      "w": 96,
+      "h": 96,
+      "state": "table_Day",
+      "name": "outdoorPark",
+      "path": "assets/props/outdoorPark/table/96x96/day",
+      "canvasBeforeTrim": [
+        96,
+        96
+      ],
+      "canvasTrimmed": [
+        87,
+        83
+      ],
+      "trimBox": [
+        5,
+        7,
+        92,
+        90
+      ]
+    },
+    {
+      "id": "3f766d55-ce97-427e-8609-3b7cfab3d1f3",
+      "name": "outdoorPark",
+      "state": "table_Night",
+      "size": "96x96",
+      "path": "assets/props/outdoorpark/table/96x96/night"
+    },
+    {
+      "id": "899018b2-8bb1-479e-9ee7-a5354efc7089",
+      "name": "tree",
+      "state": null,
+      "size": "95x105",
+      "path": "assets/props/outdoorPark/tree/95x105/default"
+    },
+    {
+      "id": "487ec03a-3466-48fe-90c4-2b1c2ac5c35c",
+      "name": "road",
+      "state": "bridge_Day",
+      "size": "256x256",
+      "path": "assets/props/road/bridge/256x256/day"
+    },
+    {
+      "id": "38523cda-b29d-4d3d-9b50-66f2eb24b997",
+      "name": "road",
+      "state": "bridge_Night",
+      "size": "256x256",
+      "path": "assets/props/road/bridge/256x256/night"
+    },
+    {
+      "id": "855407f6-1092-4800-af78-9f1dead2af55",
+      "kind": "object",
+      "w": 256,
+      "h": 256,
+      "state": "road_Day",
+      "name": "road",
+      "path": "assets/props/road/road/256x256/day",
+      "canvasBeforeTrim": [
+        256,
+        256
+      ],
+      "canvasTrimmed": [
+        256,
+        205
+      ],
+      "trimBox": [
+        0,
+        22,
+        256,
+        227
+      ]
+    },
+    {
+      "id": "18eb27e9-632e-42db-a6a3-7efad873c2ed",
+      "name": "road",
+      "state": "road_Night",
+      "size": "256x256",
+      "path": "assets/props/road/road/256x256/night"
+    },
+    {
+      "id": "road-straight-ends-day",
+      "name": "roadStraightEnds",
+      "state": "roadStraightEnds_Day",
+      "size": "256x256",
+      "path": "assets/props/road/roadStraightEnds/256x256/day",
+      "tileable": true,
+      "tileSize": 256,
+      "note": "Original road_Day look; only E/W ends straightened for tiling. Perspective kept."
+    },
+    {
+      "id": "road-straight-ends-night",
+      "name": "roadStraightEnds",
+      "state": "roadStraightEnds_Night",
+      "size": "256x256",
+      "path": "assets/props/road/roadStraightEnds/256x256/night",
+      "tileable": true,
+      "tileSize": 256,
+      "note": "Original road_Day look; only E/W ends straightened for tiling. Perspective kept."
+    },
+    {
       "id": "db23110f-481a-4f79-9a7c-98a6b99ddb5e",
-      "name": "smallAnimals",
+      "kind": "object",
+      "w": 32,
+      "h": 32,
       "state": "bird_Day",
-      "size": "32x32",
+      "name": "smallAnimals",
       "path": "assets/props/smallAnimals/bird/32x32/day",
+      "canvasBeforeTrim": [
+        32,
+        32
+      ],
+      "canvasTrimmed": [
+        31,
+        30
+      ],
+      "trimBox": [
+        1,
+        1,
+        32,
+        31
+      ],
+      "size": "32x32",
       "animations": [
         "bird_standing_idle",
         "bird_walking"
@@ -1699,10 +1702,27 @@
     },
     {
       "id": "cd14dafa-9503-4a04-8d08-3dae5b794566",
-      "name": "smallAnimals",
+      "kind": "object",
+      "w": 32,
+      "h": 32,
       "state": "cat_Day",
-      "size": "32x32",
+      "name": "smallAnimals",
       "path": "assets/props/smallAnimals/cat/32x32/day",
+      "canvasBeforeTrim": [
+        32,
+        32
+      ],
+      "canvasTrimmed": [
+        31,
+        30
+      ],
+      "trimBox": [
+        1,
+        1,
+        32,
+        31
+      ],
+      "size": "32x32",
       "animations": [
         "cute_cat_idle",
         "walk"
@@ -1733,10 +1753,27 @@
     },
     {
       "id": "86dc40d3-5d28-4c56-812a-e9bb26e8a159",
-      "name": "smallAnimals",
+      "kind": "object",
+      "w": 32,
+      "h": 32,
       "state": "dog_Day",
-      "size": "32x32",
+      "name": "smallAnimals",
       "path": "assets/props/smallAnimals/dog/32x32/day",
+      "canvasBeforeTrim": [
+        32,
+        32
+      ],
+      "canvasTrimmed": [
+        30,
+        30
+      ],
+      "trimBox": [
+        1,
+        1,
+        31,
+        31
+      ],
+      "size": "32x32",
       "animations": [
         "dog_idle",
         "walk"
@@ -1776,6 +1813,55 @@
         "walk",
         "walking"
       ]
+    },
+    {
+      "id": "e47fe1f5-6b5f-4e20-9574-a23858a749e7",
+      "name": "inside",
+      "state": null,
+      "size": "256x256",
+      "path": "assets/interiors/inside/256x256/default"
+    },
+    {
+      "id": "9031a7cf-e8bd-4f36-b6cf-4dce2129440a",
+      "name": "night_club_inside",
+      "state": null,
+      "size": "256x256",
+      "path": "assets/interiors/night_club_inside/256x256/default"
+    },
+    {
+      "id": "5e384d8a-a9ac-42c8-b27e-0165adc0d670",
+      "name": "nightclub interior, wide ...",
+      "state": null,
+      "size": "256x256",
+      "path": "assets/interiors/nightclub_interior_wide/256x256/default"
+    },
+    {
+      "id": "68e39e19-eb3e-4552-9a09-ddc77425e27d",
+      "name": "side view side-scroller n...",
+      "state": null,
+      "size": "256x256",
+      "path": "assets/interiors/side_view_side-scroller_n/256x256/default"
+    },
+    {
+      "id": "bb449830-8304-4d45-991f-b44212e02644",
+      "name": "gas station, vibrant vivi...",
+      "state": null,
+      "size": "256x256",
+      "path": "assets/objects/misc/gas_station_vibrant_vivi/256x256/default"
+    },
+    {
+      "id": "2c0c672d-7165-47d0-99f5-3b27bbf9b586",
+      "name": "skateboard",
+      "state": "base",
+      "size": "68x68",
+      "path": "assets/objects/skateboard/68x68/base"
+    },
+    {
+      "id": "aa7c55db-4c5b-4b90-919a-47d29833c336",
+      "name": "skateboard",
+      "state": null,
+      "size": "68x68",
+      "path": "assets/objects/skateboard/68x68/default"
     }
   ]
 }

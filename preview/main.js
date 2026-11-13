@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
-import { Player, dirFromVector, FEET_NUDGE_Z } from "./player.js?v=chatJumpSit";
+import { Player, dirFromVector, FEET_NUDGE_Z } from "./player.js?v=skateScript";
 import {
   loadCatalog,
   groupByCat,
@@ -27,6 +27,7 @@ const DIR_LABELS = {
 const statusEl = document.getElementById("status");
 const hudEl = document.getElementById("hud");
 const promptEl = document.getElementById("prompt");
+const promptKeyEl = document.getElementById("prompt-key");
 const promptTextEl = document.getElementById("prompt-text");
 const staminaEl = document.getElementById("stamina");
 const staminaFillEl = document.getElementById("stamina-fill");
@@ -168,6 +169,9 @@ window.addEventListener("resize", () => {
   }
   if (hudPos && hudEl) applyHudPos(hudPos.left, hudPos.top);
 });
+
+/** Street intro gather point (map center) — everyone walks here from post office. */
+let streetGatherTarget = { x: 0, z: 88 };
 
 /** Free position of #hud after first drag (px, relative to #stage). */
 let hudPos = /** @type {{ left: number, top: number } | null} */ (null);
@@ -634,8 +638,35 @@ function tightTrimTexture(tex, thr = 1) {
   return trimmed;
 }
 
-function pixelTexture(url) {
-  if (texCache.has(url)) return texCache.get(url);
+/** Characters/animals keep native frame canvas (like Main). Tight-trim
+ *  per pose changes w×h every frame → sprite looks like it pulses. */
+function shouldTightTrimUrl(url) {
+  const s = String(url || "");
+  if (/\/characters\//i.test(s)) return false;
+  if (/\/animals\//i.test(s)) return false;
+  return true;
+}
+
+function attachAlphaUserData(tex) {
+  try {
+    const img = tex.image;
+    if (!img) return tex;
+    const c = document.createElement("canvas");
+    c.width = img.width;
+    c.height = img.height;
+    const g = c.getContext("2d", { willReadFrequently: true });
+    g.drawImage(img, 0, 0);
+    tex.userData = { alpha: g.getImageData(0, 0, c.width, c.height) };
+  } catch {
+    /* */
+  }
+  return tex;
+}
+
+function pixelTexture(url, opts = {}) {
+  const trim = opts.trim != null ? !!opts.trim : shouldTightTrimUrl(url);
+  const key = trim ? url : `${url}#notrim`;
+  if (texCache.has(key)) return texCache.get(key);
   const p = new Promise((resolve, reject) => {
     loader.load(
       url,
@@ -644,6 +675,10 @@ function pixelTexture(url) {
         tex.minFilter = THREE.NearestFilter;
         tex.generateMipmaps = false;
         tex.colorSpace = THREE.SRGBColorSpace;
+        if (!trim) {
+          resolve(attachAlphaUserData(tex));
+          return;
+        }
         try {
           resolve(tightTrimTexture(tex));
         } catch {
@@ -654,7 +689,7 @@ function pixelTexture(url) {
       reject,
     );
   });
-  texCache.set(url, p);
+  texCache.set(key, p);
   return p;
 }
 
@@ -773,6 +808,7 @@ function defaultScale(item) {
   if (/boat|ferry/i.test(item.path || "")) return 1.5;
   if (/outdoorPark\/bench|outdoorpark\/bench/i.test(item.path || "")) return 0.8;
   if (/outdoorPark\/table|outdoorpark\/table/i.test(item.path || "")) return 1;
+  if (/outdoorPark\/tree|outdoorpark\/tree/i.test(item.path || "")) return 1;
   if (/night_club_inside/i.test(item.path || "")) return 2.8;
   return 1;
 }
@@ -1016,11 +1052,12 @@ function updateStaminaBar() {
  * Screen-space E label above the vehicle sprite.
  * position:fixed + z-index 9999 — never under the WebGL canvas.
  */
-function showPromptAbove(obj, text) {
+function showPromptAbove(obj, text, key = "/E") {
   if (!obj || !promptEl) {
     hidePrompt();
     return;
   }
+  if (promptKeyEl) promptKeyEl.textContent = key;
   if (promptTextEl) promptTextEl.textContent = text;
   camera.updateMatrixWorld(true);
   const h = (obj.userData?.h || 48) * (obj.userData?.scale || 1);
@@ -1098,11 +1135,17 @@ function projectHeadScreen(obj) {
   // Sprite top in world units (center.y=0 → full scale.y above feet)
   const h = obj.scale?.y || (obj.userData?.h || 96) * (obj.userData?.scale || 1) || 96;
   const cy = obj.center?.y ?? 0;
-  // Main’s art has more empty pad under the canvas top — nudge name down a bit
-  const pad = player?.mesh && obj === player.mesh ? -10 : 2;
+  const isChar =
+    (player?.mesh && obj === player.mesh) || obj.userData?.kind === "character";
+  // Untrimmed 96×96 frames keep empty pad above the head — sit just above
+  // the visible crown, with a little air (not canvas-top float, not glued on).
+  const headFrac = isChar ? 0.87 : 1;
+  const pad = isChar ? 2 : 2;
   _camUp.setFromMatrixColumn(camera.matrixWorld, 1).normalize();
   // CSS translate(-50%, -100%) sits the name on this anchor
-  _promptWorld.copy(obj.position).addScaledVector(_camUp, h * (1 - cy) + pad);
+  _promptWorld
+    .copy(obj.position)
+    .addScaledVector(_camUp, h * (1 - cy) * headFrac + pad);
   _promptNdc.copy(_promptWorld).project(camera);
   if (Math.abs(_promptNdc.x) > 1.4 || Math.abs(_promptNdc.y) > 1.4) return null;
   const canvasRect = renderer.domElement.getBoundingClientRect();
@@ -1139,8 +1182,8 @@ function chatSpeaker() {
 const CHAT_MOVE_UNIT = 48;
 /** Speech bubble / chat message max length (commands ignored). */
 const CHAT_MSG_MAX = 48;
-/** @type {{ obj: THREE.Object3D, dx: number, dz: number, left: number, speed: number } | null} */
-let npcScriptMove = null;
+/** @type {{ obj: THREE.Object3D, dx: number, dz: number, left: number, speed: number, wait?: number }[]} */
+let npcScriptMoves = [];
 
 const CHAT_DIR_ALIASES = {
   n: "north",
@@ -1175,28 +1218,108 @@ function parseChatDirToken(tok) {
   return CHAT_DIR_ALIASES[key] || null;
 }
 
+function clearNpcScriptMoves(obj = null) {
+  if (!obj) {
+    npcScriptMoves = [];
+    return;
+  }
+  npcScriptMoves = npcScriptMoves.filter((sm) => sm.obj !== obj);
+}
+
+function enqueueNpcWalk(obj, dx, dz, dist, speed = 110, wait = 0) {
+  if (!obj || !(dist > 0)) return;
+  clearNpcScriptMoves(obj);
+  const len = Math.hypot(dx, dz) || 1;
+  npcScriptMoves.push({
+    obj,
+    dx: dx / len,
+    dz: dz / len,
+    left: dist,
+    speed,
+    wait: Math.max(0, wait),
+    stuck: 0,
+  });
+}
+
+function finishNpcWalk(obj) {
+  if (!obj?.userData) return;
+  const dir = obj.userData.dir || "south";
+  attachIdle(obj, obj.userData.path, dir, { allowSouthFallback: true }).catch(
+    () => {},
+  );
+}
+
+const NPC_WALK_RADIUS = 18;
+
+/** Axis-separate slide (same idea as Player.tryMove) — don't freeze on corners. */
+function npcTryStep(obj, dx, dz, radius = NPC_WALK_RADIUS) {
+  if (!obj) return 0;
+  const x0 = obj.position.x;
+  const z0 = obj.position.z;
+  const nx = x0 + dx;
+  const nz = z0 + dz;
+  const blockedAt = (x, z) =>
+    solidBlocked(x, z, radius) || characterBlocked(x, z, CHAR_SEP_MIN * 0.85, obj);
+  if (dx && !blockedAt(nx, z0 + FEET_NUDGE_Z)) {
+    obj.position.x = nx;
+  }
+  if (dz && !blockedAt(obj.position.x, nz + FEET_NUDGE_Z)) {
+    obj.position.z = nz;
+  }
+  if (obj.position.x !== x0 || obj.position.z !== z0) syncDepth(obj);
+  return Math.hypot(obj.position.x - x0, obj.position.z - z0);
+}
+
+/** Push spawn out of solids (garage lip / trees) before scripted walk. */
+function findClearSpawn(x, z, preferDx = -1, preferDz = 0, radius = NPC_WALK_RADIUS) {
+  if (!solidBlocked(x, z + FEET_NUDGE_Z, radius)) return { x, z };
+  const len = Math.hypot(preferDx, preferDz) || 1;
+  const ux = preferDx / len;
+  const uz = preferDz / len;
+  const ring = [
+    [ux, uz],
+    [-ux, -uz],
+    [1, 0],
+    [-1, 0],
+    [0, 1],
+    [0, -1],
+    [Math.SQRT1_2, Math.SQRT1_2],
+    [-Math.SQRT1_2, Math.SQRT1_2],
+    [Math.SQRT1_2, -Math.SQRT1_2],
+    [-Math.SQRT1_2, -Math.SQRT1_2],
+  ];
+  for (let d = 16; d <= 260; d += 14) {
+    for (const [rx, rz] of ring) {
+      const nx = x + rx * d;
+      const nz = z + rz * d;
+      if (!solidBlocked(nx, nz + FEET_NUDGE_Z, radius)) return { x: nx, z: nz };
+    }
+  }
+  return { x, z };
+}
+
 function tickNpcScriptMove(dt) {
-  if (!npcScriptMove?.obj) {
-    npcScriptMove = null;
-    return;
+  for (let i = npcScriptMoves.length - 1; i >= 0; i--) {
+    const sm = npcScriptMoves[i];
+    if (!sm?.obj?.parent || sm.obj.visible === false) {
+      npcScriptMoves.splice(i, 1);
+      continue;
+    }
+    if ((sm.wait || 0) > 0) {
+      sm.wait -= dt;
+      continue;
+    }
+    const step = Math.min(sm.left, sm.speed * dt);
+    const moved = npcTryStep(sm.obj, sm.dx * step, sm.dz * step);
+    // Like Main scriptMove: keep burning distance while sliding past blockers
+    sm.left -= Math.max(moved, step * 0.25);
+    if (moved < 0.04) sm.stuck = (sm.stuck || 0) + dt;
+    else sm.stuck = 0;
+    if (sm.left <= 0.5 || (sm.stuck || 0) > 1.4) {
+      finishNpcWalk(sm.obj);
+      npcScriptMoves.splice(i, 1);
+    }
   }
-  const sm = npcScriptMove;
-  if (!sm.obj.parent || sm.obj.visible === false) {
-    npcScriptMove = null;
-    return;
-  }
-  const step = Math.min(sm.left, sm.speed * dt);
-  const nx = sm.obj.position.x + sm.dx * step;
-  const nz = sm.obj.position.z + sm.dz * step;
-  // Soft block: skip step into solids (characters aren't solid to themselves)
-  const blocked = solidBlocked(nx, nz + FEET_NUDGE_Z, 18);
-  if (!blocked) {
-    sm.obj.position.x = nx;
-    sm.obj.position.z = nz;
-    syncDepth(sm.obj);
-  }
-  sm.left -= step;
-  if (sm.left <= 0.5 || blocked) npcScriptMove = null;
 }
 
 /** Swap …/states/<x>/… → …/states/<state>/… (sit/stand). */
@@ -1295,18 +1418,53 @@ async function handleChatCommand(raw) {
       statusEl.textContent = `${name}: sit`;
       return;
     }
-    npcScriptMove = null;
+    clearNpcScriptMoves(who);
     await setCharacterSitPose(who, true);
+    return;
+  }
+
+  // /e — same as E when "Bin" prompt is active (nearby skate/vehicle)
+  if (lower === "/e") {
+    if (!isPlayer) {
+      statusEl.textContent = "/e sadece Main için";
+      return;
+    }
+    if (player.skating || occupiedVehicle) {
+      statusEl.textContent = "Zaten bindin — inmek için /stop";
+      return;
+    }
+    if (nearbySkateboard) {
+      enterSkateboard(nearbySkateboard);
+      statusEl.textContent = `${name}: kaykaya bindi`;
+      return;
+    }
+    if (nearbyVehicle) {
+      enterVehicle(nearbyVehicle);
+      statusEl.textContent = `${name}: araca bindi`;
+      return;
+    }
+    statusEl.textContent = "Bin yok — önce E/Bin çıkan kaykaya veya araca yaklaş";
     return;
   }
 
   if (lower === "/stop") {
     if (isPlayer) {
+      // /stop = in (vehicle/skate) when mounted; else cancel dance/sit/walk
+      if (player.skating && occupiedSkateboard) {
+        exitSkateboard();
+        statusEl.textContent = `${name}: kaykaydan indi`;
+        return;
+      }
+      if (occupiedVehicle) {
+        exitVehicle();
+        statusEl.textContent = `${name}: araçtan indi`;
+        return;
+      }
       player.stopActions();
       statusEl.textContent = `${name}: stop`;
       return;
     }
-    npcScriptMove = null;
+    clearNpcScriptMoves(who);
     if (who.userData?.dancing || who.userData?.animName === "dance") {
       await setCharacterDancing(who, false);
     }
@@ -1347,25 +1505,17 @@ async function handleChatCommand(raw) {
     }
     who.userData.dir = dirName;
     applyFacing(who, dirName);
-    if (who.userData.dancing) {
-      who.userData.dancing = false;
-      await attachIdle(who, who.userData.path, dirName, { allowSouthFallback: false });
-    }
     if (who.userData.sitting || /\/states\/sit/i.test(who.userData.path || "")) {
       await setCharacterSitPose(who, false);
     }
-    npcScriptMove = {
-      obj: who,
-      dx,
-      dz,
-      left: dist,
-      speed: 110,
-    };
+    who.userData.dancing = false;
+    await attachWalk(who, who.userData.path, dirName, { allowSouthFallback: true });
+    enqueueNpcWalk(who, dx, dz, dist, 110);
     statusEl.textContent = `${name}: ${dirName} × ${birim}`;
     return;
   }
 
-  statusEl.textContent = "Komut: /R3 /dance /jump /sit /stop (büyük/küçük harf OK)";
+  statusEl.textContent = "Komut: /R3 /dance /jump /sit /e /stop (büyük/küçük harf OK)";
 }
 
 function sendChatMessage() {
@@ -1791,12 +1941,108 @@ function viewBoundsBlock(px, pz, radius = 22) {
   return false;
 }
 
+/** Soft personal space at feet — stops cast stacking on the same pixel. */
+const CHAR_SEP_MIN = 30;
+const CHAR_SEP_PUSH = 70;
+
+function isSeparableCharacter(obj) {
+  if (!obj?.visible || obj.visible === false) return false;
+  if (obj === player?.mesh) return !occupiedVehicle;
+  return obj.userData?.kind === "character" && obj.userData?.editable !== false;
+}
+
+function listSeparableCharacters() {
+  const out = [];
+  if (player?.mesh && isSeparableCharacter(player.mesh)) out.push(player.mesh);
+  for (const obj of pickables) {
+    if (obj === player?.mesh) continue;
+    if (isSeparableCharacter(obj)) out.push(obj);
+  }
+  return out;
+}
+
+/** Another cast member's feet too close to (px,pz)? */
+function characterBlocked(px, pz, radius, exceptObj = null) {
+  const need = radius > 0 ? radius : CHAR_SEP_MIN;
+  for (const obj of listSeparableCharacters()) {
+    if (obj === exceptObj) continue;
+    if (dragging && obj === dragging) continue;
+    const ox = obj.position.x;
+    const oz = obj.position.z + FEET_NUDGE_Z;
+    const dx = px - ox;
+    const dz = pz - oz;
+    if (dx * dx + dz * dz < need * need) return true;
+  }
+  return false;
+}
+
+function trySepMove(obj, dx, dz) {
+  if (!obj || (!dx && !dz)) return;
+  const x0 = obj.position.x;
+  const z0 = obj.position.z;
+  const nx = x0 + dx;
+  const nz = z0 + dz;
+  const r = obj === player?.mesh ? player.radius || 22 : NPC_WALK_RADIUS;
+  if (dx && !solidBlocked(nx, z0 + FEET_NUDGE_Z, r)) obj.position.x = nx;
+  if (dz && !solidBlocked(obj.position.x, nz + FEET_NUDGE_Z, r)) {
+    obj.position.z = nz;
+  }
+  if (obj.position.x !== x0 || obj.position.z !== z0) {
+    syncDepth(obj);
+    if (obj === player?.mesh) player.syncRing?.();
+  }
+}
+
+/** Gentle push-apart so sprites don't fully overlap. */
+function tickCharacterSeparation(dt) {
+  const actors = listSeparableCharacters().filter((o) => o !== dragging);
+  for (let i = 0; i < actors.length; i++) {
+    for (let j = i + 1; j < actors.length; j++) {
+      const a = actors[i];
+      const b = actors[j];
+      const ax = a.position.x;
+      const az = a.position.z + FEET_NUDGE_Z;
+      const bx = b.position.x;
+      const bz = b.position.z + FEET_NUDGE_Z;
+      let dx = bx - ax;
+      let dz = bz - az;
+      let dist = Math.hypot(dx, dz);
+      if (dist >= CHAR_SEP_MIN) continue;
+      if (dist < 0.05) {
+        const ang = (i * 1.7 + j * 2.3) % (Math.PI * 2);
+        dx = Math.cos(ang);
+        dz = Math.sin(ang);
+        dist = 0.05;
+      }
+      const nx = dx / dist;
+      const nz = dz / dist;
+      const overlap = CHAR_SEP_MIN - dist;
+      const push = Math.min(overlap * 0.6, CHAR_SEP_PUSH * dt);
+      const aPlayer = a === player?.mesh;
+      const bPlayer = b === player?.mesh;
+      // Prefer sliding NPCs; nudge Main only lightly
+      let pushA = push;
+      let pushB = push;
+      if (aPlayer && !bPlayer) {
+        pushA = push * 0.2;
+        pushB = push * 0.95;
+      } else if (bPlayer && !aPlayer) {
+        pushB = push * 0.2;
+        pushA = push * 0.95;
+      }
+      trySepMove(a, -nx * pushA, -nz * pushA);
+      trySepMove(b, nx * pushB, nz * pushB);
+    }
+  }
+}
+
 /** px/pz = feet world position (mesh.z + FEET_NUDGE_Z). */
 function playerCollides(px, pz, radius) {
   return (
     solidBlocked(px, pz, radius) ||
     containmentBlocks(px, pz, radius) ||
-    viewBoundsBlock(px, pz, radius)
+    viewBoundsBlock(px, pz, radius) ||
+    characterBlocked(px, pz, Math.max(radius * 0.7, CHAR_SEP_MIN * 0.85), player?.mesh)
   );
 }
 
@@ -1833,6 +2079,8 @@ function isVaultablePath(path) {
     return false;
   }
   if (/\/props\/road|\/props\/ground|\/balls\/|smallAnimals/i.test(p)) return false;
+  // Trees block; don't vault over canopy — only low park props
+  if (/\/tree\//i.test(p)) return false;
   if (/outdoorpark|outdoorPark|\/bench|\/table/i.test(p)) return true;
   return (
     /\/props\//i.test(p) &&
@@ -2038,6 +2286,10 @@ function footprintOf(obj) {
     hw = w * 0.3;
     hd = w * 0.15;
     cz -= hd * 0.65; // shift north so less collision hangs under the facade
+  } else if (/\/tree\//i.test(p) || /outdoorPark\/tree/i.test(p)) {
+    // Tall billboard: collide only with the trunk near the feet, not the canopy
+    hw = Math.max(11, w * 0.11);
+    hd = Math.max(10, w * 0.09);
   } else if (isInteriorPath(p)) {
     // unused for collision (interiors are non-solid); kept for selection/overlap helpers
     hw = w * 0.42;
@@ -2285,7 +2537,44 @@ async function resolveWalkSlug(path) {
   const hit =
     listed.find((a) => /^walk$/i.test(a)) ||
     listed.find((a) => /walk/i.test(a) && !/idle/i.test(a));
-  return hit || null;
+  if (hit) return hit;
+  try {
+    const meta = await fetch(assetUrl(`${path}/meta.json`)).then((r) => r.json());
+    const anims = meta.animations || [];
+    return (
+      anims.find((a) => /^walk$/i.test(a)) ||
+      anims.find((a) => /walk/i.test(a) && !/idle/i.test(a)) ||
+      null
+    );
+  } catch {
+    return null;
+  }
+}
+
+/** Character walk loop (same pipeline as idle/dance). */
+async function attachWalk(obj, path, dir, { allowSouthFallback = true } = {}) {
+  const slug =
+    obj.userData.walkSlug || (await resolveWalkSlug(path)) || "walk";
+  obj.userData.walkSlug = slug;
+  let frames = await loadAnimFrames(path, slug, dir);
+  if (!frames.length && allowSouthFallback && dir !== "south") {
+    frames = await loadAnimFrames(path, slug, "south");
+  }
+  if (!frames.length) {
+    frames = await loadAnimFrames(path, slug, "unknown");
+  }
+  if (!frames.length) return false;
+  obj.userData.dancing = false;
+  obj.userData.animName = "walk";
+  obj.userData.anim = {
+    frames,
+    frame: 0,
+    accum: 0,
+    fps: 10,
+    dir,
+  };
+  setMap(obj, frames[0]);
+  return true;
 }
 
 /** Load idle+walk clips for all dirs (companion pet). */
@@ -2552,8 +2841,22 @@ function applyScale(obj) {
 function setMap(obj, tex) {
   obj.material.map = tex;
   obj.material.needsUpdate = true;
-  obj.userData.w = tex.image.width;
-  obj.userData.h = tex.image.height;
+  const d = obj.userData;
+  // Lock character/pet display size (Main uses fixed baseScale) so anim
+  // frame swaps never resize the sprite.
+  const lockSize =
+    d.kind === "character" || d.companion || isAnimalPath(d.path || "");
+  if (lockSize) {
+    if (!d.baseW || !d.baseH) {
+      d.baseW = tex.image.width;
+      d.baseH = tex.image.height;
+    }
+    d.w = d.baseW;
+    d.h = d.baseH;
+  } else {
+    d.w = tex.image.width;
+    d.h = tex.image.height;
+  }
   if (obj.userData.vehicle || isVehiclePath(obj.userData.path)) {
     try {
       const dir = obj.userData.dir || "south";
@@ -2735,6 +3038,10 @@ async function spawnItem(item, x, z, opts = {}) {
   }
 
   obj.userData = userData;
+  if (item.kind === "character") {
+    obj.userData.spawnX = x;
+    obj.userData.spawnZ = z;
+  }
   // Prefer cached rotation for initial facing
   if (rotTextures[dir]) setMap(obj, rotTextures[dir]);
   syncDepth(obj);
@@ -2745,6 +3052,24 @@ async function spawnItem(item, x, z, opts = {}) {
     statusEl.textContent = "Idle yükleniyor…";
     await attachIdle(obj, item.path, dir);
     statusEl.textContent = "Hazır";
+  }
+
+  // Street: newly dropped cast member exits garage → orta (same as Main)
+  if (
+    activeSceneId === "street" &&
+    item.kind === "character" &&
+    !sceneLoading &&
+    !opts.traffic &&
+    opts.playEntrance !== false
+  ) {
+    const ang = Math.random() * Math.PI * 2;
+    const rad = 18 + Math.random() * 16;
+    const slot = {
+      x: streetGatherTarget.x + Math.cos(ang) * rad,
+      z: streetGatherTarget.z + Math.sin(ang) * rad,
+    };
+    beginPostOfficeEntrance(obj, slot, { stagger: 0.15 });
+    statusEl.textContent = "Postane garajından ortaya geliyor…";
   }
 
   if (opts.select !== false) selectObject(obj);
@@ -2794,8 +3119,13 @@ function serializeScene() {
       kind: d.kind || "object",
       id: d.catalogId || null,
       path: d.path,
-      x: roundSceneNum(obj.position.x),
-      z: roundSceneNum(obj.position.z),
+      // Prefer home/spawn so mid-entrance garage coords aren't saved
+      x: roundSceneNum(
+        d.spawnX != null ? d.spawnX : obj.position.x,
+      ),
+      z: roundSceneNum(
+        d.spawnZ != null ? d.spawnZ : obj.position.z,
+      ),
       scale: roundSceneNum(d.scale ?? 1),
       dir: d.dir || "south",
     };
@@ -3055,6 +3385,117 @@ function tickTraffic(dt) {
     });
 }
 
+/** postoffice_day — stand just outside the garage / front facade. */
+function findScenePostOffice() {
+  return pickables.find((o) => /\/postoffice\//i.test(o.userData?.path || ""));
+}
+
+function postOfficeGarageExit(post) {
+  const w = (post.userData?.w || 256) * (post.userData?.scale || 1);
+  const dir = post.userData?.dir || "west";
+  const face = FACE_VEC[dir] || FACE_VEC.west;
+  // Past collision AABB (scale 1.85 buildings need more than w*0.4)
+  const box = footprintOf(post);
+  const edge =
+    box.kind === "aabb"
+      ? Math.abs(face[0]) * box.hw + Math.abs(face[1]) * box.hd
+      : w * 0.35;
+  const dist = Math.max(160, edge + NPC_WALK_RADIUS + 48, w * 0.55);
+  return {
+    x: post.position.x + face[0] * dist,
+    z: post.position.z + face[1] * dist,
+    facing: dir,
+  };
+}
+
+/** Send Main/NPC out of post office garage toward gather (orta) — walk anim for NPCs. */
+function beginPostOfficeEntrance(obj, dest, { stagger = 0, isPlayer = false } = {}) {
+  const post = findScenePostOffice();
+  if (!post || !obj) return false;
+  const exit = postOfficeGarageExit(post);
+  const jx = stagger ? (Math.random() - 0.5) * 28 : 0;
+  const jz = stagger ? (Math.random() - 0.5) * 28 : 0;
+  const tx = Number(dest?.x);
+  const tz = Number(dest?.z);
+  const destX = Number.isFinite(tx) ? tx : streetGatherTarget.x;
+  const destZ = Number.isFinite(tz) ? tz : streetGatherTarget.z;
+  // Nudge out of garage / solids before walking (was freezing on first blocked step)
+  const preferDx = destX - (exit.x + jx);
+  const preferDz = destZ - (exit.z + jz);
+  const faceFallback = FACE_VEC[exit.facing] || FACE_VEC.west;
+  const clear = findClearSpawn(
+    exit.x + jx,
+    exit.z + jz,
+    preferDx || faceFallback[0],
+    preferDz || faceFallback[1],
+    isPlayer ? player?.radius || 22 : NPC_WALK_RADIUS,
+  );
+  const sx = clear.x;
+  const sz = clear.z;
+  const dx = destX - sx;
+  const dz = destZ - sz;
+  const dist = Math.hypot(dx, dz);
+  const walkDir = dirFromVector(dx, dz) || exit.facing || "west";
+
+  if (isPlayer) {
+    if (occupiedVehicle) exitVehicle();
+    if (player?.skating && occupiedSkateboard) exitSkateboard();
+    player.stopActions?.();
+    player.mesh.position.set(sx, 0, sz);
+    player.facing = walkDir;
+    player.syncRing?.(sx, sz);
+    if (player.syncDepth) player.syncDepth(player.mesh);
+    if (dist > 16) player.startScriptMove(dx, dz, dist);
+    return true;
+  }
+
+  obj.position.set(sx, 0, sz);
+  obj.userData.dir = walkDir;
+  applyFacing(obj, walkDir);
+  syncDepth(obj);
+  clearNpcScriptMoves(obj);
+  if (dist > 16) {
+    // Walk clip (not idle) while moving — like Main
+    attachWalk(obj, obj.userData.path, walkDir, { allowSouthFallback: true }).catch(
+      () => {},
+    );
+    enqueueNpcWalk(obj, dx, dz, dist, 110, stagger);
+  } else {
+    attachIdle(obj, obj.userData.path, walkDir, { allowSouthFallback: true }).catch(
+      () => {},
+    );
+  }
+  return true;
+}
+
+/** Street play: Main + placed cast all exit garage and gather at orta (same point). */
+function startStreetPostOfficeEntrances(gather) {
+  const post = findScenePostOffice();
+  if (!post) return false;
+  const dest = gather || streetGatherTarget;
+  streetGatherTarget = { x: dest.x, z: dest.z };
+  clearNpcScriptMoves();
+  let n = 0;
+  if (player?.mesh) {
+    if (beginPostOfficeEntrance(player.mesh, dest, { isPlayer: true })) n += 1;
+  }
+  const chars = pickables.filter(
+    (o) => o.userData?.kind === "character" && o.userData?.editable !== false,
+  );
+  chars.forEach((obj, i) => {
+    // Fan gather spots so the cast doesn't land on one pixel
+    const ang = (i / Math.max(chars.length, 1)) * Math.PI * 2;
+    const rad = 22 + (i % 3) * 10;
+    const slot = {
+      x: dest.x + Math.cos(ang) * rad,
+      z: dest.z + Math.sin(ang) * rad,
+    };
+    if (beginPostOfficeEntrance(obj, slot, { stagger: 0.25 + i * 0.45 })) n += 1;
+  });
+  if (n > 0) statusEl.textContent = "Postane garajından ortaya geliyor…";
+  return n > 0;
+}
+
 async function loadScene(data, { persist = true } = {}) {
   if (!data || Number(data.version) !== 1) {
     throw new Error("Geçersiz sahne JSON (version: 1 bekleniyor)");
@@ -3107,10 +3548,24 @@ async function loadScene(data, { persist = true } = {}) {
     selectObject(null);
     if (persist) persistScene();
     syncTrafficForScene();
-    statusEl.textContent =
-      missing > 0
-        ? `Sahne: ${placed} obje (${missing} eksik asset)`
-        : `Sahne yüklendi · ${placed} obje`;
+    // Street: Main + cast exit garage → orta (scene player / gather point)
+    if (activeSceneId === "street") {
+      const dest = data.player
+        ? { x: Number(data.player.x) || 0, z: Number(data.player.z) || 88 }
+        : { x: 0, z: 88 };
+      streetGatherTarget = { ...dest };
+      if (!startStreetPostOfficeEntrances(dest)) {
+        statusEl.textContent =
+          missing > 0
+            ? `Sahne: ${placed} obje (${missing} eksik asset)`
+            : `Sahne yüklendi · ${placed} obje`;
+      }
+    } else {
+      statusEl.textContent =
+        missing > 0
+          ? `Sahne: ${placed} obje (${missing} eksik asset)`
+          : `Sahne yüklendi · ${placed} obje`;
+    }
   } finally {
     sceneLoading = false;
   }
@@ -3683,6 +4138,10 @@ inspX.addEventListener("change", () => {
   const fromX = selected.position.x;
   const toX = Number(inspX.value) || 0;
   selected.position.x = toX;
+  if (selected.userData?.kind === "character") {
+    selected.userData.spawnX = toX;
+    clearNpcScriptMoves(selected);
+  }
   syncDepth(selected);
   if (hasEditableCollision(selected.userData?.path)) updateColGizmo(selected);
   pushMoveUndo(selected, fromX, selected.position.z, toX, selected.position.z);
@@ -3692,6 +4151,10 @@ inspZ.addEventListener("change", () => {
   const fromZ = selected.position.z;
   const toZ = Number(inspZ.value) || 0;
   selected.position.z = toZ;
+  if (selected.userData?.kind === "character") {
+    selected.userData.spawnZ = toZ;
+    clearNpcScriptMoves(selected);
+  }
   syncDepth(selected);
   if (hasEditableCollision(selected.userData?.path)) updateColGizmo(selected);
   pushMoveUndo(selected, selected.position.x, fromZ, selected.position.x, toZ);
@@ -3966,6 +4429,12 @@ async function onPointerUp(event) {
       dragging.position.x = Math.round(dragging.position.x / stepX) * stepX;
       dragging.position.z = Math.round(dragging.position.z / stepZ) * stepZ;
       syncDepth(dragging);
+    }
+    // Update character home when relocated by hand
+    if (dragging.userData?.kind === "character") {
+      dragging.userData.spawnX = dragging.position.x;
+      dragging.userData.spawnZ = dragging.position.z;
+      clearNpcScriptMoves(dragging);
     }
     if (selected === dragging) {
       inspX.value = Math.round(dragging.position.x);
@@ -4434,15 +4903,15 @@ function updateVehiclePrompt() {
   if (occupiedVehicle) {
     nearbyVehicle = null;
     nearbySkateboard = null;
-    hidePrompt();
-    if (statusEl && !statusEl.dataset.busy) statusEl.textContent = "Araçtasın";
+    showPromptAbove(occupiedVehicle, "in", "/Stop");
+    if (statusEl && !statusEl.dataset.busy) statusEl.textContent = "E veya /stop · İn";
     return;
   }
   if (player.skating && occupiedSkateboard) {
     nearbyVehicle = null;
     nearbySkateboard = null;
-    hidePrompt();
-    if (statusEl && !statusEl.dataset.busy) statusEl.textContent = "Kaykaydasın";
+    showPromptAbove(occupiedSkateboard, "in", "/Stop");
+    if (statusEl && !statusEl.dataset.busy) statusEl.textContent = "E veya /stop · İn";
     return;
   }
   const p = player.mesh.position;
@@ -4450,14 +4919,18 @@ function updateVehiclePrompt() {
   nearbyVehicle = nearestVehicle(p.x, p.z);
   // prefer skateboard if both in range
   if (nearbySkateboard) {
-    showPromptAbove(nearbySkateboard, "Bin");
-    if (statusEl && !statusEl.dataset.busy) statusEl.textContent = "E · Kaykaya bin";
+    showPromptAbove(nearbySkateboard, "bin", "/E");
+    if (statusEl && !statusEl.dataset.busy) statusEl.textContent = "E veya /e · Kaykaya bin";
   } else if (nearbyVehicle) {
-    showPromptAbove(nearbyVehicle, "Bin");
-    if (statusEl && !statusEl.dataset.busy) statusEl.textContent = "E · Bin";
+    showPromptAbove(nearbyVehicle, "bin", "/E");
+    if (statusEl && !statusEl.dataset.busy) statusEl.textContent = "E veya /e · Bin";
   } else {
     hidePrompt();
-    if (statusEl && !statusEl.dataset.busy && statusEl.textContent.startsWith("E ·")) {
+    if (
+      statusEl &&
+      !statusEl.dataset.busy &&
+      (statusEl.textContent.startsWith("E ·") || statusEl.textContent.startsWith("E veya"))
+    ) {
       statusEl.textContent = "Hazır";
     }
   }
@@ -4553,6 +5026,7 @@ function tick(now) {
   lastTs = now;
   tickAnims(dt);
   tickNpcScriptMove(dt);
+  tickCharacterSeparation(dt);
   tickTraffic(dt);
   // Keep characters / pets above night_club_inside after moves
   for (const obj of pickables) {

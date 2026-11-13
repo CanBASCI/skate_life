@@ -470,24 +470,25 @@ export class Player {
     return true;
   }
 
-  /** Absolute-dir scripted walk (chat /R3). dx,dz unit or any vector; distance in world units. */
-  startScriptMove(dx, dz, distance, speed = WALK_SPEED) {
+  /** Absolute-dir scripted move (chat /R3). On skateboard keeps skateIdle + skate speed. */
+  startScriptMove(dx, dz, distance, speed) {
     if (!this.mesh || this.driving || !(distance > 0)) return false;
     const len = Math.hypot(dx, dz);
     if (!len) return false;
     this.sitting = false;
+    const defaultSpeed = this.skating ? SKATE_SPEED : WALK_SPEED;
     this.scriptMove = {
       dx: dx / len,
       dz: dz / len,
       left: distance,
-      speed: speed || WALK_SPEED,
+      speed: speed || defaultSpeed,
     };
     this.busy = null;
     this.vaultMove = null;
     this.keys.clear();
     const facing = dirFromVector(dx, dz);
     if (facing) this.facing = facing;
-    this.anim = "walk";
+    this.anim = this.skating ? "skateIdle" : "walk";
     this.frame = 0;
     this.accum = 0;
     this.applyFrame();
@@ -575,7 +576,7 @@ export class Player {
     this.vz = 0;
     if (this.driving) return;
 
-    // Chat scripted walk (/R3) — overrides WASD until done or /stop
+    // Chat scripted move (/R3) — overrides WASD until done or /stop
     if (this.scriptMove) {
       const sm = this.scriptMove;
       const step = Math.min(sm.left, sm.speed * dt);
@@ -585,9 +586,10 @@ export class Player {
       const moved = Math.hypot(this.mesh.position.x - x0, this.mesh.position.z - z0);
       sm.left -= Math.max(moved, step * 0.25);
       this.busy = null;
-      this.anim = "walk";
+      // Stay on skateIdle while riding — walk anim looked stuck / broke board ride
+      this.anim = this.skating ? "skateIdle" : "walk";
       this.syncRing();
-      const cfg = SETS.walk;
+      const cfg = SETS[this.anim] || SETS.walk;
       this.accum += dt;
       const frameDur = 1 / cfg.fps;
       while (this.accum >= frameDur) {
@@ -596,9 +598,11 @@ export class Player {
       }
       this.applyFrame();
       if (this.syncDepth) this.syncDepth(this.mesh);
-      if (sm.left <= 0.5 || moved < step * 0.05) {
+      // Only cancel for a hard wall when nearly no progress (lenient while skating)
+      const stuckThresh = this.skating ? step * 0.02 : step * 0.05;
+      if (sm.left <= 0.5 || moved < stuckThresh) {
         this.scriptMove = null;
-        this.anim = "idle";
+        this.anim = this.skating ? "skateIdle" : "idle";
         this.frame = 0;
         this.accum = 0;
         this.applyFrame();

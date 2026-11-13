@@ -6,8 +6,8 @@
   "viewport": "9x16",
   "bg": "black",
   "player": {
-    "x": 100.16,
-    "z": 319.26,
+    "x": -42.91,
+    "z": 88.23,
     "facing": "east"
   },
   "objects": [
@@ -258,8 +258,8 @@
       "kind": "object",
       "id": "0c185fd2-fd73-45b5-9215-dc0ef23c3381",
       "path": "assets/props/balls/basketball/32x32/day",
-      "x": 71.03,
-      "z": -72.38,
+      "x": 68.67,
+      "z": -61.29,
       "scale": 1,
       "dir": "south"
     },
@@ -276,8 +276,8 @@
       "kind": "object",
       "id": "fddfeb71-0299-4ed1-8581-eb5da7545b49",
       "path": "assets/props/outdoorPark/table/96x96/day",
-      "x": -163.85,
-      "z": -63.08,
+      "x": -166.77,
+      "z": -142.8,
       "scale": 0.7,
       "dir": "west"
     },
@@ -285,8 +285,8 @@
       "kind": "object",
       "id": "468b842d-e086-4352-866e-50288fc0b035",
       "path": "assets/props/outdoorPark/bench/96x96/day",
-      "x": -205.25,
-      "z": -127.32,
+      "x": -208.24,
+      "z": -211.17,
       "scale": 0.7,
       "dir": "south-east"
     },
@@ -294,8 +294,8 @@
       "kind": "object",
       "id": "468b842d-e086-4352-866e-50288fc0b035",
       "path": "assets/props/outdoorPark/bench/96x96/day",
-      "x": -211.12,
-      "z": -37.91,
+      "x": -212.11,
+      "z": -128.31,
       "scale": 0.7,
       "dir": "north-east"
     },
@@ -303,8 +303,8 @@
       "kind": "object",
       "id": "da2228e3-2441-4187-9f89-2c8fd1c46d14",
       "path": "assets/buildings/amusementpark/256x256/day",
-      "x": -271.46,
-      "z": -187.69,
+      "x": -298.13,
+      "z": -276.94,
       "scale": 1.85,
       "dir": "south-east"
     },
@@ -330,8 +330,8 @@
       "kind": "object",
       "id": "bc9c4190-994f-4710-9061-2e97aea39d23",
       "path": "assets/props/balls/football/32x32/day",
-      "x": 110.85,
-      "z": -17.42,
+      "x": 50.79,
+      "z": -12.78,
       "scale": 1,
       "dir": "south"
     },
@@ -339,8 +339,8 @@
       "kind": "object",
       "id": "092ad00e-5a43-4e1c-9137-a539f68bfafd",
       "path": "assets/props/smallAnimals/cat_2/32x32/default",
-      "x": -45.76,
-      "z": -367.69,
+      "x": -129.87,
+      "z": -338.89,
       "scale": 1,
       "dir": "south-east"
     },
@@ -348,8 +348,8 @@
       "kind": "object",
       "id": "cd14dafa-9503-4a04-8d08-3dae5b794566",
       "path": "assets/props/smallAnimals/cat/32x32/day",
-      "x": -19.69,
-      "z": -346.58,
+      "x": -95.26,
+      "z": -298.12,
       "scale": 1,
       "dir": "north-west"
     },
@@ -357,8 +357,8 @@
       "kind": "object",
       "id": "61e1b125-a232-426f-a44e-813b6637b383",
       "path": "assets/props/smallAnimals/dog_2/32x32/default",
-      "x": -47.98,
-      "z": -324.44,
+      "x": -134.75,
+      "z": -286.49,
       "scale": 1,
       "dir": "north-east"
     },
@@ -438,15 +438,6 @@
       "kind": "object",
       "id": "ground-dirt-day",
       "path": "assets/props/ground/dirt/64x64/day",
-      "x": 257.38,
-      "z": -239.12,
-      "scale": 1,
-      "dir": "south"
-    },
-    {
-      "kind": "object",
-      "id": "ground-dirt-day",
-      "path": "assets/props/ground/dirt/64x64/day",
       "x": 257.27,
       "z": -303.12,
       "scale": 1,
@@ -485,105 +476,6 @@
       "path": "assets/props/ground/dirt/64x64/day",
       "x": 1.27,
       "z": -303.12,
-      "scale": 1,
-      "dir": "south"
-    },
-    {
-      "kind": "object",
-      "id": "ground-dirt-day",
-      "path": "assets/props/ground/dirt/64x64/day",
-      "x": 1.27,
-      "z": -367.12,
-      "scale": 1,
-      "dir": "south"
-    },
-    {
-      "kind": "object",
-      "id": "ground-dirt-day",
-      "path": "assets/props/ground/dirt/64x64/day",
-      "x": 65.27,
-      "z": -367.12,
-      "scale": 1,
-      "dir": "south"
-    },
-    {
-      "kind": "object",
-      "id": "ground-dirt-day",
-      "path": "assets/props/ground/dirt/64x64/day",
-      "x": 129.27,
-      "z": -367.12,
-      "scale": 1,
-      "dir": "south"
-    },
-    {
-      "kind": "object",
-      "id": "ground-dirt-day",
-      "path": "assets/props/ground/dirt/64x64/day",
-      "x": 193.27,
-      "z": -367.12,
-      "scale": 1,
-      "dir": "south"
-    },
-    {
-      "kind": "object",
-      "id": "ground-dirt-day",
-      "path": "assets/props/ground/dirt/64x64/day",
-      "x": 257.27,
-      "z": -367.12,
-      "scale": 1,
-      "dir": "south"
-    },
-    {
-      "kind": "object",
-      "id": "ground-dirt-day",
-      "path": "assets/props/ground/dirt/64x64/day",
-      "x": 257.27,
-      "z": -431.12,
-      "scale": 1,
-      "dir": "south"
-    },
-    {
-      "kind": "object",
-      "id": "ground-dirt-day",
-      "path": "assets/props/ground/dirt/64x64/day",
-      "x": 193.27,
-      "z": -431.12,
-      "scale": 1,
-      "dir": "south"
-    },
-    {
-      "kind": "object",
-      "id": "ground-dirt-day",
-      "path": "assets/props/ground/dirt/64x64/day",
-      "x": 129.27,
-      "z": -431.12,
-      "scale": 1,
-      "dir": "south"
-    },
-    {
-      "kind": "object",
-      "id": "ground-dirt-day",
-      "path": "assets/props/ground/dirt/64x64/day",
-      "x": 65.27,
-      "z": -431.12,
-      "scale": 1,
-      "dir": "south"
-    },
-    {
-      "kind": "object",
-      "id": "ground-dirt-day",
-      "path": "assets/props/ground/dirt/64x64/day",
-      "x": 1.27,
-      "z": -431.12,
-      "scale": 1,
-      "dir": "south"
-    },
-    {
-      "kind": "object",
-      "id": "ground-dirt-day",
-      "path": "assets/props/ground/dirt/64x64/day",
-      "x": -62.73,
-      "z": -431.12,
       "scale": 1,
       "dir": "south"
     },
@@ -609,8 +501,8 @@
       "kind": "object",
       "id": "bc9c4190-994f-4710-9061-2e97aea39d23",
       "path": "assets/props/balls/football/32x32/day",
-      "x": 89.55,
-      "z": -49.12,
+      "x": 25.94,
+      "z": -52.35,
       "scale": 1,
       "dir": "south"
     },
@@ -627,8 +519,8 @@
       "kind": "object",
       "id": "2c0c672d-7165-47d0-99f5-3b27bbf9b586",
       "path": "assets/objects/skateboard/68x68/base",
-      "x": -108.12,
-      "z": -274.68,
+      "x": -207.38,
+      "z": -57.86,
       "scale": 0.7,
       "dir": "north-east"
     },
@@ -636,8 +528,8 @@
       "kind": "object",
       "id": "0999ff4c-83b5-470b-9124-8dad14bace43",
       "path": "assets/buildings/postoffice/256x256/day",
-      "x": 268.32,
-      "z": -129.18,
+      "x": 279.72,
+      "z": -100.89,
       "scale": 1.85,
       "dir": "west"
     },
@@ -1374,69 +1266,6 @@
       "kind": "object",
       "id": "ground-dirt-day",
       "path": "assets/props/ground/dirt/64x64/day",
-      "x": -126.73,
-      "z": -431.12,
-      "scale": 1,
-      "dir": "south"
-    },
-    {
-      "kind": "object",
-      "id": "ground-dirt-day",
-      "path": "assets/props/ground/dirt/64x64/day",
-      "x": -190.73,
-      "z": -431.12,
-      "scale": 1,
-      "dir": "south"
-    },
-    {
-      "kind": "object",
-      "id": "ground-dirt-day",
-      "path": "assets/props/ground/dirt/64x64/day",
-      "x": -254.73,
-      "z": -431.12,
-      "scale": 1,
-      "dir": "south"
-    },
-    {
-      "kind": "object",
-      "id": "ground-dirt-day",
-      "path": "assets/props/ground/dirt/64x64/day",
-      "x": -254.73,
-      "z": -367.12,
-      "scale": 1,
-      "dir": "south"
-    },
-    {
-      "kind": "object",
-      "id": "ground-dirt-day",
-      "path": "assets/props/ground/dirt/64x64/day",
-      "x": -190.73,
-      "z": -367.12,
-      "scale": 1,
-      "dir": "south"
-    },
-    {
-      "kind": "object",
-      "id": "ground-dirt-day",
-      "path": "assets/props/ground/dirt/64x64/day",
-      "x": -126.73,
-      "z": -367.12,
-      "scale": 1,
-      "dir": "south"
-    },
-    {
-      "kind": "object",
-      "id": "ground-dirt-day",
-      "path": "assets/props/ground/dirt/64x64/day",
-      "x": -62.73,
-      "z": -367.12,
-      "scale": 1,
-      "dir": "south"
-    },
-    {
-      "kind": "object",
-      "id": "ground-dirt-day",
-      "path": "assets/props/ground/dirt/64x64/day",
       "x": -62.73,
       "z": -303.12,
       "scale": 1,
@@ -1456,7 +1285,7 @@
       "id": "ground-dirt-day",
       "path": "assets/props/ground/dirt/64x64/day",
       "x": -190.73,
-      "z": -303.12,
+      "z": -302.95,
       "scale": 1,
       "dir": "south"
     },
@@ -1561,10 +1390,199 @@
     },
     {
       "kind": "object",
-      "id": "9729f0de-2b0b-413a-b3f6-d46ab6f543e9",
-      "path": "assets/props/smallAnimals/dog_3/32x32/default",
-      "x": -67.98,
-      "z": -350.99,
+      "id": "899018b2-8bb1-479e-9ee7-a5354efc7089",
+      "path": "assets/props/outdoorPark/tree/95x105/default",
+      "x": 103.64,
+      "z": -347.23,
+      "scale": 1,
+      "dir": "south"
+    },
+    {
+      "kind": "object",
+      "id": "899018b2-8bb1-479e-9ee7-a5354efc7089",
+      "path": "assets/props/outdoorPark/tree/95x105/default",
+      "x": 6.76,
+      "z": -347.08,
+      "scale": 1,
+      "dir": "south"
+    },
+    {
+      "kind": "object",
+      "id": "899018b2-8bb1-479e-9ee7-a5354efc7089",
+      "path": "assets/props/outdoorPark/tree/95x105/default",
+      "x": -91.24,
+      "z": -346.1,
+      "scale": 1,
+      "dir": "south"
+    },
+    {
+      "kind": "object",
+      "id": "ground-grass-day",
+      "path": "assets/props/ground/grass/64x64/day",
+      "x": -63.01,
+      "z": -431.44,
+      "scale": 1,
+      "dir": "south"
+    },
+    {
+      "kind": "object",
+      "id": "ground-grass-day",
+      "path": "assets/props/ground/grass/64x64/day",
+      "x": 0.99,
+      "z": -431.44,
+      "scale": 1,
+      "dir": "south"
+    },
+    {
+      "kind": "object",
+      "id": "ground-grass-day",
+      "path": "assets/props/ground/grass/64x64/day",
+      "x": 64.99,
+      "z": -431.44,
+      "scale": 1,
+      "dir": "south"
+    },
+    {
+      "kind": "object",
+      "id": "ground-grass-day",
+      "path": "assets/props/ground/grass/64x64/day",
+      "x": 128.99,
+      "z": -431.44,
+      "scale": 1,
+      "dir": "south"
+    },
+    {
+      "kind": "object",
+      "id": "ground-grass-day",
+      "path": "assets/props/ground/grass/64x64/day",
+      "x": -127.12,
+      "z": -431.44,
+      "scale": 1,
+      "dir": "south"
+    },
+    {
+      "kind": "object",
+      "id": "ground-grass-day",
+      "path": "assets/props/ground/grass/64x64/day",
+      "x": -127.12,
+      "z": -367.44,
+      "scale": 1,
+      "dir": "south"
+    },
+    {
+      "kind": "object",
+      "id": "ground-grass-day",
+      "path": "assets/props/ground/grass/64x64/day",
+      "x": -63.12,
+      "z": -367.44,
+      "scale": 1,
+      "dir": "south"
+    },
+    {
+      "kind": "object",
+      "id": "ground-grass-day",
+      "path": "assets/props/ground/grass/64x64/day",
+      "x": 0.88,
+      "z": -367.44,
+      "scale": 1,
+      "dir": "south"
+    },
+    {
+      "kind": "object",
+      "id": "ground-grass-day",
+      "path": "assets/props/ground/grass/64x64/day",
+      "x": 64.88,
+      "z": -367.44,
+      "scale": 1,
+      "dir": "south"
+    },
+    {
+      "kind": "object",
+      "id": "ground-grass-day",
+      "path": "assets/props/ground/grass/64x64/day",
+      "x": 128.88,
+      "z": -367.44,
+      "scale": 1,
+      "dir": "south"
+    },
+    {
+      "kind": "object",
+      "id": "ground-grass-day",
+      "path": "assets/props/ground/grass/64x64/day",
+      "x": 192.88,
+      "z": -367.44,
+      "scale": 1,
+      "dir": "south"
+    },
+    {
+      "kind": "object",
+      "id": "ground-dirt-day",
+      "path": "assets/props/ground/dirt/64x64/day",
+      "x": 257.27,
+      "z": -239.12,
+      "scale": 1,
+      "dir": "south"
+    },
+    {
+      "kind": "object",
+      "id": "ground-grass-day",
+      "path": "assets/props/ground/grass/64x64/day",
+      "x": 192.99,
+      "z": -431.44,
+      "scale": 1,
+      "dir": "south"
+    },
+    {
+      "kind": "object",
+      "id": "ground-grass-day",
+      "path": "assets/props/ground/grass/64x64/day",
+      "x": 256.99,
+      "z": -431.44,
+      "scale": 1,
+      "dir": "south"
+    },
+    {
+      "kind": "object",
+      "id": "ground-grass-day",
+      "path": "assets/props/ground/grass/64x64/day",
+      "x": 256.99,
+      "z": -367.44,
+      "scale": 1,
+      "dir": "south"
+    },
+    {
+      "kind": "object",
+      "id": "ground-dirt-day",
+      "path": "assets/props/ground/dirt/64x64/day",
+      "x": -190.73,
+      "z": -366.95,
+      "scale": 1,
+      "dir": "south"
+    },
+    {
+      "kind": "object",
+      "id": "ground-dirt-day",
+      "path": "assets/props/ground/dirt/64x64/day",
+      "x": -254.73,
+      "z": -366.95,
+      "scale": 1,
+      "dir": "south"
+    },
+    {
+      "kind": "object",
+      "id": "ground-dirt-day",
+      "path": "assets/props/ground/dirt/64x64/day",
+      "x": -254.73,
+      "z": -430.95,
+      "scale": 1,
+      "dir": "south"
+    },
+    {
+      "kind": "object",
+      "id": "ground-dirt-day",
+      "path": "assets/props/ground/dirt/64x64/day",
+      "x": -190.73,
+      "z": -430.95,
       "scale": 1,
       "dir": "south"
     }
