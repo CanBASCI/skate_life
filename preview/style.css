@@ -182,6 +182,7 @@ body {
 #app {
   position: absolute;
   inset: 0;
+  z-index: 0;
 }
 
 #app canvas {
@@ -217,53 +218,55 @@ body {
 }
 
 #prompt {
-  position: absolute;
+  position: fixed;
   left: 0;
   top: 0;
-  z-index: 30;
+  z-index: 9999;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
+  gap: 3px;
   padding: 0;
+  margin: 0;
   background: transparent;
   border: 0;
-  transform: translate(-50%, -130%);
-  font-size: 12px;
-  font-weight: 650;
+  transform: translate(-50%, -100%);
+  font-size: 11px;
+  font-weight: 600;
   color: var(--ink);
   pointer-events: none;
-  text-shadow: 0 1px 2px #000c;
   white-space: nowrap;
 }
 
 #prompt.hidden {
-  display: none;
+  display: none !important;
 }
 
 #prompt kbd {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 28px;
-  height: 28px;
-  padding: 0 8px;
-  border: 2px solid var(--accent);
-  border-radius: 8px;
-  background: #0e1810f2;
-  color: var(--accent);
-  font-size: 14px;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  border: 1px solid #c8d4c6;
+  border-radius: 6px;
+  background: #0a100de8;
+  color: #eef2ec;
+  font-size: 12px;
   font-weight: 700;
-  box-shadow: 0 4px 14px #0008;
+  box-shadow: 0 2px 8px #0008;
 }
 
 #prompt #prompt-text {
-  padding: 2px 8px;
+  padding: 1px 7px;
   border-radius: 999px;
-  background: #0e1810e6;
-  border: 1px solid #3a5244;
-  font-size: 11px;
-  color: var(--muted);
+  background: #0a100de8;
+  border: 1px solid #2a3830;
+  font-size: 10px;
+  font-weight: 600;
+  color: #c5d0c2;
+  box-shadow: 0 2px 6px #0007;
 }
 
 #hud kbd {

@@ -1712,6 +1712,127 @@
       "state": "police_Night",
       "size": "168x168",
       "path": "assets/vehicles/police/168x168/night"
+    },
+    {
+      "id": "roadtile-straight_ns",
+      "kind": "object",
+      "w": 64,
+      "h": 64,
+      "state": "D\u00fcz Kuzey-G\u00fcney",
+      "name": "roadTiles",
+      "path": "assets/props/roadTiles/64x64/straight_ns",
+      "tileable": true,
+      "tileSize": 64
+    },
+    {
+      "id": "roadtile-straight_ew",
+      "kind": "object",
+      "w": 64,
+      "h": 64,
+      "state": "D\u00fcz Do\u011fu-Bat\u0131",
+      "name": "roadTiles",
+      "path": "assets/props/roadTiles/64x64/straight_ew",
+      "tileable": true,
+      "tileSize": 64
+    },
+    {
+      "id": "roadtile-cross",
+      "kind": "object",
+      "w": 64,
+      "h": 64,
+      "state": "Kav\u015fak +",
+      "name": "roadTiles",
+      "path": "assets/props/roadTiles/64x64/cross",
+      "tileable": true,
+      "tileSize": 64
+    },
+    {
+      "id": "roadtile-corner_ne",
+      "kind": "object",
+      "w": 64,
+      "h": 64,
+      "state": "K\u00f6\u015fe KD",
+      "name": "roadTiles",
+      "path": "assets/props/roadTiles/64x64/corner_ne",
+      "tileable": true,
+      "tileSize": 64
+    },
+    {
+      "id": "roadtile-corner_nw",
+      "kind": "object",
+      "w": 64,
+      "h": 64,
+      "state": "K\u00f6\u015fe KB",
+      "name": "roadTiles",
+      "path": "assets/props/roadTiles/64x64/corner_nw",
+      "tileable": true,
+      "tileSize": 64
+    },
+    {
+      "id": "roadtile-corner_se",
+      "kind": "object",
+      "w": 64,
+      "h": 64,
+      "state": "K\u00f6\u015fe GD",
+      "name": "roadTiles",
+      "path": "assets/props/roadTiles/64x64/corner_se",
+      "tileable": true,
+      "tileSize": 64
+    },
+    {
+      "id": "roadtile-corner_sw",
+      "kind": "object",
+      "w": 64,
+      "h": 64,
+      "state": "K\u00f6\u015fe GB",
+      "name": "roadTiles",
+      "path": "assets/props/roadTiles/64x64/corner_sw",
+      "tileable": true,
+      "tileSize": 64
+    },
+    {
+      "id": "roadtile-t_n",
+      "kind": "object",
+      "w": 64,
+      "h": 64,
+      "state": "T Kuzey",
+      "name": "roadTiles",
+      "path": "assets/props/roadTiles/64x64/t_n",
+      "tileable": true,
+      "tileSize": 64
+    },
+    {
+      "id": "roadtile-t_s",
+      "kind": "object",
+      "w": 64,
+      "h": 64,
+      "state": "T G\u00fcney",
+      "name": "roadTiles",
+      "path": "assets/props/roadTiles/64x64/t_s",
+      "tileable": true,
+      "tileSize": 64
+    },
+    {
+      "id": "roadtile-t_e",
+      "kind": "object",
+      "w": 64,
+      "h": 64,
+      "state": "T Do\u011fu",
+      "name": "roadTiles",
+      "path": "assets/props/roadTiles/64x64/t_e",
+      "tileable": true,
+      "tileSize": 64
+    },
+    {
+      "id": "roadtile-t_w",
+      "kind": "object",
+      "w": 64,
+      "h": 64,
+      "state": "T Bat\u0131",
+      "name": "roadTiles",
+      "path": "assets/props/roadTiles/64x64/t_w",
+      "tileable": true,
+      "tileSize": 64
     }
   ]
 }

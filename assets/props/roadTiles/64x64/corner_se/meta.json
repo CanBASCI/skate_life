@@ -1,0 +1,11 @@
+{
+  "id": "roadtile-corner_se",
+  "kind": "object",
+  "w": 64,
+  "h": 64,
+  "name": "roadTiles",
+  "state": "K\u00f6\u015fe GD",
+  "path": "assets/props/roadTiles/64x64/corner_se",
+  "tileable": true,
+  "tileSize": 64
+}

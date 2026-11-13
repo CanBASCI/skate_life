@@ -3,8 +3,10 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+    <meta http-equiv="Pragma" content="no-cache" />
     <title>skate_life — editor</title>
-    <link rel="stylesheet" href="./style.css" />
+    <link rel="stylesheet" href="./style.css?v=20251113roads" />
     <script type="importmap">
       {
         "imports": {
@@ -26,10 +28,9 @@
 
       <main id="stage">
         <div id="hud">
-          <span><kbd>WASD</kbd> hareket · <kbd>Shift</kbd> koş · <kbd>E</kbd> araç · <kbd>P</kbd> pet · <kbd>Q</kbd> yön · sürükle yerleştir</span>
+          <span><kbd>WASD</kbd> hareket · <kbd>Shift</kbd> koş · <kbd>Space</kbd> zıpla/vault · <kbd>E</kbd> araç · <kbd>P</kbd> pet · <kbd>Q</kbd> yön</span>
           <span id="status">Yükleniyor…</span>
         </div>
-        <div id="prompt" class="hidden"><kbd>E</kbd> <span id="prompt-text">Bin</span></div>
         <div id="app"></div>
         <div id="inspector" class="hidden">
           <div class="insp-title" id="insp-label">—</div>
@@ -50,7 +51,9 @@
       </aside>
     </div>
 
+    <!-- fixed overlay: always above WebGL canvas / sprites -->
+    <div id="prompt" class="hidden"><kbd>E</kbd> <span id="prompt-text">Bin</span></div>
     <div id="drag-ghost" class="hidden"></div>
-    <script type="module" src="./main.js"></script>
+    <script type="module" src="./main.js?v=20251113vaultZ"></script>
   </body>
 </html>

@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
-import { Player, dirFromVector } from "./player.js";
+import { Player, dirFromVector } from "./player.js?v=vaultZ";
 import {
   loadCatalog,
   groupByCat,
@@ -50,7 +50,8 @@ let nearbyVehicle = null;
 let companion = null;
 const texCache = new Map(); // url -> Promise<Texture>
 
-const VEHICLE_ENTER_RANGE = 160;
+/** Max distance from car body edge to show E (world units). */
+const VEHICLE_ENTER_PAD = 36;
 
 const FACE_VEC = {
   south: [0, 1],
@@ -282,7 +283,16 @@ function opaqueHits(hits, alphaThr = 8) {
 
 function syncDepth(obj) {
   const layerBias = obj.userData?.layer === "ground" ? -10000 : 0;
-  obj.renderOrder = Math.round(obj.position.z * 10 + layerBias);
+  let order = Math.round(obj.position.z * 10 + layerBias);
+  // vault/jump: draw player in front of props/cars (sprites ignore depthTest paint order)
+  if (
+    obj.userData?.controllable &&
+    player &&
+    (player.busy === "vault" || player.busy === "jump")
+  ) {
+    order += 90000;
+  }
+  obj.renderOrder = order;
 }
 
 function defaultScale(item) {
@@ -299,7 +309,21 @@ function isAnimalPath(path) {
 
 function usesGroundPlane(item) {
   if (item.kind !== "object") return false;
-  return /\/props\/road\//i.test(item.path || "");
+  const p = item.path || "";
+  return /\/props\/road\//i.test(p) || /\/roadTiles\//i.test(p);
+}
+
+function isRoadTileItem(item) {
+  return !!(item?.tileable || /\/roadTiles\//i.test(item?.path || ""));
+}
+
+/** Snap tileable roads so segments meet edge-to-edge. */
+function snapRoadPos(x, z, tileSize = 64) {
+  const s = tileSize || 64;
+  return {
+    x: Math.round(x / s) * s,
+    z: Math.round(z / s) * s,
+  };
 }
 
 function isBallPath(path) {
@@ -314,59 +338,50 @@ function isVehicleObj(obj) {
   return !!(obj?.userData?.vehicle || isVehiclePath(obj?.userData?.path));
 }
 
-function vehicleReach(obj) {
-  const w = (obj?.userData?.w || 96) * (obj?.userData?.scale || 1);
-  return Math.max(VEHICLE_ENTER_RANGE, w * 0.75);
-}
-
 function nearestVehicle(px, pz) {
   let best = null;
   let bestD = Infinity;
   for (const obj of pickables) {
     if (!isVehicleObj(obj)) continue;
     if (obj === occupiedVehicle) continue;
-    // center distance — footprint edge was missing the rear of tall billboards
-    const d = Math.hypot(px - obj.position.x, pz - obj.position.z);
+    // distance to car body edge (0 = touching / inside footprint)
+    const d = distToFootprint(px, pz, footprintOf(obj));
     if (d < bestD) {
       bestD = d;
       best = obj;
     }
   }
-  return best && bestD <= vehicleReach(best) ? best : null;
+  return best && bestD <= VEHICLE_ENTER_PAD ? best : null;
 }
 
 const _promptWorld = new THREE.Vector3();
 const _promptNdc = new THREE.Vector3();
-const _toCam = new THREE.Vector3();
 
 function hidePrompt() {
-  promptEl.classList.add("hidden");
+  if (promptEl) promptEl.classList.add("hidden");
 }
 
-/** Float the E prompt above a world object (vehicle), toward camera so it isn't buried in the sprite. */
+/**
+ * Screen-space E label above the vehicle sprite.
+ * position:fixed + z-index 9999 — never under the WebGL canvas.
+ */
 function showPromptAbove(obj, text) {
   if (!obj || !promptEl) {
     hidePrompt();
     return;
   }
-  promptTextEl.textContent = text;
+  if (promptTextEl) promptTextEl.textContent = text;
+  camera.updateMatrixWorld(true);
   const h = (obj.userData?.h || 48) * (obj.userData?.scale || 1);
-  // feet at y=0; car art rises on the billboard — label near upper body
-  _promptWorld.set(obj.position.x, Math.max(40, h * 0.5), obj.position.z);
-  _toCam.subVectors(camera.position, _promptWorld).normalize();
-  _promptWorld.addScaledVector(_toCam, 70);
+  // project a point near the top of the billboard (not feet) so label sits above the car
+  _promptWorld.set(obj.position.x, Math.max(24, h * 0.92), obj.position.z);
   _promptNdc.copy(_promptWorld).project(camera);
-  // ortho NDC.z is flaky for hide checks — only cull if clearly off-screen
-  if (Math.abs(_promptNdc.x) > 1.25 || Math.abs(_promptNdc.y) > 1.25) {
-    hidePrompt();
-    return;
-  }
   const canvasRect = renderer.domElement.getBoundingClientRect();
-  const stageEl = document.getElementById("stage");
-  const stageRect = stageEl?.getBoundingClientRect?.() || canvasRect;
-  const sx = ((_promptNdc.x + 1) / 2) * canvasRect.width + (canvasRect.left - stageRect.left);
-  const sy =
-    ((-_promptNdc.y + 1) / 2) * canvasRect.height + (canvasRect.top - stageRect.top) - 28;
+  let sx = ((_promptNdc.x + 1) / 2) * canvasRect.width + canvasRect.left;
+  let sy = ((-_promptNdc.y + 1) / 2) * canvasRect.height + canvasRect.top - 12;
+  // keep fully on screen so it can't vanish above/below the viewport
+  sx = Math.min(Math.max(sx, canvasRect.left + 28), canvasRect.right - 28);
+  sy = Math.min(Math.max(sy, canvasRect.top + 48), canvasRect.bottom - 48);
   promptEl.style.left = `${sx}px`;
   promptEl.style.top = `${sy}px`;
   promptEl.classList.remove("hidden");
@@ -504,34 +519,215 @@ function isSolidItem(item) {
   return item.kind === "object";
 }
 
+/** Small cars only — no boats, buses, ambulance, ferry. */
+function isVaultableCarPath(path) {
+  const p = path || "";
+  if (!/\/vehicles\//i.test(p)) return false;
+  if (/boat|ferry|bus|ambulance|amblance|school/i.test(p)) return false;
+  // car / car_2… / jeep / pickup / police
+  return /\/vehicles\/(car|jeep|pickup|police)/i.test(p);
+}
+
+/** Low props + vaultable cars (bench/bank, table, park bits). */
+function isVaultablePath(path) {
+  const p = path || "";
+  if (isVaultableCarPath(p)) return true;
+  if (/\/buildings\//i.test(p) || /\/vehicles\//i.test(p) || /\/interiors\//i.test(p)) {
+    return false;
+  }
+  if (/\/props\/road|roadTiles|\/balls\/|smallAnimals/i.test(p)) return false;
+  if (/outdoorpark|outdoorPark|\/bench|\/table/i.test(p)) return true;
+  return (
+    /\/props\//i.test(p) &&
+    /bench|table|fence|bin|trash|crate|barrier|bollard|planter|pot|stump|rock|log|light/i.test(p)
+  );
+}
+
+function isVaultableObj(obj) {
+  const d = obj?.userData;
+  if (!d?.solid || d.ball || d.occupied) return false;
+  // occupied vehicle / driving target: no vault
+  if (d.vaultable) return true;
+  return isVaultablePath(d.path);
+}
+
+function solidBlockedExcept(px, pz, radius, except) {
+  for (const obj of pickables) {
+    if (obj === except) continue;
+    if (!obj.userData?.solid) continue;
+    if (circleHitsAabb(px, pz, radius, footprintOf(obj))) return true;
+  }
+  return false;
+}
+
+/** Vaultable obstacle ahead of player → landing on the far side. */
+function findVaultForPlayer() {
+  if (!player?.mesh || player.driving) return null;
+  const face = FACE_VEC[player.facing] || FACE_VEC.south;
+  const fx = face[0];
+  const fz = face[1];
+  const px = player.mesh.position.x;
+  const pz = player.mesh.position.z;
+  const pr = player.radius || 22;
+  let best = null;
+  let bestScore = Infinity;
+  for (const obj of pickables) {
+    if (!isVaultableObj(obj)) continue;
+    const box = footprintOf(obj);
+    const d = distToFootprint(px, pz, box);
+    if (d > 48) continue;
+    const ox = box.x - px;
+    const oz = box.z - pz;
+    const forward = ox * fx + oz * fz;
+    if (forward < -8) continue; // mostly behind
+    const side = Math.abs(ox * -fz + oz * fx);
+    const extent = Math.max(box.hw || 0, box.hd || 0) + 8;
+    if (side > extent + 28) continue; // too far beside
+    const score = d + Math.max(0, -forward) * 0.5 + side * 0.15;
+    if (score < bestScore) {
+      bestScore = score;
+      best = obj;
+    }
+  }
+  if (!best) return null;
+  const box = footprintOf(best);
+  const clear = Math.max(box.hw || 20, box.hd || 20) + pr + 18;
+  const landX = box.x + fx * clear;
+  const landZ = box.z + fz * clear;
+  if (solidBlockedExcept(landX, landZ, pr, best)) {
+    // try a bit further
+    const landX2 = box.x + fx * clear * 1.35;
+    const landZ2 = box.z + fz * clear * 1.35;
+    if (solidBlockedExcept(landX2, landZ2, pr, best)) return null;
+    return { landX: landX2, landZ: landZ2, ignore: best };
+  }
+  return { landX, landZ, ignore: best };
+}
+
+/** Opaque pixel bbox of a texture image (cached). Image y=0 is top. */
+const alphaBoundsCache = new WeakMap();
+
+function getAlphaBounds(image) {
+  if (!image?.width) return null;
+  if (alphaBoundsCache.has(image)) return alphaBoundsCache.get(image);
+  const w = image.width;
+  const h = image.height;
+  const canvas = document.createElement("canvas");
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext("2d", { willReadFrequently: true });
+  ctx.drawImage(image, 0, 0);
+  const data = ctx.getImageData(0, 0, w, h).data;
+  let minX = w;
+  let minY = h;
+  let maxX = -1;
+  let maxY = -1;
+  const step = w * h > 20000 ? 2 : 1;
+  for (let y = 0; y < h; y += step) {
+    for (let x = 0; x < w; x += step) {
+      if (data[(y * w + x) * 4 + 3] > 20) {
+        if (x < minX) minX = x;
+        if (x > maxX) maxX = x;
+        if (y < minY) minY = y;
+        if (y > maxY) maxY = y;
+      }
+    }
+  }
+  const bounds =
+    maxX < 0
+      ? { minX: 0, minY: 0, maxX: w - 1, maxY: h - 1, w, h }
+      : { minX, minY, maxX, maxY, w, h };
+  alphaBoundsCache.set(image, bounds);
+  return bounds;
+}
+
+/** Scan all 8 (or available) rotation textures → per-dir opaque bounds. */
+function buildAlphaBoundsByDir(rotTextures) {
+  const out = {};
+  if (!rotTextures) return out;
+  for (const dir of DIRS) {
+    const tex = rotTextures[dir];
+    if (!tex?.image) continue;
+    try {
+      out[dir] = getAlphaBounds(tex.image);
+    } catch {
+      /* skip */
+    }
+  }
+  // also keep any non-compass keys (e.g. unknown)
+  for (const [dir, tex] of Object.entries(rotTextures)) {
+    if (out[dir] || !tex?.image) continue;
+    try {
+      out[dir] = getAlphaBounds(tex.image);
+    } catch {
+      /* skip */
+    }
+  }
+  return out;
+}
+
+/**
+ * Per-dir OBB: long axis follows facing — including diagonals (NE/NW/SE/SW),
+ * not just axis-aligned X/Z boxes. Size comes from that dir's opaque sprite.
+ */
+function vehicleFootprintFromBounds(obj, b, dir) {
+  const sc = obj.userData.scale || 1;
+  const face = FACE_VEC[dir] || FACE_VEC.south;
+  const fx = face[0];
+  const fz = face[1];
+  const ax = Math.abs(fx);
+  const az = Math.abs(fz);
+  const ow = Math.max(8, (b.maxX - b.minX + 1) * sc);
+  const oh = Math.max(8, (b.maxY - b.minY + 1) * sc);
+  const GROUND_K = 0.55;
+  // NS → image height is length; EW → image width; çapraz → ikisinin karışımı
+  const den = ax + az || 1;
+  const along = (az * oh * GROUND_K + ax * ow * 0.88) / den;
+  const side = (az * ow * 0.88 + ax * oh * GROUND_K) / den;
+  const halfLen = Math.max(12, along * 0.48);
+  const halfWid = Math.max(10, side * 0.46);
+  // mild rear bias (feet ≈ front); stronger for N/S where body rises in sprite
+  const rearShift = along * (0.1 + 0.16 * az);
+  return {
+    kind: "obb",
+    x: obj.position.x - fx * rearShift,
+    z: obj.position.z - fz * rearShift,
+    fx,
+    fz,
+    px: -fz,
+    pz: fx,
+    halfLen,
+    halfWid,
+    hw: halfWid,
+    hd: halfLen,
+  };
+}
+
 function footprintOf(obj) {
   const d = obj.userData || {};
   const w = (d.w || 32) * (d.scale || 1);
   const h = (d.h || 32) * (d.scale || 1);
   const p = d.path || "";
   if (/\/vehicles\//i.test(p) || d.vehicle) {
-    // PixelLab cars: sprite feet = front bumper; body/rear rises up the billboard
-    // (toward -facing on the ground). Old box was too short and nudged forward,
-    // so the rear was hollow.
-    const face = FACE_VEC[d.dir] || FACE_VEC.south;
-    const fx = face[0];
-    const fz = face[1];
-    const px = -fz;
-    const pz = fx;
-    const halfLen = w * 0.55;
-    const halfWid = w * 0.4;
-    const rearShift = w * 0.28; // center toward rear / sprite-up
+    const dir = d.dir || "south";
+    const b = d.alphaBoundsByDir?.[dir] || d.alphaBounds;
+    if (b && b.w > 0 && b.h > 0) {
+      return vehicleFootprintFromBounds(obj, b, dir);
+    }
+    const face = FACE_VEC[dir] || FACE_VEC.south;
+    const halfLen = w * 0.32;
+    const halfWid = w * 0.24;
+    const rearShift = w * 0.12;
     return {
       kind: "obb",
-      x: obj.position.x - fx * rearShift,
-      z: obj.position.z - fz * rearShift,
-      fx,
-      fz,
-      px,
-      pz,
+      x: obj.position.x - face[0] * rearShift,
+      z: obj.position.z - face[1] * rearShift,
+      fx: face[0],
+      fz: face[1],
+      px: -face[1],
+      pz: face[0],
       halfLen,
       halfWid,
-      // aliases for callers expecting aabb sizes
       hw: halfWid,
       hd: halfLen,
     };
@@ -957,6 +1153,19 @@ function setMap(obj, tex) {
   obj.material.needsUpdate = true;
   obj.userData.w = tex.image.width;
   obj.userData.h = tex.image.height;
+  if (obj.userData.vehicle || isVehiclePath(obj.userData.path)) {
+    try {
+      const dir = obj.userData.dir || "south";
+      const byDir = obj.userData.alphaBoundsByDir || {};
+      // prefer precomputed for this exact dir (all 8); refresh if missing
+      const b = byDir[dir] || getAlphaBounds(tex.image);
+      byDir[dir] = b;
+      obj.userData.alphaBoundsByDir = byDir;
+      obj.userData.alphaBounds = b;
+    } catch (err) {
+      console.warn("alphaBounds", err);
+    }
+  }
   applyScale(obj);
 }
 
@@ -1020,6 +1229,13 @@ async function spawnItem(item, x, z) {
   const scale = defaultScale(item);
   const w = tex.image.width;
   const h = tex.image.height;
+  const tileable = isRoadTileItem(item);
+  const tileSize = (item.tileSize || w || 64) * scale;
+  if (tileable) {
+    const sn = snapRoadPos(x, z, tileSize);
+    x = sn.x;
+    z = sn.z;
+  }
   const dir = dirs.includes("south") ? "south" : dirs[0] || "south";
   const userData = {
     kind: item.kind,
@@ -1037,7 +1253,19 @@ async function spawnItem(item, x, z) {
     solid: isSolidItem(item),
     ball: isBallPath(item.path),
     vehicle: isVehiclePath(item.path),
+    vaultable: isVaultablePath(item.path),
+    tileable,
+    tileSize,
   };
+  if (userData.vehicle) {
+    // all 8 facings (DIRS) scanned up front — collision switches with dir
+    userData.alphaBoundsByDir = buildAlphaBoundsByDir(rotTextures);
+    userData.alphaBounds = userData.alphaBoundsByDir[dir] || null;
+    const n = Object.keys(userData.alphaBoundsByDir).length;
+    if (n < 8) {
+      console.warn(`vehicle ${item.path}: alpha bounds for ${n}/8 dirs`, Object.keys(userData.alphaBoundsByDir));
+    }
+  }
   if (userData.ball) {
     const br = Math.max(10, ((w * scale) / 2) * 0.55);
     userData.physics = { vx: 0, vz: 0, r: br };
@@ -1227,8 +1455,15 @@ function onPointerMove(event) {
   setPointerFromEvent(event);
   const gp = groundHit();
   if (!gp) return;
-  dragging.position.x = gp.x + dragOffset.x;
-  dragging.position.z = gp.z + dragOffset.z;
+  let nx = gp.x + dragOffset.x;
+  let nz = gp.z + dragOffset.z;
+  if (dragging.userData?.tileable) {
+    const sn = snapRoadPos(nx, nz, dragging.userData.tileSize || 64);
+    nx = sn.x;
+    nz = sn.z;
+  }
+  dragging.position.x = nx;
+  dragging.position.z = nz;
   syncDepth(dragging);
   if (selected === dragging) {
     inspX.value = Math.round(dragging.position.x);
@@ -1245,7 +1480,14 @@ async function onPointerUp(event) {
     if (gp) {
       statusEl.textContent = "Yerleştiriliyor…";
       try {
-        await spawnItem(item, gp.x, gp.z);
+        let x = gp.x;
+        let z = gp.z;
+        if (isRoadTileItem(item)) {
+          const sn = snapRoadPos(x, z, (item.tileSize || 64) * defaultScale(item));
+          x = sn.x;
+          z = sn.z;
+        }
+        await spawnItem(item, x, z);
         statusEl.textContent = "Hazır";
       } catch (err) {
         console.warn(err);
@@ -1255,6 +1497,16 @@ async function onPointerUp(event) {
     return;
   }
   if (!dragging) return;
+  if (dragging.userData?.tileable) {
+    const sn = snapRoadPos(
+      dragging.position.x,
+      dragging.position.z,
+      dragging.userData.tileSize || 64,
+    );
+    dragging.position.x = sn.x;
+    dragging.position.z = sn.z;
+    syncDepth(dragging);
+  }
   dragging = null;
   controls.enabled = true;
   try {
@@ -1434,6 +1686,7 @@ async function boot() {
     z: 200,
     syncDepth,
     collides: solidBlocked,
+    findVault: findVaultForPlayer,
     radius: 22,
   }).load();
   // player not in pickables editor list
@@ -1591,12 +1844,20 @@ function updateVehiclePrompt() {
   if (occupiedVehicle) {
     nearbyVehicle = null;
     showPromptAbove(occupiedVehicle, "İn");
+    if (statusEl && !statusEl.dataset.busy) statusEl.textContent = "E · İn";
     return;
   }
   const p = player.mesh.position;
   nearbyVehicle = nearestVehicle(p.x, p.z);
-  if (nearbyVehicle) showPromptAbove(nearbyVehicle, "Bin");
-  else hidePrompt();
+  if (nearbyVehicle) {
+    showPromptAbove(nearbyVehicle, "Bin");
+    if (statusEl && !statusEl.dataset.busy) statusEl.textContent = "E · Bin";
+  } else {
+    hidePrompt();
+    if (statusEl && !statusEl.dataset.busy && statusEl.textContent.startsWith("E ·")) {
+      statusEl.textContent = "Hazır";
+    }
+  }
 }
 
 function tick(now) {

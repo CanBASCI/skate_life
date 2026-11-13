@@ -1,0 +1,11 @@
+{
+  "id": "roadtile-t_e",
+  "kind": "object",
+  "w": 64,
+  "h": 64,
+  "name": "roadTiles",
+  "state": "T Do\u011fu",
+  "path": "assets/props/roadTiles/64x64/t_e",
+  "tileable": true,
+  "tileSize": 64
+}

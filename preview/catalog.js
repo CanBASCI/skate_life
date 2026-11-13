@@ -9,14 +9,30 @@ export const DIRS = [
   "south-east",
 ];
 
-export const OBJ_CAT_ORDER = ["buildings", "vehicles", "props", "interiors", "objects"];
+export const OBJ_CAT_ORDER = [
+  "roads",
+  "buildings",
+  "vehicles",
+  "props",
+  "interiors",
+  "objects",
+];
 export const OBJ_CAT_LABEL = {
+  roads: "Roads",
   buildings: "Buildings",
   vehicles: "Vehicles",
   props: "Props",
   interiors: "Interiors",
   objects: "Misc",
 };
+
+/** Tileable flat roads live under props/roadTiles (and legacy props/road). */
+export function objectCat(entry) {
+  const path = entry.path || "";
+  if (/\/roadTiles\//i.test(path) || /\/props\/road\//i.test(path)) return "roads";
+  const parts = path.split("/");
+  return parts[1] || "objects";
+}
 
 export function assetUrl(rel) {
   return new URL(`../${rel.replace(/^\.?\/?/, "")}`, import.meta.url).href;
@@ -42,15 +58,20 @@ export async function loadCatalog() {
   const index = await fetch(assetUrl("assets/INDEX.json")).then((r) => r.json());
 
   const objects = (index.objects || []).map((o) => {
-    const parts = (o.path || "").split("/");
-    const cat = parts[1] || "objects";
+    const cat = objectCat(o);
+    const label =
+      cat === "roads"
+        ? o.state || o.name || "road"
+        : [o.name, o.state].filter(Boolean).join(" · ");
     return {
       kind: "object",
       id: o.id,
       cat,
-      label: [o.name, o.state].filter(Boolean).join(" · "),
+      label,
       path: o.path,
-      size: o.size,
+      size: o.size || (o.w && o.h ? `${o.w}x${o.h}` : undefined),
+      tileable: !!o.tileable || /\/roadTiles\//i.test(o.path || ""),
+      tileSize: o.tileSize || (/\/roadTiles\//i.test(o.path || "") ? 64 : undefined),
       thumbs: thumbUrls(o.path),
     };
   });

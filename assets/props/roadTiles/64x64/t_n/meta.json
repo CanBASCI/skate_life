@@ -1,0 +1,11 @@
+{
+  "id": "roadtile-t_n",
+  "kind": "object",
+  "w": 64,
+  "h": 64,
+  "name": "roadTiles",
+  "state": "T Kuzey",
+  "path": "assets/props/roadTiles/64x64/t_n",
+  "tileable": true,
+  "tileSize": 64
+}

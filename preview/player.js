@@ -69,11 +69,16 @@ export function dirFromVector(dx, dz) {
 }
 
 export class Player {
-  constructor(scene, { x = 0, z = 200, syncDepth, collides = null, radius = 22 } = {}) {
+  constructor(
+    scene,
+    { x = 0, z = 200, syncDepth, collides = null, findVault = null, radius = 22 } = {},
+  ) {
     this.scene = scene;
     this.syncDepth = syncDepth;
-    /** (x, z) => true if blocked */
+    /** (x, z, r) => true if blocked */
     this.collides = collides;
+    /** () => { landX, landZ, ignore } | null — vaultable obstacle ahead */
+    this.findVault = findVault;
     this.radius = radius;
     this.keys = new Set();
     this.facing = "south";
@@ -81,6 +86,8 @@ export class Player {
     this.frame = 0;
     this.accum = 0;
     this.busy = null;
+    /** @type {{ fromX:number, fromZ:number, toX:number, toZ:number, ignore: object|null, dur:number, t:number } | null} */
+    this.vaultMove = null;
     this.textures = {};
     this.mesh = null;
     this.ring = null;
@@ -192,9 +199,15 @@ export class Player {
     if (this.driving) return;
     if (e.code === "Space") {
       e.preventDefault();
-      this.startOneShot("jump");
+      // near vaultable obstacle → vault (V anim); else normal jump
+      const v = this.findVault?.() || null;
+      if (v) this.startVault(v);
+      else this.startOneShot("jump");
     } else if (e.code === "KeyV" || e.code === "KeyF") {
-      this.startOneShot("vault");
+      e.preventDefault();
+      const v = this.findVault?.() || null;
+      if (v) this.startVault(v);
+      else this.startOneShot("vault");
     }
   }
 
@@ -208,6 +221,27 @@ export class Player {
     this.anim = name;
     this.frame = 0;
     this.accum = 0;
+    this.vaultMove = null;
+    this.applyFrame();
+  }
+
+  /** Vault over an obstacle: play vault anim + slide to far side. */
+  startVault({ landX, landZ, ignore = null } = {}) {
+    if (this.busy || !this.mesh) return;
+    const cfg = SETS.vault;
+    this.busy = "vault";
+    this.anim = "vault";
+    this.frame = 0;
+    this.accum = 0;
+    this.vaultMove = {
+      fromX: this.mesh.position.x,
+      fromZ: this.mesh.position.z,
+      toX: landX,
+      toZ: landZ,
+      ignore,
+      dur: cfg.frames / cfg.fps,
+      t: 0,
+    };
     this.applyFrame();
   }
 
@@ -263,25 +297,27 @@ export class Player {
       else speed = WALK_SPEED;
     } else if (this.busy === "jump") {
       speed = moving ? WALK_SPEED * 0.85 : 0;
-    } else if (this.busy === "vault") {
-      speed = moving ? WALK_SPEED * 1.1 : WALK_SPEED * 0.7;
-      if (!moving) {
-        const drift = {
-          east: [1, 0],
-          west: [-1, 0],
-          north: [0, -1],
-          south: [0, 1],
-          "north-east": [Math.SQRT1_2, -Math.SQRT1_2],
-          "north-west": [-Math.SQRT1_2, -Math.SQRT1_2],
-          "south-east": [Math.SQRT1_2, Math.SQRT1_2],
-          "south-west": [-Math.SQRT1_2, Math.SQRT1_2],
-        }[this.facing] || [0, 1];
-        this.tryMove(drift[0] * speed * dt, drift[1] * speed * dt);
-      }
     }
 
-    if (speed > 0 && (dx !== 0 || dz !== 0)) {
-      this.tryMove(dx * speed * dt, dz * speed * dt);
+    // vault: lerp over obstacle (ignore its collision)
+    if (this.busy === "vault" && this.vaultMove) {
+      const vm = this.vaultMove;
+      vm.t += dt;
+      const u = Math.min(1, vm.t / vm.dur);
+      const s = u * u * (3 - 2 * u); // smoothstep
+      const x0 = this.mesh.position.x;
+      const z0 = this.mesh.position.z;
+      this.mesh.position.x = vm.fromX + (vm.toX - vm.fromX) * s;
+      this.mesh.position.z = vm.fromZ + (vm.toZ - vm.fromZ) * s;
+      // slight lift so vault reads “over” the object
+      this.mesh.position.y = Math.sin(Math.PI * u) * 18;
+      this.vx = this.mesh.position.x - x0;
+      this.vz = this.mesh.position.z - z0;
+    } else {
+      if (this.mesh.position.y !== 0) this.mesh.position.y = 0;
+      if (speed > 0 && (dx !== 0 || dz !== 0)) {
+        this.tryMove(dx * speed * dt, dz * speed * dt);
+      }
     }
 
     this.ring.position.x = this.mesh.position.x;
@@ -297,6 +333,7 @@ export class Player {
         if (cfg.loop) this.frame = 0;
         else {
           this.busy = null;
+          this.vaultMove = null;
           this.anim = crouch
             ? moving
               ? "crouchWalk"
