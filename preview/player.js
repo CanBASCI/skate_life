@@ -160,6 +160,8 @@ export class Player {
     this.textures = {};
     this.mesh = null;
     this.ring = null;
+    /** When false, green collision disk stays hidden (debug toggle). */
+    this.colRingEnabled = true;
     this.spawn = { x, z };
     /** world units moved last frame (for ball kicks) */
     this.vx = 0;
@@ -204,7 +206,17 @@ export class Player {
   setVisible(on) {
     if (!this.mesh) return;
     this.mesh.visible = on;
-    if (this.ring) this.ring.visible = on;
+    this.syncColRingVisibility();
+  }
+
+  setColRingEnabled(on) {
+    this.colRingEnabled = !!on;
+    this.syncColRingVisibility();
+  }
+
+  syncColRingVisibility() {
+    if (!this.ring) return;
+    this.ring.visible = !!this.colRingEnabled && !!this.mesh?.visible;
   }
 
   /** World XZ of the collision feet (under painted shoes). */
@@ -320,6 +332,7 @@ export class Player {
     this.ring.add(fill, rim);
     this.ring.userData.skipPick = true;
     this.scene.add(this.ring);
+    this.syncColRingVisibility();
 
     window.addEventListener("keydown", this._boundKeyDown);
     window.addEventListener("keyup", this._boundKeyUp);

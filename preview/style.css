@@ -213,7 +213,8 @@ body {
 }
 
 #viewport-toggle,
-#bg-toggle {
+#bg-toggle,
+#col-toggle {
   display: flex;
   gap: 4px;
   padding: 3px;
@@ -223,7 +224,8 @@ body {
 }
 
 #viewport-toggle button,
-#bg-toggle button {
+#bg-toggle button,
+#col-toggle button {
   appearance: none;
   border: 0;
   border-radius: 999px;
@@ -238,12 +240,14 @@ body {
 }
 
 #viewport-toggle button:hover,
-#bg-toggle button:hover {
+#bg-toggle button:hover,
+#col-toggle button:hover {
   color: var(--ink);
 }
 
 #viewport-toggle button.active,
-#bg-toggle button.active {
+#bg-toggle button.active,
+#col-toggle button.active {
   background: #1c2a22;
   color: var(--accent);
 }
@@ -482,6 +486,39 @@ body {
   grid-template-columns: repeat(3, 28px);
   grid-template-rows: repeat(3, 28px);
   gap: 3px;
+}
+
+.insp-dance {
+  appearance: none;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 6px 10px;
+  background: #121a16;
+  color: var(--muted);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.insp-dance:hover:not(:disabled) {
+  color: var(--ink);
+  border-color: #3a5244;
+}
+
+.insp-dance.active {
+  background: #2a3d28;
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.insp-dance.hidden {
+  display: none;
+}
+
+.insp-dance:disabled {
+  opacity: 0.35;
+  cursor: default;
 }
 
 .dirs button {

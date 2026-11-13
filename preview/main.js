@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
-import { Player, dirFromVector, FEET_NUDGE_Z } from "./player.js?v=feetNudge";
+import { Player, dirFromVector, FEET_NUDGE_Z } from "./player.js?v=colToggle";
 import {
   loadCatalog,
   groupByCat,
@@ -34,13 +34,21 @@ const app = document.getElementById("app");
 const inspector = document.getElementById("inspector");
 const viewportToggle = document.getElementById("viewport-toggle");
 const bgToggle = document.getElementById("bg-toggle");
+const colToggle = document.getElementById("col-toggle");
 const VP_STORAGE_KEY = "skate_life_viewport";
 const BG_STORAGE_KEY = "skate_life_bg";
+const COL_DEBUG_KEY = "skate_life_col_debug";
 /** @type {"fill" | "9x16"} */
 let viewportMode =
   localStorage.getItem(VP_STORAGE_KEY) === "9x16" ? "9x16" : "fill";
 /** @type {"grass" | "black"} */
 let bgMode = localStorage.getItem(BG_STORAGE_KEY) === "black" ? "black" : "grass";
+/** Show green feet collision disks (player + pet). */
+let colDebugVisible = localStorage.getItem(COL_DEBUG_KEY) !== "hide";
+/** @type {THREE.Group | null} */
+let petColRing = null;
+const PET_COL_RADIUS = 12;
+const PET_FEET_NUDGE_Z = -10;
 /** Fixed playable frame center for 9:16 (camera does not follow the player). */
 const MAP_VIEW = { x: 0, z: 200 };
 const BG_PRESETS = {
@@ -63,6 +71,7 @@ const inspZ = document.getElementById("insp-z");
 const inspScale = document.getElementById("insp-scale");
 const inspScaleVal = document.getElementById("insp-scale-val");
 const inspDirs = document.getElementById("insp-dirs");
+const inspDance = document.getElementById("insp-dance");
 const inspDelete = document.getElementById("insp-delete");
 const inspCol = document.getElementById("insp-col");
 const inspColOn = document.getElementById("insp-col-on");
@@ -335,8 +344,90 @@ bgToggle?.addEventListener("click", (e) => {
   if (!btn) return;
   applyBackgroundMode(btn.getAttribute("data-bg"));
 });
+colToggle?.addEventListener("click", (e) => {
+  const btn = e.target.closest("button[data-col]");
+  if (!btn) return;
+  applyColDebugVisible(btn.getAttribute("data-col") !== "hide");
+});
 applyBackgroundMode(bgMode);
 applyViewportMode(viewportMode);
+
+function makeColRing(radius, x, z, nudgeZ = 0) {
+  const ring = new THREE.Group();
+  ring.rotation.x = -Math.PI / 2;
+  ring.position.set(x, 0.2, z + nudgeZ);
+  const fill = new THREE.Mesh(
+    new THREE.CircleGeometry(radius, 40),
+    new THREE.MeshBasicMaterial({
+      color: 0x3ddc6a,
+      transparent: true,
+      opacity: 0.28,
+      depthWrite: false,
+    }),
+  );
+  const rim = new THREE.Mesh(
+    new THREE.RingGeometry(Math.max(1, radius - 1.2), radius + 0.4, 40),
+    new THREE.MeshBasicMaterial({
+      color: 0x9ef0a8,
+      transparent: true,
+      opacity: 0.9,
+      depthWrite: false,
+    }),
+  );
+  fill.renderOrder = 99990;
+  rim.renderOrder = 99991;
+  ring.add(fill, rim);
+  ring.userData.skipPick = true;
+  return ring;
+}
+
+function disposePetColRing() {
+  if (!petColRing) return;
+  petColRing.parent?.remove(petColRing);
+  petColRing.traverse((n) => {
+    n.geometry?.dispose?.();
+    if (Array.isArray(n.material)) n.material.forEach((m) => m.dispose?.());
+    else n.material?.dispose?.();
+  });
+  petColRing = null;
+}
+
+function syncPetColRing() {
+  if (!companion || !companion.visible) {
+    if (petColRing) petColRing.visible = false;
+    return;
+  }
+  if (!petColRing) {
+    petColRing = makeColRing(
+      PET_COL_RADIUS,
+      companion.position.x,
+      companion.position.z,
+      PET_FEET_NUDGE_Z,
+    );
+    scene.add(petColRing);
+  }
+  petColRing.position.x = companion.position.x;
+  petColRing.position.z = companion.position.z + PET_FEET_NUDGE_Z;
+  petColRing.position.y = 0.2;
+  petColRing.visible = colDebugVisible;
+}
+
+function applyColDebugVisible(show) {
+  colDebugVisible = !!show;
+  try {
+    localStorage.setItem(COL_DEBUG_KEY, colDebugVisible ? "show" : "hide");
+  } catch {
+    /* */
+  }
+  player?.setColRingEnabled(colDebugVisible);
+  if (petColRing) petColRing.visible = colDebugVisible && !!companion?.visible;
+  else if (colDebugVisible && companion) syncPetColRing();
+  colToggle?.querySelectorAll("button[data-col]").forEach((btn) => {
+    const want = btn.getAttribute("data-col") === "show";
+    btn.classList.toggle("active", want === colDebugVisible);
+  });
+}
+applyColDebugVisible(colDebugVisible);
 
 function tightTrimTexture(tex, thr = 1) {
   const img = tex.image;
@@ -421,6 +512,17 @@ async function loadAnyTexture(urls) {
   throw new Error("no texture");
 }
 
+/** Higher = preferred when several sprites overlap under the cursor. */
+function pickPriority(obj) {
+  const d = obj?.userData || {};
+  const p = d.path || "";
+  let score = obj.renderOrder || 0;
+  // Characters / animals always beat cutaway rooms (club has opaque black bg)
+  if (d.kind === "character" || isAnimalPath(p) || d.companion) score += 1_000_000;
+  if (isInteriorPath(p) || /night_club_inside/i.test(p)) score -= 1_000_000;
+  return score;
+}
+
 function opaqueHits(hits, alphaThr = 8) {
   const out = [];
   for (const hit of hits) {
@@ -441,6 +543,8 @@ function opaqueHits(hits, alphaThr = 8) {
     );
     if (data.data[(y * data.width + x) * 4 + 3] > alphaThr) out.push(hit);
   }
+  // Match what you see: topmost / character wins over night_club black plate
+  out.sort((a, b) => pickPriority(b.object) - pickPriority(a.object));
   return out;
 }
 
@@ -1454,6 +1558,7 @@ async function attachIdle(obj, path, dir, { allowSouthFallback = true } = {}) {
     frames = await loadAnimFrames(path, slug, "unknown");
   }
   if (!frames.length) return false;
+  obj.userData.animName = "idle";
   obj.userData.anim = {
     frames,
     frame: 0,
@@ -1462,6 +1567,82 @@ async function attachIdle(obj, path, dir, { allowSouthFallback = true } = {}) {
     dir,
   };
   setMap(obj, frames[0]);
+  return true;
+}
+
+async function resolveDanceSlug(path) {
+  let candidates = [];
+  try {
+    const meta = await fetch(assetUrl(`${path}/meta.json`)).then((r) => r.json());
+    candidates = meta.animations || [];
+  } catch {
+    /* no meta */
+  }
+  if (!candidates.length) {
+    candidates = await listAnimSlugs(path);
+  }
+  // Prefer exact "dance", then custom-dancing / any *danc* slug
+  return (
+    candidates.find((a) => /^dance$/i.test(a)) ||
+    candidates.find((a) => /custom[-_]?danc/i.test(a)) ||
+    candidates.find((a) => /danc/i.test(a)) ||
+    null
+  );
+}
+
+async function ensureDanceAvailable(obj) {
+  if (!obj?.userData || obj.userData.kind !== "character") return false;
+  // Re-probe if previously cached as missing (old resolver missed custom-dancing)
+  if (obj.userData.danceSlug) return true;
+  const slug = await resolveDanceSlug(obj.userData.path);
+  obj.userData.danceSlug = slug;
+  return !!slug;
+}
+
+async function attachDance(obj, path, dir, { allowSouthFallback = true } = {}) {
+  const slug =
+    obj.userData.danceSlug ||
+    (await resolveDanceSlug(path)) ||
+    null;
+  if (!slug) return false;
+  obj.userData.danceSlug = slug;
+  let frames = await loadAnimFrames(path, slug, dir);
+  if (!frames.length && allowSouthFallback && dir !== "south") {
+    frames = await loadAnimFrames(path, slug, "south");
+  }
+  if (!frames.length) {
+    frames = await loadAnimFrames(path, slug, "unknown");
+  }
+  if (!frames.length) return false;
+  obj.userData.animName = "dance";
+  obj.userData.dancing = true;
+  obj.userData.anim = {
+    frames,
+    frame: 0,
+    accum: 0,
+    fps: 10,
+    dir,
+  };
+  setMap(obj, frames[0]);
+  return true;
+}
+
+async function setCharacterDancing(obj, on) {
+  if (!obj?.userData || obj.userData.kind !== "character") return false;
+  const dir = obj.userData.dir || "south";
+  if (on) {
+    const ok = await attachDance(obj, obj.userData.path, dir);
+    if (!ok) {
+      obj.userData.dancing = false;
+      statusEl.textContent = "Bu karakterde dance yok";
+      return false;
+    }
+    statusEl.textContent = "Dans açık";
+    return true;
+  }
+  obj.userData.dancing = false;
+  await attachIdle(obj, obj.userData.path, dir, { allowSouthFallback: false });
+  statusEl.textContent = "Dans kapalı";
   return true;
 }
 
@@ -1535,6 +1716,7 @@ async function spawnCompanion() {
     if (i >= 0) pickables.splice(i, 1);
     if (selected === companion) selectObject(null);
     companion = null;
+    disposePetColRing();
     statusEl.textContent = "Pet gitti";
     return;
   }
@@ -1567,6 +1749,7 @@ async function spawnCompanion() {
   obj.userData.solid = false;
   await attachPetClips(obj, COMPANION_PATH);
   companion = obj;
+  syncPetColRing();
   statusEl.textContent = "Pet yanında";
 }
 
@@ -1579,6 +1762,7 @@ function tickCompanions(dt) {
   // Hide with player while driving — don't keep walking beside the car
   if (occupiedVehicle) {
     companion.visible = false;
+    if (petColRing) petColRing.visible = false;
     return;
   }
   if (!companion.visible) companion.visible = true;
@@ -1623,6 +1807,7 @@ function tickCompanions(dt) {
     setPetClip(companion, "idle", companion.userData.dir || face);
   }
   syncDepth(companion);
+  syncPetColRing();
 }
 
 function rotationUrl(path, dir) {
@@ -1764,9 +1949,16 @@ async function setDirection(obj, dir, { recordUndo = true } = {}) {
     });
   }
   d.dir = dir;
-  // Characters / pets: always reload idle for this facing.
-  // (Previously skipped when rotTextures[dir] existed → tickAnims kept south idle forever.)
+  // Characters / pets: reload facing clip (keep dance if toggled on).
   if ((d.idleSlug || d.anim || d.kind === "character") && !d.vehicle && !d.ball) {
+    if (d.kind === "character" && d.dancing) {
+      const danced = await attachDance(obj, d.path, dir, { allowSouthFallback: false });
+      if (danced) {
+        refreshInspector();
+        return;
+      }
+      d.dancing = false;
+    }
     const ok = await attachIdle(obj, d.path, dir, { allowSouthFallback: false });
     if (ok) {
       refreshInspector();
@@ -2162,7 +2354,10 @@ function disposePlacedObject(obj) {
 function detachPlacedObject(obj) {
   if (!obj) return;
   if (selected === obj) selectObject(null);
-  if (companion === obj) companion = null;
+  if (companion === obj) {
+    companion = null;
+    disposePetColRing();
+  }
   scene.remove(obj);
   const i = pickables.indexOf(obj);
   if (i >= 0) pickables.splice(i, 1);
@@ -2289,7 +2484,39 @@ function refreshInspector() {
   mid.style.gridArea = "c";
   mid.title = d.dir;
   inspDirs.appendChild(mid);
+
+  if (inspDance) {
+    const isChar = d.kind === "character";
+    inspDance.classList.toggle("hidden", !isChar);
+    if (isChar) {
+      inspDance.classList.toggle("active", !!d.dancing);
+      inspDance.textContent = d.dancing ? "Dans: Açık" : "Dans: Kapalı";
+      inspDance.disabled = true;
+      inspDance.title = "Dance kontrol ediliyor…";
+      const sel = selected;
+      ensureDanceAvailable(sel).then((ok) => {
+        if (selected !== sel) return;
+        inspDance.disabled = !ok;
+        inspDance.title = ok
+          ? "Dans animasyonunu aç / kapat"
+          : "Bu karakterde dance animasyonu yok";
+        if (!ok) {
+          inspDance.classList.remove("active");
+          inspDance.textContent = "Dans: Yok";
+        }
+      });
+    }
+  }
 }
+
+inspDance?.addEventListener("click", async () => {
+  if (!selected || selected.userData?.kind !== "character") return;
+  if (inspDance.disabled) return;
+  const next = !selected.userData.dancing;
+  inspDance.disabled = true;
+  await setCharacterDancing(selected, next);
+  refreshInspector();
+});
 
 inspX.addEventListener("change", () => {
   if (!selected) return;
@@ -2849,6 +3076,7 @@ async function boot() {
     findVault: findVaultForPlayer,
     radius: 22,
   }).load();
+  applyColDebugVisible(colDebugVisible);
   // player not in pickables editor list
   if (viewportMode === "9x16") {
     setCameraFollowEnabled(false);

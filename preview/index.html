@@ -6,7 +6,7 @@
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
     <meta http-equiv="Pragma" content="no-cache" />
     <title>skate_life — editor</title>
-    <link rel="stylesheet" href="./style.css?v=20251113colCorners" />
+    <link rel="stylesheet" href="./style.css?v=20251113charDance" />
     <script type="importmap">
       {
         "imports": {
@@ -40,6 +40,10 @@
             <button type="button" data-bg="grass" class="active">Yeşil</button>
             <button type="button" data-bg="black">Siyah</button>
           </div>
+          <div id="col-toggle" title="Karakter / pet collision alanı">
+            <button type="button" data-col="show" class="active">Col göster</button>
+            <button type="button" data-col="hide">Col gizle</button>
+          </div>
         </div>
         <div id="app"></div>
         <div id="inspector" class="hidden">
@@ -48,6 +52,7 @@
           <label>Z <input id="insp-z" type="number" step="1" /></label>
           <label>Boyut <input id="insp-scale" type="range" min="0.25" max="4" step="0.05" /><span id="insp-scale-val">1.00</span></label>
           <div class="dirs" id="insp-dirs" title="Yön"></div>
+          <button type="button" id="insp-dance" class="insp-dance hidden" title="Dans animasyonu">Dans: Kapalı</button>
           <div id="insp-col" class="insp-col hidden" title="İçinde yürünebilir alan — köşeleri sürükleyerek ayarla">
             <label class="insp-check"><input id="insp-col-on" type="checkbox" /> İç alan</label>
             <span class="insp-col-hint">Köşe sürükle · kenar ortası = nokta ekle · Alt+tık = sil</span>
@@ -70,6 +75,6 @@
     <div id="prompt" class="hidden"><kbd>E</kbd> <span id="prompt-text">Bin</span></div>
     <div id="stamina" class="hidden"><div id="stamina-fill"></div></div>
     <div id="drag-ghost" class="hidden"></div>
-    <script type="module" src="./main.js?v=20251113colEdgePts"></script>
+    <script type="module" src="./main.js?v=20251113danceFix"></script>
   </body>
 </html>
