@@ -69,9 +69,12 @@ export function dirFromVector(dx, dz) {
 }
 
 export class Player {
-  constructor(scene, { x = 0, z = 200, syncDepth } = {}) {
+  constructor(scene, { x = 0, z = 200, syncDepth, collides = null, radius = 22 } = {}) {
     this.scene = scene;
     this.syncDepth = syncDepth;
+    /** (x, z) => true if blocked */
+    this.collides = collides;
+    this.radius = radius;
     this.keys = new Set();
     this.facing = "south";
     this.anim = "idle";
@@ -82,8 +85,44 @@ export class Player {
     this.mesh = null;
     this.ring = null;
     this.spawn = { x, z };
+    /** world units moved last frame (for ball kicks) */
+    this.vx = 0;
+    this.vz = 0;
+    /** true while controlling a vehicle — character hidden, no walk update */
+    this.driving = false;
     this._boundKeyDown = (e) => this.onKeyDown(e);
     this._boundKeyUp = (e) => this.onKeyUp(e);
+  }
+
+  setVisible(on) {
+    if (!this.mesh) return;
+    this.mesh.visible = on;
+    if (this.ring) this.ring.visible = on;
+  }
+
+  tryMove(dx, dz) {
+    if (!this.mesh) return;
+    if (!dx && !dz) {
+      this.vx = 0;
+      this.vz = 0;
+      return;
+    }
+    const x0 = this.mesh.position.x;
+    const z0 = this.mesh.position.z;
+    const nx = x0 + dx;
+    const nz = z0 + dz;
+    if (!this.collides) {
+      this.mesh.position.x = nx;
+      this.mesh.position.z = nz;
+    } else {
+      // axis-separate so you slide along walls
+      if (dx && !this.collides(nx, z0, this.radius)) this.mesh.position.x = nx;
+      if (dz && !this.collides(this.mesh.position.x, nz, this.radius)) {
+        this.mesh.position.z = nz;
+      }
+    }
+    this.vx = this.mesh.position.x - x0;
+    this.vz = this.mesh.position.z - z0;
   }
 
   async load() {
@@ -150,6 +189,7 @@ export class Player {
       return;
     }
     this.keys.add(e.code);
+    if (this.driving) return;
     if (e.code === "Space") {
       e.preventDefault();
       this.startOneShot("jump");
@@ -195,6 +235,9 @@ export class Player {
 
   update(dt) {
     if (!this.mesh) return;
+    this.vx = 0;
+    this.vz = 0;
+    if (this.driving) return;
 
     const crouch =
       this.keys.has("KeyC") || this.keys.has("ControlLeft") || this.keys.has("ControlRight");
@@ -233,14 +276,12 @@ export class Player {
           "south-east": [Math.SQRT1_2, Math.SQRT1_2],
           "south-west": [-Math.SQRT1_2, Math.SQRT1_2],
         }[this.facing] || [0, 1];
-        this.mesh.position.x += drift[0] * speed * dt;
-        this.mesh.position.z += drift[1] * speed * dt;
+        this.tryMove(drift[0] * speed * dt, drift[1] * speed * dt);
       }
     }
 
     if (speed > 0 && (dx !== 0 || dz !== 0)) {
-      this.mesh.position.x += dx * speed * dt;
-      this.mesh.position.z += dz * speed * dt;
+      this.tryMove(dx * speed * dt, dz * speed * dt);
     }
 
     this.ring.position.x = this.mesh.position.x;

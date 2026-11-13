@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
-import { Player } from "./player.js";
+import { Player, dirFromVector } from "./player.js";
 import {
   loadCatalog,
   groupByCat,
@@ -25,6 +25,8 @@ const DIR_LABELS = {
 };
 
 const statusEl = document.getElementById("status");
+const promptEl = document.getElementById("prompt");
+const promptTextEl = document.getElementById("prompt-text");
 const app = document.getElementById("app");
 const inspector = document.getElementById("inspector");
 const inspLabel = document.getElementById("insp-label");
@@ -41,7 +43,31 @@ let lastTs = performance.now();
 let selected = null;
 let catalogItemById = new Map();
 let placing = null; // catalog item while dragging from palette
+/** @type {THREE.Object3D | null} */
+let occupiedVehicle = null;
+let nearbyVehicle = null;
+/** @type {THREE.Object3D | null} */
+let companion = null;
 const texCache = new Map(); // url -> Promise<Texture>
+
+const VEHICLE_ENTER_RANGE = 120;
+
+const FACE_VEC = {
+  south: [0, 1],
+  north: [0, -1],
+  east: [1, 0],
+  west: [-1, 0],
+  "south-east": [Math.SQRT1_2, Math.SQRT1_2],
+  "north-east": [Math.SQRT1_2, -Math.SQRT1_2],
+  "south-west": [-Math.SQRT1_2, Math.SQRT1_2],
+  "north-west": [-Math.SQRT1_2, -Math.SQRT1_2],
+};
+const DRIVE_SPEED = 240;
+const DRIVE_BOOST = 340;
+const COMPANION_PATH = "assets/props/smallAnimals/dog/32x32/default";
+const COMPANION_FOLLOW_STOP = 38;
+const COMPANION_FOLLOW_START = 52;
+const COMPANION_SPEED = 105;
 
 const renderer = new THREE.WebGLRenderer({
   antialias: false,
@@ -276,6 +302,288 @@ function usesGroundPlane(item) {
   return /\/props\/road\//i.test(item.path || "");
 }
 
+function isBallPath(path) {
+  return /\/props\/balls\//i.test(path || "");
+}
+
+function isVehiclePath(path) {
+  return /\/vehicles\//i.test(path || "");
+}
+
+function isVehicleObj(obj) {
+  return !!(obj?.userData?.vehicle || isVehiclePath(obj?.userData?.path));
+}
+
+function nearestVehicle(px, pz, range = VEHICLE_ENTER_RANGE) {
+  let best = null;
+  let bestD = Infinity;
+  for (const obj of pickables) {
+    if (!isVehicleObj(obj)) continue;
+    if (obj === occupiedVehicle) continue;
+    // distance to car body edge (not sprite origin) so E shows from all sides
+    const d = distToFootprint(px, pz, footprintOf(obj));
+    if (d < bestD) {
+      bestD = d;
+      best = obj;
+    }
+  }
+  return best && bestD <= range ? best : null;
+}
+
+const _promptWorld = new THREE.Vector3();
+const _promptNdc = new THREE.Vector3();
+const _toCam = new THREE.Vector3();
+
+function hidePrompt() {
+  promptEl.classList.add("hidden");
+}
+
+/** Float the E prompt above a world object (vehicle), toward camera so it isn't buried in the sprite. */
+function showPromptAbove(obj, text) {
+  if (!obj || !promptEl) {
+    hidePrompt();
+    return;
+  }
+  promptTextEl.textContent = text;
+  const h = (obj.userData?.h || 48) * (obj.userData?.scale || 1);
+  _promptWorld.set(obj.position.x, Math.max(48, h * 0.72), obj.position.z);
+  // pull toward camera so DOM label sits in front of the car billboard on screen
+  _toCam.subVectors(camera.position, _promptWorld).normalize();
+  _promptWorld.addScaledVector(_toCam, 55);
+  _promptNdc.copy(_promptWorld).project(camera);
+  if (_promptNdc.z > 1 || _promptNdc.z < -1) {
+    hidePrompt();
+    return;
+  }
+  const canvasRect = renderer.domElement.getBoundingClientRect();
+  const stageRect = promptEl.offsetParent?.getBoundingClientRect?.() || canvasRect;
+  const sx = ((_promptNdc.x + 1) / 2) * canvasRect.width + (canvasRect.left - stageRect.left);
+  const sy =
+    ((-_promptNdc.y + 1) / 2) * canvasRect.height + (canvasRect.top - stageRect.top) - 18;
+  promptEl.style.left = `${sx}px`;
+  promptEl.style.top = `${sy}px`;
+  promptEl.classList.remove("hidden");
+}
+
+function enterVehicle(veh) {
+  if (!player?.mesh || !veh) return;
+  occupiedVehicle = veh;
+  nearbyVehicle = null;
+  player.driving = true;
+  player.setVisible(false);
+  if (companion) companion.visible = false;
+  veh.userData._solidBeforeDrive = !!veh.userData.solid;
+  veh.userData.solid = false;
+  veh.userData.occupied = true;
+  if (selected === veh) selectObject(null);
+  showPromptAbove(veh, "İn");
+  statusEl.textContent = "Araçtasın";
+}
+
+function exitVehicle() {
+  const veh = occupiedVehicle;
+  if (!player?.mesh || !veh) return;
+
+  // Place outside the vehicle footprint — old fixed 48px landed inside big car AABBs.
+  const box = footprintOf(veh);
+  const pr = player.radius || 22;
+  const clearance = Math.max(box.hw, box.hd) + pr + 28;
+  const face = veh.userData.dir || "south";
+  const sideFirst = {
+    east: [0, 1],
+    west: [0, -1],
+    north: [1, 0],
+    south: [-1, 0],
+    "north-east": [Math.SQRT1_2, Math.SQRT1_2],
+    "north-west": [-Math.SQRT1_2, Math.SQRT1_2],
+    "south-east": [Math.SQRT1_2, -Math.SQRT1_2],
+    "south-west": [-Math.SQRT1_2, -Math.SQRT1_2],
+  }[face] || [1, 0];
+  const tryDirs = [
+    sideFirst,
+    [-sideFirst[0], -sideFirst[1]],
+    [1, 0],
+    [-1, 0],
+    [0, 1],
+    [0, -1],
+    [Math.SQRT1_2, Math.SQRT1_2],
+    [-Math.SQRT1_2, Math.SQRT1_2],
+    [Math.SQRT1_2, -Math.SQRT1_2],
+    [-Math.SQRT1_2, -Math.SQRT1_2],
+  ];
+
+  let spot = null;
+  for (const [dx, dz] of tryDirs) {
+    for (const mul of [1, 1.35, 1.75, 2.3, 3]) {
+      const x = veh.position.x + dx * clearance * mul;
+      const z = veh.position.z + dz * clearance * mul;
+      // still ignore veh.solid (it's false while driving) — test footprint manually
+      if (circleHitsAabb(x, z, pr, box)) continue;
+      if (solidBlocked(x, z, pr)) continue;
+      spot = { x, z };
+      break;
+    }
+    if (spot) break;
+  }
+  if (!spot) {
+    spot = {
+      x: veh.position.x + clearance * 3,
+      z: veh.position.z + clearance * 3,
+    };
+  }
+
+  player.mesh.position.set(spot.x, 0, spot.z);
+  player.ring.position.x = spot.x;
+  player.ring.position.z = spot.z;
+  player.driving = false;
+  player.setVisible(true);
+  if (companion) {
+    companion.visible = true;
+    companion.position.set(
+      spot.x - 28,
+      0,
+      spot.z - 28,
+    );
+    syncDepth(companion);
+  }
+  veh.userData.solid = veh.userData._solidBeforeDrive !== false;
+  veh.userData.occupied = false;
+  occupiedVehicle = null;
+  hidePrompt();
+  statusEl.textContent = "Hazır";
+  if (player.syncDepth) player.syncDepth(player.mesh);
+}
+
+function driveVehicle(dt) {
+  const veh = occupiedVehicle;
+  if (!veh || !player) return;
+  const { dx, dz } = player.inputVector();
+  const moving = dx !== 0 || dz !== 0;
+  const boost = player.keys.has("ShiftLeft") || player.keys.has("ShiftRight");
+  const speed = boost ? DRIVE_BOOST : DRIVE_SPEED;
+  if (moving) {
+    const facing = dirFromVector(dx, dz);
+    if (facing && facing !== veh.userData.dir) {
+      applyFacing(veh, facing);
+    }
+    const x0 = veh.position.x;
+    const z0 = veh.position.z;
+    const nx = x0 + dx * speed * dt;
+    const nz = z0 + dz * speed * dt;
+    // vehicle footprint radius for driving collision
+    const box = footprintOf(veh);
+    const r = Math.max(box.hw, box.hd) * 0.55;
+    if (!solidBlocked(nx, z0, r)) veh.position.x = nx;
+    if (!solidBlocked(veh.position.x, nz, r)) veh.position.z = nz;
+    player.vx = veh.position.x - x0;
+    player.vz = veh.position.z - z0;
+  } else {
+    player.vx = 0;
+    player.vz = 0;
+  }
+  // keep hidden player transform on vehicle for camera follow
+  player.mesh.position.x = veh.position.x;
+  player.mesh.position.z = veh.position.z;
+  syncDepth(veh);
+}
+
+/** Buildings / vehicles / props / interiors block; roads, animals, balls, characters don't. */
+function isSolidItem(item) {
+  if (!item || item.kind === "character") return false;
+  const p = item.path || "";
+  if (usesGroundPlane(item) || /\/props\/road\//i.test(p)) return false;
+  if (isAnimalPath(p)) return false;
+  if (isBallPath(p)) return false;
+  return item.kind === "object";
+}
+
+function footprintOf(obj) {
+  const d = obj.userData || {};
+  const w = (d.w || 32) * (d.scale || 1);
+  const h = (d.h || 32) * (d.scale || 1);
+  const p = d.path || "";
+  if (/\/vehicles\//i.test(p) || d.vehicle) {
+    // Oriented box: long axis follows facing so you can't walk into the rear/front
+    const face = FACE_VEC[d.dir] || FACE_VEC.south;
+    const fx = face[0];
+    const fz = face[1];
+    const px = -fz;
+    const pz = fx;
+    const halfLen = w * 0.4;
+    const halfWid = w * 0.24;
+    return {
+      kind: "obb",
+      x: obj.position.x + fx * w * 0.14,
+      z: obj.position.z + fz * w * 0.14,
+      fx,
+      fz,
+      px,
+      pz,
+      halfLen,
+      halfWid,
+      // aliases for callers expecting aabb sizes
+      hw: halfWid,
+      hd: halfLen,
+    };
+  }
+  let hw;
+  let hd;
+  if (/\/buildings\//i.test(p)) {
+    hw = w * 0.32;
+    hd = w * 0.22;
+  } else if (/\/interiors\//i.test(p)) {
+    hw = w * 0.42;
+    hd = h * 0.36;
+  } else {
+    hw = w * 0.28;
+    hd = Math.max(w * 0.2, h * 0.18);
+  }
+  return { kind: "aabb", x: obj.position.x, z: obj.position.z, hw, hd };
+}
+
+function circleHitsAabb(px, pz, radius, box) {
+  if (box.kind === "obb") {
+    const dx = px - box.x;
+    const dz = pz - box.z;
+    const localF = dx * box.fx + dz * box.fz;
+    const localS = dx * box.px + dz * box.pz;
+    const cx = Math.max(-box.halfLen, Math.min(localF, box.halfLen));
+    const cz = Math.max(-box.halfWid, Math.min(localS, box.halfWid));
+    const ex = localF - cx;
+    const ez = localS - cz;
+    return ex * ex + ez * ez < radius * radius;
+  }
+  const cx = Math.max(box.x - box.hw, Math.min(px, box.x + box.hw));
+  const cz = Math.max(box.z - box.hd, Math.min(pz, box.z + box.hd));
+  const dx = px - cx;
+  const dz = pz - cz;
+  return dx * dx + dz * dz < radius * radius;
+}
+
+/** Distance from point to footprint surface (0 if inside). */
+function distToFootprint(px, pz, box) {
+  if (box.kind === "obb") {
+    const dx = px - box.x;
+    const dz = pz - box.z;
+    const localF = dx * box.fx + dz * box.fz;
+    const localS = dx * box.px + dz * box.pz;
+    const ox = Math.max(Math.abs(localF) - box.halfLen, 0);
+    const oz = Math.max(Math.abs(localS) - box.halfWid, 0);
+    return Math.hypot(ox, oz);
+  }
+  const ox = Math.max(Math.abs(px - box.x) - box.hw, 0);
+  const oz = Math.max(Math.abs(pz - box.z) - box.hd, 0);
+  return Math.hypot(ox, oz);
+}
+
+function solidBlocked(px, pz, radius) {
+  for (const obj of pickables) {
+    if (!obj.userData?.solid) continue;
+    if (circleHitsAabb(px, pz, radius, footprintOf(obj))) return true;
+  }
+  return false;
+}
+
 function wantsIdle(item) {
   return (
     item.kind === "character" ||
@@ -383,6 +691,166 @@ async function attachIdle(obj, path, dir) {
   return true;
 }
 
+async function resolveWalkSlug(path) {
+  const listed = await listAnimSlugs(path);
+  const hit =
+    listed.find((a) => /^walk$/i.test(a)) ||
+    listed.find((a) => /walk/i.test(a) && !/idle/i.test(a));
+  return hit || null;
+}
+
+/** Load idle+walk clips for all dirs (companion pet). */
+async function attachPetClips(obj, path) {
+  const idleSlug = (await resolveIdleSlug(path)) || "dog_idle";
+  const walkSlug = (await resolveWalkSlug(path)) || "walk";
+  const dirs = obj.userData.dirs?.length ? obj.userData.dirs : DIRS;
+  const clips = { idle: {}, walk: {} };
+  await Promise.all(
+    dirs.map(async (dir) => {
+      clips.idle[dir] = await loadAnimFrames(path, idleSlug, dir);
+      clips.walk[dir] = await loadAnimFrames(path, walkSlug, dir);
+      if (!clips.idle[dir].length) {
+        clips.idle[dir] = await loadAnimFrames(path, idleSlug, "south");
+      }
+      if (!clips.walk[dir].length) {
+        clips.walk[dir] = clips.idle[dir];
+      }
+    }),
+  );
+  obj.userData.idleSlug = idleSlug;
+  obj.userData.walkSlug = walkSlug;
+  obj.userData.clips = clips;
+  obj.userData.animName = "idle";
+  const dir = obj.userData.dir || "south";
+  const frames = clips.idle[dir] || clips.idle.south || [];
+  if (!frames.length) return false;
+  obj.userData.anim = { frames, frame: 0, accum: 0, fps: 3.5, dir };
+  setMap(obj, frames[0]);
+  return true;
+}
+
+function setPetClip(obj, animName, dir) {
+  const clips = obj.userData.clips;
+  if (!clips) return;
+  const bucket = clips[animName] || clips.idle;
+  let frames = bucket?.[dir] || bucket?.south || clips.idle?.south;
+  if (!frames?.length) return;
+  const same =
+    obj.userData.animName === animName &&
+    obj.userData.anim?.dir === dir &&
+    obj.userData.anim?.frames === frames;
+  if (same) return;
+  obj.userData.animName = animName;
+  obj.userData.dir = dir;
+  obj.userData.anim = {
+    frames,
+    frame: 0,
+    accum: 0,
+    fps: animName === "walk" ? 9 : 3.5,
+    dir,
+  };
+  setMap(obj, frames[0]);
+}
+
+async function spawnCompanion() {
+  if (!player?.mesh) return;
+  if (companion) {
+    // toggle off
+    scene.remove(companion);
+    const i = pickables.indexOf(companion);
+    if (i >= 0) pickables.splice(i, 1);
+    if (selected === companion) selectObject(null);
+    companion = null;
+    statusEl.textContent = "Pet gitti";
+    return;
+  }
+  const facing = player.facing || "south";
+  const behind = {
+    south: [0, -1],
+    north: [0, 1],
+    east: [-1, 0],
+    west: [1, 0],
+    "south-east": [-Math.SQRT1_2, -Math.SQRT1_2],
+    "south-west": [Math.SQRT1_2, -Math.SQRT1_2],
+    "north-east": [-Math.SQRT1_2, Math.SQRT1_2],
+    "north-west": [Math.SQRT1_2, Math.SQRT1_2],
+  }[facing] || [0, -1];
+  const x = player.mesh.position.x + behind[0] * 42;
+  const z = player.mesh.position.z + behind[1] * 42;
+  statusEl.textContent = "Pet geliyor…";
+  const item = {
+    kind: "object",
+    id: "companion-dog",
+    label: "pet dog",
+    path: COMPANION_PATH,
+    thumbs: [
+      assetUrl(`${COMPANION_PATH}/south.png`),
+      assetUrl(`${COMPANION_PATH}/rotations/south.png`),
+    ],
+  };
+  const obj = await spawnItem(item, x, z);
+  obj.userData.companion = true;
+  obj.userData.solid = false;
+  await attachPetClips(obj, COMPANION_PATH);
+  companion = obj;
+  statusEl.textContent = "Pet yanında";
+}
+
+function tickCompanions(dt) {
+  if (!companion || !player?.mesh) return;
+  if (!pickables.includes(companion)) {
+    companion = null;
+    return;
+  }
+  // Hide with player while driving — don't keep walking beside the car
+  if (occupiedVehicle) {
+    companion.visible = false;
+    return;
+  }
+  if (!companion.visible) companion.visible = true;
+  const follow = player.mesh;
+  const px = follow.position.x;
+  const pz = follow.position.z;
+  // stay slightly behind the leader's facing
+  const face = occupiedVehicle
+    ? occupiedVehicle.userData.dir || "south"
+    : player.facing || "south";
+  const behind = {
+    south: [0, -1],
+    north: [0, 1],
+    east: [-1, 0],
+    west: [1, 0],
+    "south-east": [-Math.SQRT1_2, -Math.SQRT1_2],
+    "south-west": [Math.SQRT1_2, -Math.SQRT1_2],
+    "north-east": [-Math.SQRT1_2, Math.SQRT1_2],
+    "north-west": [Math.SQRT1_2, Math.SQRT1_2],
+  }[face] || [0, -1];
+  const tx = px + behind[0] * 40;
+  const tz = pz + behind[1] * 40;
+  const dx = tx - companion.position.x;
+  const dz = tz - companion.position.z;
+  const dist = Math.hypot(dx, dz);
+  if (dist > COMPANION_FOLLOW_START) {
+    const nx = dx / dist;
+    const nz = dz / dist;
+    const step = Math.min(dist - COMPANION_FOLLOW_STOP, COMPANION_SPEED * dt);
+    companion.position.x += nx * step;
+    companion.position.z += nz * step;
+    const facing = dirFromVector(nx, nz) || companion.userData.dir || "south";
+    setPetClip(companion, "walk", facing);
+  } else if (dist > COMPANION_FOLLOW_STOP) {
+    const nx = dx / dist;
+    const nz = dz / dist;
+    companion.position.x += nx * COMPANION_SPEED * 0.45 * dt;
+    companion.position.z += nz * COMPANION_SPEED * 0.45 * dt;
+    const facing = dirFromVector(nx, nz) || companion.userData.dir || "south";
+    setPetClip(companion, "walk", facing);
+  } else {
+    setPetClip(companion, "idle", companion.userData.dir || face);
+  }
+  syncDepth(companion);
+}
+
 function rotationUrl(path, dir) {
   return assetUrl(`${path.replace(/\/$/, "")}/rotations/${dir}.png`);
 }
@@ -419,6 +887,49 @@ async function probeDirs(path) {
   return order.filter((d) => available.includes(d));
 }
 
+/** Prefetch all 8 (or available) rotation textures so facing is instant. */
+async function loadRotationTextures(path, dirs) {
+  const map = {};
+  await Promise.all(
+    dirs.map(async (dir) => {
+      try {
+        map[dir] = await pixelTexture(rotationUrl(path, dir));
+      } catch {
+        /* missing dir */
+      }
+    }),
+  );
+  if (!map.south) {
+    try {
+      map.south = (await loadAnyTexture([
+        rotationUrl(path, "south"),
+        assetUrl(`${path}/south.png`),
+      ])).tex;
+    } catch {
+      /* */
+    }
+  }
+  return map;
+}
+
+function applyFacing(obj, dir) {
+  const d = obj.userData;
+  if (!dir) return false;
+  const cached = d.rotTextures?.[dir];
+  if (cached) {
+    d.dir = dir;
+    setMap(obj, cached);
+    return true;
+  }
+  if (d.dirs?.includes(dir)) {
+    // kick async load; still mark desired dir
+    d.dir = dir;
+    setDirection(obj, dir);
+    return true;
+  }
+  return false;
+}
+
 function applyScale(obj) {
   const d = obj.userData;
   const displayW = d.w * d.scale;
@@ -441,14 +952,20 @@ function setMap(obj, tex) {
 
 async function setDirection(obj, dir) {
   const d = obj.userData;
-  if (!d.dirs.includes(dir)) return;
+  if (!d.dirs?.includes(dir) && !d.rotTextures?.[dir]) return;
   d.dir = dir;
-  if (d.idleSlug || d.anim) {
+  // Characters / pets with idle clips keep anim path
+  if ((d.idleSlug || d.anim) && !d.vehicle && !d.rotTextures?.[dir]) {
     const ok = await attachIdle(obj, d.path, dir);
     if (ok) {
       refreshInspector();
       return;
     }
+  }
+  if (d.rotTextures?.[dir]) {
+    setMap(obj, d.rotTextures[dir]);
+    refreshInspector();
+    return;
   }
   if (dir === "south" && d.fallbackSouth) {
     try {
@@ -456,6 +973,8 @@ async function setDirection(obj, dir) {
         rotationUrl(d.path, "south"),
         assetUrl(`${d.path}/south.png`),
       ]);
+      d.rotTextures = d.rotTextures || {};
+      d.rotTextures.south = tex;
       setMap(obj, tex);
       refreshInspector();
       return;
@@ -465,6 +984,9 @@ async function setDirection(obj, dir) {
   }
   try {
     const tex = await pixelTexture(rotationUrl(d.path, dir));
+    d.rotTextures = d.rotTextures || {};
+    d.rotTextures[dir] = tex;
+    if (!d.dirs.includes(dir)) d.dirs.push(dir);
     setMap(obj, tex);
     refreshInspector();
   } catch (err) {
@@ -474,7 +996,17 @@ async function setDirection(obj, dir) {
 
 async function spawnItem(item, x, z) {
   const { tex } = await loadAnyTexture(item.thumbs);
-  const dirs = await probeDirs(item.path);
+  let dirs = await probeDirs(item.path);
+  // Vehicles/buildings: always try full 8-dir atlas (probe alone can miss under load)
+  const wantFull =
+    isVehiclePath(item.path) || /\/buildings\//i.test(item.path || "");
+  const rotTextures = await loadRotationTextures(
+    item.path,
+    wantFull ? DIRS : dirs.length ? dirs : DIRS,
+  );
+  const fromTex = DIRS.filter((d) => rotTextures[d]);
+  if (fromTex.length) dirs = fromTex;
+  else if (rotTextures.unknown) dirs = ["unknown"];
   const scale = defaultScale(item);
   const w = tex.image.width;
   const h = tex.image.height;
@@ -489,9 +1021,17 @@ async function spawnItem(item, x, z) {
     scale,
     dir,
     dirs,
+    rotTextures,
     fallbackSouth: true,
     editable: true,
+    solid: isSolidItem(item),
+    ball: isBallPath(item.path),
+    vehicle: isVehiclePath(item.path),
   };
+  if (userData.ball) {
+    const br = Math.max(10, ((w * scale) / 2) * 0.55);
+    userData.physics = { vx: 0, vz: 0, r: br };
+  }
 
   let obj;
   if (usesGroundPlane(item)) {
@@ -522,6 +1062,8 @@ async function spawnItem(item, x, z) {
   }
 
   obj.userData = userData;
+  // Prefer cached rotation for initial facing
+  if (rotTextures[dir]) setMap(obj, rotTextures[dir]);
   syncDepth(obj);
   scene.add(obj);
   pickables.push(obj);
@@ -618,6 +1160,8 @@ inspScale.addEventListener("input", () => {
 });
 inspDelete.addEventListener("click", () => {
   if (!selected || !selected.userData.editable) return;
+  if (selected === companion) companion = null;
+  if (selected === occupiedVehicle) return;
   scene.remove(selected);
   const i = pickables.indexOf(selected);
   if (i >= 0) pickables.splice(i, 1);
@@ -640,6 +1184,7 @@ function groundHit() {
 function onPointerDown(event) {
   if (event.button !== 0) return;
   if (placing) return;
+  if (occupiedVehicle) return;
   setPointerFromEvent(event);
   raycaster.setFromCamera(pointer, camera);
   raycaster.camera = camera;
@@ -649,7 +1194,7 @@ function onPointerDown(event) {
     return;
   }
   const obj = hits[0].object;
-  if (!obj.userData.editable) {
+  if (!obj.userData.editable || obj.userData.occupied) {
     selectObject(null);
     return;
   }
@@ -715,18 +1260,40 @@ renderer.domElement.addEventListener("pointerup", onPointerUp);
 renderer.domElement.addEventListener("pointercancel", onPointerUp);
 
 window.addEventListener("keydown", (e) => {
-  if (!selected || !selected.userData.editable) return;
   if (e.target.matches?.("input, textarea")) return;
-  const dirs = selected.userData.dirs.length
-    ? selected.userData.dirs
-    : DIRS;
+
+  // P: spawn / dismiss companion pet
+  if ((e.key === "p" || e.key === "P") && !e.repeat) {
+    e.preventDefault();
+    spawnCompanion();
+    return;
+  }
+
+  // E: enter / exit vehicle (priority over rotate)
+  if ((e.key === "e" || e.key === "E") && !e.repeat) {
+    if (occupiedVehicle) {
+      e.preventDefault();
+      exitVehicle();
+      return;
+    }
+    if (nearbyVehicle) {
+      e.preventDefault();
+      enterVehicle(nearbyVehicle);
+      return;
+    }
+  }
+
+  if (!selected || !selected.userData.editable) return;
+  if (occupiedVehicle) return;
+  const dirs = selected.userData.dirs.length ? selected.userData.dirs : DIRS;
   if (!dirs.length) return;
   let idx = dirs.indexOf(selected.userData.dir);
   if (idx < 0) idx = 0;
   if (e.key === "q" || e.key === "Q") {
     idx = (idx - 1 + dirs.length) % dirs.length;
     setDirection(selected, dirs[idx]);
-  } else if (e.key === "e" || e.key === "E") {
+  } else if ((e.key === "e" || e.key === "E") && !nearbyVehicle) {
+    // rotate selection only when not in vehicle enter range
     idx = (idx + 1) % dirs.length;
     setDirection(selected, dirs[idx]);
   } else if (e.key === "Delete" || e.key === "Backspace") {
@@ -852,7 +1419,13 @@ async function boot() {
   });
 
   statusEl.textContent = "Oyuncu…";
-  player = await new Player(scene, { x: 0, z: 200, syncDepth }).load();
+  player = await new Player(scene, {
+    x: 0,
+    z: 200,
+    syncDepth,
+    collides: solidBlocked,
+    radius: 22,
+  }).load();
   // player not in pickables editor list
   controls.target.set(player.mesh.position.x, 0, player.mesh.position.z);
   placeCamera(controls.target);
@@ -882,14 +1455,151 @@ function tickAnims(dt) {
   }
 }
 
+const BALL_FRICTION = 2.8;
+const BALL_BOUNCE = 0.55;
+const BALL_KICK = 9.5;
+const BALL_MAX_SPEED = 420;
+
+function resolveBallVsSolid(ball, phy) {
+  for (const obj of pickables) {
+    if (!obj.userData?.solid) continue;
+    const box = footprintOf(obj);
+    if (!circleHitsAabb(ball.position.x, ball.position.z, phy.r, box)) continue;
+    // push out of AABB + bounce velocity on dominant axis
+    const dx = ball.position.x - box.x;
+    const dz = ball.position.z - box.z;
+    const px = box.hw + phy.r - Math.abs(dx);
+    const pz = box.hd + phy.r - Math.abs(dz);
+    if (px < pz) {
+      ball.position.x += Math.sign(dx || 1) * px;
+      phy.vx *= -BALL_BOUNCE;
+    } else {
+      ball.position.z += Math.sign(dz || 1) * pz;
+      phy.vz *= -BALL_BOUNCE;
+    }
+  }
+}
+
+function kickBallsFromPlayer() {
+  if (!player?.mesh) return;
+  const px = player.mesh.position.x;
+  const pz = player.mesh.position.z;
+  const pr = player.radius || 22;
+  for (const ball of pickables) {
+    const phy = ball.userData?.physics;
+    if (!ball.userData?.ball || !phy) continue;
+    const dx = ball.position.x - px;
+    const dz = ball.position.z - pz;
+    const dist = Math.hypot(dx, dz) || 0.0001;
+    const minDist = pr + phy.r;
+    if (dist >= minDist) continue;
+    // separate so we don't stick inside the player
+    const push = (minDist - dist) / dist;
+    ball.position.x += dx * push;
+    ball.position.z += dz * push;
+    const nx = dx / dist;
+    const nz = dz / dist;
+    const move = Math.hypot(player.vx || 0, player.vz || 0);
+    const impulse = BALL_KICK * (0.35 + move * 18);
+    phy.vx += nx * impulse + (player.vx || 0) * 28;
+    phy.vz += nz * impulse + (player.vz || 0) * 28;
+  }
+}
+
+function tickBallPhysics(dt) {
+  kickBallsFromPlayer();
+  const damp = Math.exp(-BALL_FRICTION * dt);
+  for (const ball of pickables) {
+    const phy = ball.userData?.physics;
+    if (!ball.userData?.ball || !phy) continue;
+    let sp = Math.hypot(phy.vx, phy.vz);
+    if (sp > BALL_MAX_SPEED) {
+      phy.vx = (phy.vx / sp) * BALL_MAX_SPEED;
+      phy.vz = (phy.vz / sp) * BALL_MAX_SPEED;
+      sp = BALL_MAX_SPEED;
+    }
+    ball.position.x += phy.vx * dt;
+    ball.position.z += phy.vz * dt;
+    phy.vx *= damp;
+    phy.vz *= damp;
+    if (Math.abs(phy.vx) < 1 && Math.abs(phy.vz) < 1) {
+      phy.vx = 0;
+      phy.vz = 0;
+    }
+    resolveBallVsSolid(ball, phy);
+    // ball ↔ ball
+    for (const other of pickables) {
+      if (other === ball || !other.userData?.ball) continue;
+      const op = other.userData.physics;
+      if (!op) continue;
+      const dx = ball.position.x - other.position.x;
+      const dz = ball.position.z - other.position.z;
+      const dist = Math.hypot(dx, dz) || 0.0001;
+      const min = phy.r + op.r;
+      if (dist >= min) continue;
+      const nx = dx / dist;
+      const nz = dz / dist;
+      const overlap = (min - dist) * 0.5;
+      ball.position.x += nx * overlap;
+      ball.position.z += nz * overlap;
+      other.position.x -= nx * overlap;
+      other.position.z -= nz * overlap;
+      const dvx = phy.vx - op.vx;
+      const dvz = phy.vz - op.vz;
+      const impact = dvx * nx + dvz * nz;
+      if (impact > 0) continue;
+      const j = impact * 0.9;
+      phy.vx -= j * nx;
+      phy.vz -= j * nz;
+      op.vx += j * nx;
+      op.vz += j * nz;
+      syncDepth(other);
+    }
+    // light spin: cycle facing with speed (fire-and-forget)
+    if (sp > 40 && ball.userData.dirs?.length > 1 && !ball.userData._spinBusy) {
+      ball.userData._spinAcc = (ball.userData._spinAcc || 0) + sp * dt * 0.015;
+      if (ball.userData._spinAcc >= 1) {
+        ball.userData._spinAcc = 0;
+        const dirs = ball.userData.dirs;
+        let i = dirs.indexOf(ball.userData.dir);
+        if (i < 0) i = 0;
+        const next = dirs[(i + 1) % dirs.length];
+        if (next !== ball.userData.dir) {
+          ball.userData._spinBusy = true;
+          setDirection(ball, next).finally(() => {
+            ball.userData._spinBusy = false;
+          });
+        }
+      }
+    }
+    syncDepth(ball);
+  }
+}
+
+function updateVehiclePrompt() {
+  if (!player?.mesh) return;
+  if (occupiedVehicle) {
+    nearbyVehicle = null;
+    showPromptAbove(occupiedVehicle, "İn");
+    return;
+  }
+  const p = player.mesh.position;
+  nearbyVehicle = nearestVehicle(p.x, p.z);
+  if (nearbyVehicle) showPromptAbove(nearbyVehicle, "Bin");
+  else hidePrompt();
+}
+
 function tick(now) {
   const dt = Math.min(0.05, (now - lastTs) / 1000);
   lastTs = now;
   tickAnims(dt);
   if (player) {
-    player.update(dt);
+    if (occupiedVehicle) driveVehicle(dt);
+    else player.update(dt);
+    tickCompanions(dt);
+    tickBallPhysics(dt);
     if (!dragging && !placing) {
-      const p = player.mesh.position;
+      const p = occupiedVehicle ? occupiedVehicle.position : player.mesh.position;
       const t = 1 - Math.pow(0.0008, dt);
       controls.target.x += (p.x - controls.target.x) * t;
       controls.target.z += (p.z - controls.target.z) * t;
@@ -899,6 +1609,7 @@ function tick(now) {
     }
   }
   controls.update();
+  updateVehiclePrompt();
   renderer.render(scene, camera);
   requestAnimationFrame(tick);
 }
