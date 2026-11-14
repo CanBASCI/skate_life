@@ -13,6 +13,7 @@ import {
   connectLiveBridge,
   bridgePost,
 } from "./liveBridge.js";
+import { tryResolveChatIntent } from "./chatIntent.js?v=20251114nl";
 
 const REF = 96;
 const BUILDING_SCALE = 1.85;
@@ -2418,7 +2419,7 @@ async function handleChatCommand(raw, speakerOverride = null) {
   }
 
   statusEl.textContent =
-    "Komut: /play /add50char /R3 /dance /jump /sit /e /stop";
+    "Komut: /play · dans et · sola 3 · zıpla · dur · /R3 (küfür yasak)";
 }
 
 function dismissChatKeyboard() {
@@ -2434,6 +2435,59 @@ function dismissChatKeyboard() {
   requestAnimationFrame(() => resize());
 }
 
+/**
+ * Apply resolved chat intent for Main or a live character.
+ * @returns {boolean} true if handled (incl. banned)
+ */
+function applyResolvedChatIntent(intent, who, user = null) {
+  if (!intent) return false;
+  if (intent.kind === "banned") {
+    statusEl.textContent = "Küfür yasak";
+    return true;
+  }
+  if (intent.kind === "signin") {
+    if (user) {
+      liveSignIn(user).catch((err) => {
+        console.warn(err);
+        statusEl.textContent = err.message || String(err);
+      });
+    } else {
+      statusEl.textContent = "Katıl · YouTube chat’ten yaz (live)";
+    }
+    return true;
+  }
+  if (intent.kind === "signout") {
+    if (user) {
+      liveSignOut(user).catch((err) => {
+        console.warn(err);
+        statusEl.textContent = err.message || String(err);
+      });
+    } else {
+      statusEl.textContent = "Çıkış · live karakter için";
+    }
+    return true;
+  }
+  if (intent.kind === "vote") {
+    if (user) {
+      registerSceneVote(user, intent.sceneId, intent.cmd).catch((err) => {
+        console.warn(err);
+        statusEl.textContent = err?.message || String(err);
+      });
+    } else {
+      statusEl.textContent = "Sahne oyu · live /signin sonrası";
+    }
+    return true;
+  }
+  if (intent.kind === "slash" && intent.cmd) {
+    handleChatCommand(intent.cmd, who).catch((err) => {
+      console.warn(err);
+      statusEl.textContent = err.message || String(err);
+    });
+    return true;
+  }
+  return false;
+}
+
 function sendChatMessage() {
   if (!chatInput) return;
   const text = chatInput.value.trim();
@@ -2441,12 +2495,10 @@ function sendChatMessage() {
   const who = chatSpeaker();
   if (!who) return;
 
-  if (text.startsWith("/")) {
+  const intent = tryResolveChatIntent(text);
+  if (intent) {
     chatInput.value = "";
-    handleChatCommand(text).catch((err) => {
-      console.warn(err);
-      statusEl.textContent = err.message || String(err);
-    });
+    applyResolvedChatIntent(intent, who, null);
     if (window.matchMedia?.("(pointer: coarse)")?.matches) dismissChatKeyboard();
     return;
   }
@@ -2717,39 +2769,26 @@ function handleLiveEvent(ev) {
 
   if (ev.type !== "comment" || !text) return;
 
-  const lower = text.toLowerCase();
-  if (lower === "/signin" || lower === "/join") {
-    liveSignIn(user).catch((err) => {
-      console.warn(err);
-      statusEl.textContent = err.message || String(err);
-    });
+  const intent = tryResolveChatIntent(text);
+  if (intent?.kind === "banned") {
+    statusEl.textContent = "Küfür yasak";
     return;
   }
-  if (lower === "/signout" || lower === "/leave") {
-    liveSignOut(user).catch((err) => {
-      console.warn(err);
-      statusEl.textContent = err.message || String(err);
-    });
+  if (intent?.kind === "signin" || intent?.kind === "signout") {
+    applyResolvedChatIntent(intent, null, user);
     return;
   }
 
   const who = liveUsers.get(String(user.id || ""));
-  if (!who || !who.parent) return;
-
-  const voteScene = SCENE_VOTE_CMDS[lower];
-  if (voteScene) {
-    registerSceneVote(user, voteScene, lower).catch((err) => {
-      console.warn(err);
-      statusEl.textContent = err?.message || String(err);
-    });
+  if (!who || !who.parent) {
+    if (intent?.kind === "vote" || intent?.kind === "slash") {
+      statusEl.textContent = "Önce katıl (katıl / /signin)";
+    }
     return;
   }
 
-  if (text.startsWith("/")) {
-    handleChatCommand(text, who).catch((err) => {
-      console.warn(err);
-      statusEl.textContent = err.message || String(err);
-    });
+  if (intent) {
+    applyResolvedChatIntent(intent, who, user);
     return;
   }
 
