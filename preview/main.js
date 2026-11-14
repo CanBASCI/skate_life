@@ -44,8 +44,18 @@ const UI_CHROME_KEY = "skate_life_ui_chrome_hidden";
 const SCENE_STORAGE_KEY = "skate_life_scene_v1";
 const layoutEl = document.getElementById("layout");
 const uiToggleBtn = document.getElementById("ui-toggle");
+const uiRestartBtn = document.getElementById("ui-restart");
 // Default: menus + WASD HUD hidden; only show if user previously chose "Menü".
 let uiChromeHidden = localStorage.getItem(UI_CHROME_KEY) !== "0";
+/**
+ * Session cast only — travels between scenes while the tab is open.
+ * Cleared on hard refresh / Yeniden Başla (never restored from localStorage).
+ * @type {{ path: string, id?: string|null, scale?: number, dir?: string }[]}
+ */
+let persistentParty = [];
+/** After first scene load, live cast snapshots update party on switch. */
+let partySnapshotEnabled = false;
+let sessionRestarting = false;
 
 function applyUiChromeHidden(hidden) {
   uiChromeHidden = !!hidden;
@@ -75,6 +85,80 @@ uiToggleBtn?.addEventListener("click", (e) => {
   e.stopPropagation();
   applyUiChromeHidden(!uiChromeHidden);
 });
+
+/** Soft restart: empty cast, street — no full page refresh. */
+async function restartSession() {
+  if (sessionRestarting) return;
+  sessionRestarting = true;
+  statusEl.textContent = "Yeniden başlıyor…";
+  try {
+    persistentParty = [];
+    partySnapshotEnabled = false;
+    tennisCastCount = 0;
+    truthDareCrowdCount = 0;
+    redLightCastCount = 0;
+    truthDareActive = false;
+    truthDareSnapshot = new Map();
+    try {
+      clearTruthDareFormationLocks();
+    } catch {
+      /* */
+    }
+    try {
+      stopRedLightGame({ clearDq: true });
+    } catch {
+      /* */
+    }
+    clearNpcScriptMoves();
+    if (player?.scriptMove) player.scriptMove = null;
+    if (player?.mesh?.userData) {
+      player.mesh.userData.tennisTeam = null;
+      player.mesh.userData.formationSlot = null;
+      player.mesh.userData.formationMove = false;
+      player.mesh.userData.redLightDq = false;
+      player.mesh.userData.redLightEliminating = false;
+      player.mesh.userData.redLightFinished = false;
+      player.mesh.userData.redLightFinishing = false;
+      player.mesh.visible = true;
+    }
+    clearTennisCast();
+    clearCrowdExtras();
+    for (const obj of [...listPartyCharacters()]) {
+      clearNpcScriptMoves(obj);
+      detachPlacedObject(obj);
+      disposePlacedObject(obj);
+    }
+    if (companion) {
+      detachPlacedObject(companion);
+      disposePlacedObject(companion);
+      companion = null;
+    }
+    try {
+      syncTennisLiveSimUi();
+      syncTruthDareCrowdUi();
+      syncRedLightCastUi();
+    } catch {
+      /* UI helpers may not be ready */
+    }
+    if (sceneCatalog.some((s) => s.id === "street")) {
+      await loadNamedScene("street");
+    }
+    persistentParty = [];
+    statusEl.textContent = "Yeniden başladı · street · boş cast";
+  } catch (err) {
+    console.warn("restartSession", err);
+    statusEl.textContent = "Yeniden başlatılamadı";
+  } finally {
+    sessionRestarting = false;
+  }
+}
+
+uiRestartBtn?.addEventListener("click", (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+  restartSession().catch((err) => console.warn(err));
+});
+
 /** @type {"fill" | "9x16"} */
 let viewportMode =
   localStorage.getItem(VP_STORAGE_KEY) === "9x16" ? "9x16" : "fill";
@@ -140,6 +224,17 @@ const sceneJsonEl = document.getElementById("scene-json");
 const sceneModalCancel = document.getElementById("scene-modal-cancel");
 const sceneModalApply = document.getElementById("scene-modal-apply");
 const truthDareCrowdEl = document.getElementById("truth-dare-crowd");
+const tennisLiveSimEl = document.getElementById("tennis-live-sim");
+const tennisLiveStatsEl = document.getElementById("tennis-live-stats");
+/** TikTok like/gift sim for tennis 2v2 — likes + gift count per team. */
+const tennisLive = {
+  a: { likes: 0, gifts: 0, power: 0 },
+  b: { likes: 0, gifts: 0, power: 0 },
+};
+const TENNIS_LIKE_POWER = 1;
+const TENNIS_GIFT_POWER = 12;
+/** 0 | 2 | 4 — random cast size on tennis court */
+let tennisCastCount = 0;
 const redLightCastEl = document.getElementById("red-light-cast");
 const TRUTH_DARE_CROWD_COUNTS = [5, 10, 20, 30, 40, 50];
 const RED_LIGHT_CAST_MAX = 10;
@@ -1906,6 +2001,19 @@ async function handleChatCommand(raw) {
     }
   }
 
+  if (lower === "/play") {
+    if (!isRedLightScene()) {
+      statusEl.textContent = "/play sadece red light sahnesinde";
+      return;
+    }
+    if (redLightGame.active || redLightGame.pendingStart) {
+      statusEl.textContent = "Red light zaten başlıyor / oynanıyor";
+      return;
+    }
+    await startRedLightPlay();
+    return;
+  }
+
   if (lower === "/dance") {
     if (isRedLightScene()) {
       statusEl.textContent = "Red light — sadece yürüme";
@@ -2097,7 +2205,7 @@ async function handleChatCommand(raw) {
     if (!dirName || !Number.isFinite(birim) || birim <= 0) {
       statusEl.textContent = isRedLightScene()
         ? "Komut: /N3 = 3 sn yürü · /stop"
-        : "Komut: /R3 /N2 · /dance /jump /sit /stop";
+        : "Komut: /play /R3 /N2 · /dance /jump /sit /stop";
       return;
     }
     const vec = FACE_VEC[dirName];
@@ -2155,7 +2263,8 @@ async function handleChatCommand(raw) {
     return;
   }
 
-  statusEl.textContent = "Komut: /R3 /dance /jump /sit /e /stop (büyük/küçük harf OK)";
+  statusEl.textContent =
+    "Komut: /play /R3 /dance /jump /sit /e /stop (büyük/küçük harf OK)";
 }
 
 function dismissChatKeyboard() {
@@ -2261,13 +2370,14 @@ function syncWorldLabels() {
     }
   }
 
-  // dog_3 countdown bubble (red light counter)
-  if (isRedLightScene() && (redLightGame.active || redLightGame.dogKey)) {
+  // dog_3 bubble: /play hint, Yerlerinize, or countdown
+  if (isRedLightScene()) {
     const dog = findRedLightCounterDog();
     if (dog) {
       const key = labelKeyFor(dog);
       if (key) {
         live.add(key);
+        redLightGame.dogKey = key;
         const entry = ensureWorldLabel(key, " ", dog.userData?.path);
         entry.root.classList.add("rl-dog-label");
         entry.nameEl.textContent = "";
@@ -2281,7 +2391,19 @@ function syncWorldLabels() {
           // Don't shrink with tiny 32px dog sprite — keep ~20px readable
           placeWorldLabel(entry, dog, { ...scr, scale: 1 });
         }
-        if (entry.hideAt && now >= entry.hideAt) {
+        // Sticky /play while waiting — don't let hideAt clear it
+        const waitingPlay =
+          !redLightGame.active && !redLightGame.pendingStart;
+        if (waitingPlay) {
+          if (
+            entry.bubbleEl.classList.contains("hidden") ||
+            entry.bubbleEl.textContent !== "/play"
+          ) {
+            entry.bubbleEl.textContent = "/play";
+            entry.bubbleEl.classList.remove("hidden");
+          }
+          entry.hideAt = now + 60000;
+        } else if (entry.hideAt && now >= entry.hideAt) {
           entry.bubbleEl.classList.add("hidden");
           entry.bubbleEl.textContent = "";
           entry.hideAt = 0;
@@ -4159,9 +4281,33 @@ async function spawnItem(item, x, z, opts = {}) {
 
   obj.userData = userData;
   if (item.kind === "character") {
+    // Keep intended gather/home — not mid-entrance garage coords
     obj.userData.spawnX = x;
     obj.userData.spawnZ = z;
+    // User-placed cast travels across scenes (not JSON props / traffic / loading)
+    if (
+      !sceneLoading &&
+      !opts.traffic &&
+      opts.editable !== false &&
+      opts.partyMember !== false
+    ) {
+      obj.userData.partyMember = true;
+    }
   }
+
+  // Street cast: appear at post office first (never flash at click / screen center)
+  const streetEntrance =
+    isStreetLikeScene() &&
+    item.kind === "character" &&
+    !sceneLoading &&
+    !opts.traffic &&
+    opts.playEntrance !== false &&
+    !!findScenePostOffice();
+  if (streetEntrance) {
+    const exit = postOfficeGarageExit(findScenePostOffice());
+    obj.position.set(exit.x, 0, exit.z);
+  }
+
   // Prefer cached rotation for initial facing
   if (rotTextures[dir]) setMap(obj, rotTextures[dir]);
   syncDepth(obj);
@@ -4174,14 +4320,8 @@ async function spawnItem(item, x, z, opts = {}) {
     statusEl.textContent = "Hazır";
   }
 
-  // Street: new cast exits garage → scene JSON player spot (not live Main)
-  if (
-    isStreetLikeScene() &&
-    item.kind === "character" &&
-    !sceneLoading &&
-    !opts.traffic &&
-    opts.playEntrance !== false
-  ) {
+  // Street: walk from garage → scene JSON player spot (not live Main)
+  if (streetEntrance) {
     const home = streetGatherTarget;
     const ang = Math.random() * Math.PI * 2;
     const rad = 18 + Math.random() * 16;
@@ -4222,6 +4362,14 @@ async function spawnItem(item, x, z, opts = {}) {
     await setRedLightCastCount(countRedLightCast());
   } else if (!sceneLoading && !opts.traffic && opts.editable !== false) {
     schedulePersistScene();
+  }
+  if (
+    obj?.userData?.partyMember &&
+    partySnapshotEnabled &&
+    !sceneLoading &&
+    !opts.traffic
+  ) {
+    snapshotPartyFromWorld();
   }
   return obj;
 }
@@ -4293,8 +4441,9 @@ function serializeScene() {
   const objects = [];
   for (const obj of pickables) {
   const d = obj.userData;
-    // P-key companion is transient; catalog animals save normally
-    if (!d?.editable || d.companion || d.crowdExtra) continue;
+    // Party cast is stored separately and travels between scenes
+    if (!d?.editable || d.companion || d.crowdExtra || d.partyMember || d.tennisCast)
+      continue;
     const entry = {
       kind: d.kind || "object",
       id: d.catalogId || null,
@@ -4412,6 +4561,124 @@ function clearEditableSceneObjects() {
   companion = null;
   disposePetColRing();
   undoStack.length = 0;
+}
+
+function listPartyCharacters() {
+  return pickables.filter((o) => {
+    if (o.userData?.kind !== "character") return false;
+    if (o.userData?.companion) return false;
+    // Street cast, crowd (10/20/50), tennis NPCs — all travel between scenes
+    return !!(
+      o.userData?.partyMember ||
+      o.userData?.tennisCast ||
+      o.userData?.crowdExtra
+    );
+  });
+}
+
+function snapshotPartyFromWorld() {
+  const list = [];
+  for (const o of listPartyCharacters()) {
+    const d = o.userData || {};
+    list.push({
+      path: d.path,
+      id: d.catalogId || null,
+      scale: d.scale ?? 1,
+      dir: d.dir || "south",
+    });
+  }
+  persistentParty = list;
+}
+
+async function restorePartyIntoScene() {
+  if (!persistentParty.length) return 0;
+  const home = streetGatherTarget || player?.mesh?.position || { x: 0, z: 200 };
+  const club = isNightClubScene();
+  const street = isStreetLikeScene();
+  const clubSlots = club ? nightClubCrowdSlots(persistentParty.length) : [];
+  const gate = club ? nightClubEntranceGate() : null;
+  const post = street ? findScenePostOffice() : null;
+  const garage = post ? postOfficeGarageExit(post) : null;
+  const dirs = ["south", "south-east", "south-west", "east", "west"];
+  let placed = 0;
+  for (let i = 0; i < persistentParty.length; i++) {
+    const entry = persistentParty[i];
+    const item = findCatalogItem(entry);
+    if (!item) continue;
+    const dir = club ? dirs[i % dirs.length] : entry.dir || "south";
+    const slot = clubSlots[i] || null;
+    const ang = (i / Math.max(persistentParty.length, 1)) * Math.PI * 2;
+    const rad = 22 + (i % 3) * 10;
+    const gather = {
+      x: home.x + Math.cos(ang) * rad,
+      z: home.z + Math.sin(ang) * rad,
+    };
+    let spawnX;
+    let spawnZ;
+    if (club && gate) {
+      // Queue at sol-alt entrance, then run onto floor
+      const lane = i % 8;
+      const wave = Math.floor(i / 8);
+      spawnX = gate.x + 6 + lane * 12 + wave * 3 + (Math.random() - 0.5) * 4;
+      spawnZ = gate.z - 4 - (Math.random() - 0.5) * 5;
+    } else if (street && garage) {
+      // Start at post office — startStreetPostOfficeEntrances walks them in
+      const lane = i % 8;
+      const wave = Math.floor(i / 8);
+      spawnX = garage.x + (lane - 3.5) * 10;
+      spawnZ = garage.z + wave * 8;
+    } else if (slot) {
+      spawnX = slot.x;
+      spawnZ = slot.z;
+    } else {
+      spawnX = gather.x;
+      spawnZ = gather.z;
+    }
+    try {
+      const obj = await spawnItem(item, gather.x, gather.z, {
+        dir,
+        scale: entry.scale != null ? Number(entry.scale) : undefined,
+        exactPos: true,
+        recordUndo: false,
+        select: false,
+        playEntrance: false,
+        partyMember: false,
+      });
+      // Override spawnItem position — gather is home; visual start is gate/garage
+      obj.position.set(spawnX, 0, spawnZ);
+      obj.userData.spawnX = gather.x;
+      obj.userData.spawnZ = gather.z;
+      obj.userData.partyMember = true;
+      obj.userData.crowdExtra = true;
+      obj.userData.editable = true;
+      syncDepth(obj);
+      if (club && slot) {
+        obj.userData.formationMove = true;
+        scriptActorTo(obj, slot.x, slot.z, {
+          run: true,
+          faceDir: dir,
+          idleOnArrive: false,
+          wait: i * 0.14,
+          onDone: () => {
+            attachDance(obj, obj.userData.path, dir, {
+              allowSouthFallback: true,
+            })
+              .then((ok) => {
+                if (ok) return;
+                return attachIdle(obj, obj.userData.path, dir, {
+                  allowSouthFallback: true,
+                });
+              })
+              .catch(() => {});
+          },
+        });
+      }
+      placed += 1;
+    } catch (err) {
+      console.warn("party restore", err);
+    }
+  }
+  return placed;
 }
 
 /** NPC traffic on street road — car_2→car_5→pickup, L↔R off-screen. */
@@ -4720,6 +4987,7 @@ function beginPostOfficeEntrance(obj, dest, { stagger = 0, isPlayer = false } = 
     if (player?.skating && occupiedSkateboard) exitSkateboard();
     player.stopActions?.();
     player.mesh.position.set(sx, 0, sz);
+    player.mesh.visible = true;
     player.facing = walkDir;
     player.syncRing?.(sx, sz);
     if (player.syncDepth) player.syncDepth(player.mesh);
@@ -4727,7 +4995,9 @@ function beginPostOfficeEntrance(obj, dest, { stagger = 0, isPlayer = false } = 
     return true;
   }
 
+  // Reveal only at garage — never mid-plaza from a previous spawn slot
   obj.position.set(sx, 0, sz);
+  obj.visible = true;
   obj.userData.dir = walkDir;
   applyFacing(obj, walkDir);
   syncDepth(obj);
@@ -4784,7 +5054,7 @@ function startStreetPostOfficeEntrances(gather) {
   return n > 0;
 }
 
-async function loadScene(data, { persist = true } = {}) {
+async function loadScene(data, { persist = true, carryParty = true } = {}) {
   if (!data || Number(data.version) !== 1) {
     throw new Error("Geçersiz sahne JSON (version: 1 bekleniyor)");
   }
@@ -4799,7 +5069,11 @@ async function loadScene(data, { persist = true } = {}) {
     } catch {
       /* helpers may not be ready on first boot */
     }
+    // Remember cast before wipe — they travel to the next scene
+    if (carryParty && partySnapshotEnabled) snapshotPartyFromWorld();
     clearTraffic();
+    clearTennisCast();
+    clearCrowdExtras();
     if (data.revision != null) sceneRevision = Number(data.revision) || 0;
     if (data.sceneId) activeSceneId = String(data.sceneId);
     else activeSceneId = null;
@@ -4824,6 +5098,8 @@ async function loadScene(data, { persist = true } = {}) {
     let placed = 0;
     let missing = 0;
     for (const entry of entries) {
+      // Party cast is restored separately — skip character entries baked into JSON
+      if (entry?.partyMember) continue;
       const item = findCatalogItem(entry);
       if (!item) {
         missing += 1;
@@ -4848,6 +5124,8 @@ async function loadScene(data, { persist = true } = {}) {
     selectObject(null);
     // Scene JSON trafficLanes wins over stale localStorage defaults
     applyTrafficLanesFromScene(data);
+    let partyN = 0;
+    if (carryParty) partyN = await restorePartyIntoScene();
     if (persist) persistScene();
     syncTrafficForScene();
     // Street: Main + cast → JSON player home; later spawns use same fixed point
@@ -4871,6 +5149,9 @@ async function loadScene(data, { persist = true } = {}) {
           ? `Sahne: ${placed} obje (${missing} eksik asset)`
           : `Sahne yüklendi · ${placed} obje`;
     }
+    if (partyN > 0) {
+      statusEl.textContent = `${statusEl.textContent || "Hazır"} · parti ${partyN}`;
+    }
     if (isRedLightScene()) {
       redLightCastCount = Math.min(
         RED_LIGHT_CAST_MAX,
@@ -4878,11 +5159,22 @@ async function loadScene(data, { persist = true } = {}) {
       );
       syncRedLightCastUi();
       stopRedLightGame({ clearDq: true });
+      showRedLightPlayPrompt();
+      const ready = countRedLightCast();
+      statusEl.textContent =
+        ready > 0
+          ? `Red light · ${ready} kişi hazır · /play ile başla (max ${RED_LIGHT_CAST_MAX})`
+          : `Red light · /play ile başla (Main)`;
     } else {
       stopRedLightGame({ clearDq: true });
     }
+    if (isTennisScene()) {
+      syncTennisLiveSimUi();
+      ensureTennisFootballBall().catch(() => {});
+    }
   } finally {
     sceneLoading = false;
+    partySnapshotEnabled = true;
   }
 }
 
@@ -5140,22 +5432,286 @@ function syncRedLightCastUi() {
     const n = Number(btn.getAttribute("data-rlcast"));
     btn.classList.toggle("active", show && n === redLightCastCount);
   });
+  syncTennisLiveSimUi();
 }
 
-/** Editable cast on red_light (excludes Main mesh). */
+function formatTennisLiveStats() {
+  const { a, b } = tennisLive;
+  return `A ${a.likes}·${a.gifts} (${a.power}) · B ${b.likes}·${b.gifts} (${b.power})`;
+}
+
+function syncTennisLiveSimUi() {
+  const panel = tennisLiveSimEl;
+  if (!panel) return;
+  const show = isTennisScene();
+  panel.classList.toggle("hidden", !show);
+  panel.querySelectorAll("button[data-tncast]").forEach((btn) => {
+    const n = Number(btn.getAttribute("data-tncast"));
+    btn.classList.toggle("active", show && n === tennisCastCount);
+  });
+  if (tennisLiveStatsEl) tennisLiveStatsEl.textContent = formatTennisLiveStats();
+}
+
+function resetTennisLiveSim() {
+  tennisLive.a = { likes: 0, gifts: 0, power: 0 };
+  tennisLive.b = { likes: 0, gifts: 0, power: 0 };
+}
+
+function simulateTennisLive(kind) {
+  if (!isTennisScene()) {
+    statusEl.textContent = "Like/hediye sim — tennis sahnesinde dene";
+    return;
+  }
+  if (kind === "reset") {
+    resetTennisLiveSim();
+    syncTennisLiveSimUi();
+    statusEl.textContent = "Tenis live sim sıfırlandı";
+    return;
+  }
+  const team = kind.endsWith("-a") ? "a" : kind.endsWith("-b") ? "b" : null;
+  if (!team) return;
+  const side = tennisLive[team];
+  const label = team === "a" ? "A" : "B";
+  if (kind.startsWith("like-")) {
+    side.likes += 1;
+    side.power += TENNIS_LIKE_POWER;
+    statusEl.textContent = `Like → Takım ${label} · güç ${side.power}`;
+  } else if (kind.startsWith("gift-")) {
+    side.gifts += 1;
+    side.power += TENNIS_GIFT_POWER;
+    statusEl.textContent = `Hediye → Takım ${label} · güç ${side.power} (+${TENNIS_GIFT_POWER})`;
+  }
+  syncTennisLiveSimUi();
+}
+
+function shuffleInPlace(arr) {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
+/** Court mid in walk zone — south side = A, north side = B. */
+function tennisCastSlots(count) {
+  const n = count === 2 ? 2 : 4;
+  if (n === 2) {
+    return [
+      { x: -40, z: 140, dir: "north", team: "a" },
+      { x: 40, z: 300, dir: "south", team: "b" },
+    ];
+  }
+  return [
+    { x: -90, z: 130, dir: "north", team: "a" },
+    { x: 90, z: 130, dir: "north", team: "a" },
+    { x: -90, z: 310, dir: "south", team: "b" },
+    { x: 90, z: 310, dir: "south", team: "b" },
+  ];
+}
+
+function clearTennisCast() {
+  const doomed = pickables.filter((o) => o.userData?.tennisCast);
+  for (const obj of doomed) {
+    clearNpcScriptMoves(obj);
+    detachPlacedObject(obj);
+    disposePlacedObject(obj);
+  }
+  return doomed.length;
+}
+
+function findFootballBallItem() {
+  for (const it of catalogItemById.values()) {
+    if (/\/balls\/football\//i.test(it.path || "")) return it;
+  }
+  return null;
+}
+
+async function ensureTennisFootballBall() {
+  if (!isTennisScene()) return null;
+  const existing = pickables.find(
+    (o) => o.userData?.tennisBall || /\/balls\/football\//i.test(o.userData?.path || ""),
+  );
+  if (existing) {
+    existing.userData.tennisBall = true;
+    return existing;
+  }
+  const item = findFootballBallItem();
+  if (!item) {
+    statusEl.textContent = "Futbol topu katalogda yok";
+    return null;
+  }
+  const obj = await spawnItem(item, 0, 220, {
+    dir: "south",
+    exactPos: true,
+    recordUndo: false,
+    select: false,
+    playEntrance: false,
+  });
+  if (obj) {
+    obj.userData.tennisBall = true;
+    obj.userData.editable = true;
+  }
+  return obj;
+}
+
+async function setTennisCastCount(count) {
+  const n = count === 2 || count === 4 ? count : 0;
+  if (!isTennisScene()) return;
+  statusEl.textContent = n ? `${n} oyuncu hazırlanıyor…` : "Tenis cast temizleniyor…";
+  clearNpcScriptMoves();
+  if (player?.scriptMove) player.scriptMove = null;
+  // Drop street party + old tennis NPCs so total = Main + (n-1)
+  for (const obj of [...listPartyCharacters()]) {
+    clearNpcScriptMoves(obj);
+    detachPlacedObject(obj);
+    disposePlacedObject(obj);
+  }
+  clearTennisCast();
+  tennisCastCount = n;
+  syncTennisLiveSimUi();
+  await ensureTennisFootballBall();
+  if (!n) {
+    if (player?.mesh?.userData) {
+      player.mesh.userData.tennisTeam = null;
+      player.mesh.userData.formationSlot = null;
+    }
+    statusEl.textContent = "Tenis cast yok · futbol topu hazır";
+    return;
+  }
+  const slots = tennisCastSlots(n);
+  // Main counts as 1 — spawn only n-1 NPCs (2 → 1v1, 4 → 2v2)
+  const needNpcs = Math.max(0, n - (player?.mesh ? 1 : 0));
+  const catalog = shuffleInPlace([...crowdCharacterCatalog()]);
+  if (needNpcs > 0 && !catalog.length) {
+    statusEl.textContent = "Random cast için boy/girl yok";
+    tennisCastCount = 0;
+    syncTennisLiveSimUi();
+    return;
+  }
+
+  // Slot 0 = Main (takım A); remaining slots = NPCs
+  if (player?.mesh && slots[0]) {
+    const slot = slots[0];
+    player.mesh.position.set(slot.x, 0, slot.z);
+    player.facing = slot.dir || "north";
+    player.mesh.userData.tennisTeam = slot.team;
+    player.mesh.userData.formationSlot = { x: slot.x, z: slot.z };
+    player.mesh.userData.formationMove = false;
+    player.syncRing?.(slot.x, slot.z);
+    if (player.syncDepth) player.syncDepth(player.mesh);
+  }
+
+  let placed = player?.mesh ? 1 : 0;
+  for (let i = 0; i < needNpcs; i++) {
+    const item = catalog[i % catalog.length];
+    const slot = slots[i + (player?.mesh ? 1 : 0)];
+    if (!slot) break;
+    try {
+      const obj = await spawnItem(item, slot.x, slot.z, {
+        dir: slot.dir,
+        exactPos: true,
+        recordUndo: false,
+        select: false,
+        playEntrance: false,
+        editable: false,
+        partyMember: false,
+      });
+      obj.userData.tennisCast = true;
+      obj.userData.partyMember = true;
+      obj.userData.tennisTeam = slot.team;
+      obj.userData.editable = false;
+      obj.userData.formationSlot = { x: slot.x, z: slot.z };
+      obj.userData.formationMove = false;
+      placed += 1;
+    } catch (err) {
+      console.warn("tennis cast spawn", err);
+    }
+  }
+  if (partySnapshotEnabled) snapshotPartyFromWorld();
+  statusEl.textContent =
+    n === 2
+      ? `1v1 · Main + ${placed - (player?.mesh ? 1 : 0)} · futbol topu (geçici)`
+      : `2v2 · Main + ${placed - (player?.mesh ? 1 : 0)} · A/B · futbol topu (geçici)`;
+  syncTennisLiveSimUi();
+}
+
+tennisLiveSimEl?.addEventListener("click", (e) => {
+  const castBtn = e.target?.closest?.("button[data-tncast]");
+  if (castBtn) {
+    const n = Number(castBtn.getAttribute("data-tncast"));
+    setTennisCastCount(n).catch((err) => {
+      console.warn(err);
+      statusEl.textContent = err.message || String(err);
+    });
+    return;
+  }
+  const btn = e.target?.closest?.("button[data-tnsim]");
+  if (!btn) return;
+  simulateTennisLive(btn.getAttribute("data-tnsim") || "");
+});
+
+/** All red-light cast candidates (includes benched/hidden). Excludes Main. */
+function listRedLightNpcPool() {
+  return pickables.filter((o) => {
+    if (o.userData?.kind !== "character") return false;
+    if (o === player?.mesh || o.userData?.companion) return false;
+    return !!(
+      o.userData?.partyMember ||
+      o.userData?.tennisCast ||
+      o.userData?.crowdExtra ||
+      o.userData?.editable !== false
+    );
+  });
+}
+
+/** Active lineup NPCs only (not benched/hidden). */
 function listRedLightNpcs() {
-  return pickables.filter(
-    (o) =>
-      o.userData?.kind === "character" &&
-      o.userData?.editable !== false &&
-      !o.userData?.crowdExtra &&
-      o !== player?.mesh,
+  return listRedLightNpcPool().filter(
+    (o) => !o.userData?.redLightBench && o.visible !== false,
   );
 }
 
 function countRedLightCast() {
-  const npcs = listRedLightNpcs().length;
+  const npcs = listRedLightNpcPool().length;
   return (player?.mesh ? 1 : 0) + npcs;
+}
+
+function clearRedLightBenchHide() {
+  for (const o of listRedLightNpcPool()) {
+    o.visible = true;
+    if (o.userData) o.userData.redLightBench = false;
+  }
+}
+
+/**
+ * /play: Main + random up to 9 NPCs line up; everyone else stays in party but hidden.
+ */
+async function startRedLightPlay() {
+  if (!isRedLightScene()) return;
+  clearRedLightBenchHide();
+  const pool = listRedLightNpcPool();
+  const needNpcs = Math.max(0, RED_LIGHT_CAST_MAX - (player?.mesh ? 1 : 0));
+  const shuffled = shuffleInPlace([...pool]);
+  const selected = shuffled.slice(0, Math.min(needNpcs, shuffled.length));
+  const selectedSet = new Set(selected);
+  let hidden = 0;
+  for (const o of pool) {
+    if (selectedSet.has(o)) {
+      o.visible = true;
+      o.userData.redLightBench = false;
+      continue;
+    }
+    clearNpcScriptMoves(o);
+    o.visible = false;
+    o.userData.redLightBench = true;
+    hidden += 1;
+  }
+  const n = (player?.mesh ? 1 : 0) + selected.length;
+  statusEl.textContent =
+    hidden > 0
+      ? `Red light — ${n} random oyuncu · ${hidden} gizlendi`
+      : `Red light — ${n} oyuncu…`;
+  await setRedLightCastCount(n, { spawnMissing: false, hideExtras: false });
 }
 
 /**
@@ -5271,8 +5827,13 @@ function redLightExitGate() {
 
 /**
  * Set cast size 1–10: enter from sağ-üst, run to ALT lineup facing north.
+ * hideExtras: surplus NPCs are hidden (kept in party), not deleted.
+ * spawnMissing: fill shortfall with random catalog NPCs (cast buttons).
  */
-async function setRedLightCastCount(count) {
+async function setRedLightCastCount(
+  count,
+  { hideExtras = true, spawnMissing = true } = {},
+) {
   if (!isRedLightScene()) return;
   const n = Math.max(1, Math.min(RED_LIGHT_CAST_MAX, Number(count) || 1));
   statusEl.textContent = `${n} oyuncu giriyor…`;
@@ -5295,6 +5856,27 @@ async function setRedLightCastCount(count) {
     player.mesh.userData.formationMove = false;
     player.mesh.visible = true;
   }
+
+  const needNpcs = n - (player?.mesh ? 1 : 0);
+  const pool = listRedLightNpcPool();
+
+  if (hideExtras) {
+    // Random who plays; rest stay in party but hidden
+    for (const o of pool) {
+      o.visible = true;
+      if (o.userData) o.userData.redLightBench = false;
+    }
+    const shuffled = shuffleInPlace([...pool]);
+    const keep = shuffled.slice(0, Math.min(needNpcs, shuffled.length));
+    const keepSet = new Set(keep);
+    for (const o of shuffled) {
+      if (keepSet.has(o)) continue;
+      clearNpcScriptMoves(o);
+      o.visible = false;
+      o.userData.redLightBench = true;
+    }
+  }
+
   for (const o of listRedLightNpcs()) {
     if (o.userData) {
       o.userData.formationSlot = null;
@@ -5307,39 +5889,38 @@ async function setRedLightCastCount(count) {
   redLightGame.entranceArrived = 0;
   armRedLightGameAfterEntrance();
 
-  // Trim extra NPCs beyond n-1
   const npcs = listRedLightNpcs();
-  const needNpcs = n - (player?.mesh ? 1 : 0);
-  while (npcs.length > needNpcs) {
-    const obj = npcs.pop();
-    detachPlacedObject(obj);
-    disposePlacedObject(obj);
-  }
 
-  // Spawn missing NPCs at the gate (not on the finish line)
-  const catalog = crowdCharacterCatalog();
-  if (!catalog.length && needNpcs > npcs.length) {
-    statusEl.textContent = "Katalogda boy/girl karakter yok";
-  }
-  while (npcs.length < needNpcs && catalog.length) {
-    if (entranceGen !== redLightGame.entranceGen) return; // newer cast started
-    const item = catalog[npcs.length % catalog.length];
-    const i = npcs.length;
-    const sx = gate.x - (i % 5) * 14;
-    const sz = gate.z + Math.floor(i / 5) * 12;
-    try {
-      const obj = await spawnItem(item, sx, sz, {
-        dir: "south",
-        exactPos: true,
-        recordUndo: false,
-        select: false,
-        playEntrance: false,
-        redLightLineup: false,
-      });
-      npcs.push(obj);
-    } catch (err) {
-      console.warn("red light cast spawn", err);
-      break;
+  // Spawn missing NPCs at the gate (cast size buttons) — not on /play
+  if (spawnMissing) {
+    const catalog = crowdCharacterCatalog();
+    if (!catalog.length && needNpcs > npcs.length) {
+      statusEl.textContent = "Katalogda boy/girl karakter yok";
+    }
+    while (npcs.length < needNpcs && catalog.length) {
+      if (entranceGen !== redLightGame.entranceGen) return;
+      const item = catalog[npcs.length % catalog.length];
+      const i = npcs.length;
+      const sx = gate.x - (i % 5) * 14;
+      const sz = gate.z + Math.floor(i / 5) * 12;
+      try {
+        const obj = await spawnItem(item, sx, sz, {
+          dir: "south",
+          exactPos: true,
+          recordUndo: false,
+          select: false,
+          playEntrance: false,
+          redLightLineup: false,
+        });
+        if (obj) {
+          obj.userData.partyMember = true;
+          obj.userData.redLightBench = false;
+          npcs.push(obj);
+        }
+      } catch (err) {
+        console.warn("red light cast spawn", err);
+        break;
+      }
     }
   }
   if (entranceGen !== redLightGame.entranceGen) return;
@@ -5370,6 +5951,7 @@ async function setRedLightCastCount(count) {
     const sz = gate.z + wave * 12 + (Math.random() - 0.5) * 4;
     obj.userData.redLightLaneX = slot.x;
     obj.userData.redLightLaneZ = slot.z;
+    obj.visible = true;
     if (isPlayer) {
       player.mesh.position.set(sx, 0, sz);
       player.mesh.userData.spawnX = slot.x;
@@ -5403,10 +5985,10 @@ async function setRedLightCastCount(count) {
     });
   }
 
-  redLightCastCount = n;
+  redLightCastCount = goCount;
   syncRedLightCastUi();
   persistScene();
-  statusEl.textContent = `${n} oyuncu — yerlerinize!`;
+  statusEl.textContent = `${goCount} oyuncu — yerlerinize!`;
 }
 
 function findRedLightCounterDog() {
@@ -5619,6 +6201,15 @@ function flushRedLightEntranceAndStart() {
 function showRedLightLineupPrompt() {
   faceRedLightDog("south").catch(() => {});
   redLightDogBubble("Yerlerinize", 20000);
+}
+
+/** Until /play — dog shows the command so players know what to type. */
+function showRedLightPlayPrompt() {
+  if (!isRedLightScene()) return;
+  if (redLightGame.active || redLightGame.pendingStart) return;
+  clearRedLightBenchHide();
+  faceRedLightDog("south").catch(() => {});
+  redLightDogBubble("/play", 60000);
 }
 
 function armRedLightGameAfterEntrance() {
@@ -6121,6 +6712,12 @@ function endRedLightGame({ won = false } = {}) {
   faceRedLightDog("south").catch(() => {});
   stopRedLightGame({ clearDq: true });
   redLightDogBubble(won ? "✓" : "OK", 1600);
+  // After brief result, /play returns via tick / next prompt
+  setTimeout(() => {
+    if (isRedLightScene() && !redLightGame.active && !redLightGame.pendingStart) {
+      showRedLightPlayPrompt();
+    }
+  }, 1700);
 }
 
 function tickRedLightGame(dt) {
@@ -6164,7 +6761,27 @@ function tickRedLightGame(dt) {
     return;
   }
 
-  if (!redLightGame.active) return;
+  if (!redLightGame.active) {
+    // Idle on scene — keep /play on the dog until someone starts
+    const dog = findRedLightCounterDog();
+    if (dog) {
+      const key = labelKeyFor(dog);
+      const entry = key ? worldLabelMap.get(key) : null;
+      if (
+        !entry ||
+        entry.bubbleEl.classList.contains("hidden") ||
+        entry.bubbleEl.textContent !== "/play"
+      ) {
+        showRedLightPlayPrompt();
+      } else {
+        entry.hideAt = performance.now() + 60000;
+        entry.bubbleEl.textContent = "/play";
+        entry.bubbleEl.classList.add("rl-countdown");
+        entry.bubbleEl.classList.remove("hidden");
+      }
+    }
+    return;
+  }
 
   checkRedLightWinners();
   if (!redLightGame.active) return;
@@ -6446,6 +7063,7 @@ async function spawnCrowdExtras(count) {
           playEntrance: false,
         });
         obj.userData.crowdExtra = true;
+        obj.userData.partyMember = true; // travels with street → night club / other scenes
         obj.userData.formationMove = true; // before first frame soft-sep / blockers
         // Enter from sol alt, run to floor slot, then dance
         scriptActorTo(obj, slot.x, slot.z, {
@@ -6478,15 +7096,23 @@ async function spawnCrowdExtras(count) {
   const cols = 10;
   const gapX = 42;
   const gapZ = 46;
+  const post = findScenePostOffice();
+  const garage = post ? postOfficeGarageExit(post) : null;
   for (let i = 0; i < n; i++) {
     const item = catalog[i % catalog.length];
     const col = i % cols;
     const row = Math.floor(i / cols);
+    // Final gather slot (where they walk to)
     const x = home.x + (col - (cols - 1) / 2) * gapX + (row % 2) * 12;
     const z = home.z - 40 - row * gapZ;
     const dir = dirs[i % dirs.length];
+    // Spawn AT garage so idle-load never flashes them across the plaza
+    const lane = i % 8;
+    const wave = Math.floor(i / 8);
+    const sx = garage ? garage.x + (lane - 3.5) * 10 : x;
+    const sz = garage ? garage.z + wave * 8 : z;
     try {
-      const obj = await spawnItem(item, x, z, {
+      const obj = await spawnItem(item, sx, sz, {
         dir,
         exactPos: true,
         recordUndo: false,
@@ -6494,10 +7120,23 @@ async function spawnCrowdExtras(count) {
         playEntrance: false,
       });
       obj.userData.crowdExtra = true;
+      obj.userData.partyMember = true;
+      obj.userData.spawnX = x;
+      obj.userData.spawnZ = z;
+      if (garage) {
+        // Hide during idle decode — beginPostOfficeEntrance reveals at garage
+        obj.visible = false;
+        obj.position.set(sx, 0, sz);
+        syncDepth(obj);
+        beginPostOfficeEntrance(obj, { x, z }, { stagger: 0.12 + i * 0.1 });
+      }
       placed += 1;
     } catch (err) {
       console.warn("crowd spawn", err);
     }
+  }
+  if (post && placed > 0) {
+    statusEl.textContent = `Kalabalık: ${placed} · postane garajından…`;
   }
   return placed;
 }
@@ -6513,9 +7152,16 @@ async function setTruthDareCrowdCount(count) {
   clearTruthDareFormationLocks();
   truthDareActive = false;
   truthDareSnapshot = new Map();
+  // Replace whole traveling cast with this crowd size
+  for (const obj of [...listPartyCharacters()]) {
+    clearNpcScriptMoves(obj);
+    detachPlacedObject(obj);
+    disposePlacedObject(obj);
+  }
   clearCrowdExtras();
   const placed = await spawnCrowdExtras(n);
   truthDareCrowdCount = n;
+  if (partySnapshotEnabled) snapshotPartyFromWorld();
   syncTruthDareCrowdUi();
   if (activeSceneId === "dogrulukmu_cesaretmi") {
     await startTruthDareFormation();
@@ -6523,7 +7169,7 @@ async function setTruthDareCrowdCount(count) {
   } else if (isNightClubScene()) {
     statusEl.textContent = `Kalabalık: ${placed} · night club`;
   } else {
-    statusEl.textContent = `Kalabalık: ${placed} — doğrulukmu_cesaretmi’ye geç`;
+    statusEl.textContent = `Kalabalık: ${placed} — sahneler arası geliyor`;
   }
   persistScene();
 }
@@ -7384,6 +8030,7 @@ function disposePlacedObject(obj) {
 
 function detachPlacedObject(obj) {
   if (!obj) return;
+  const wasParty = !!(obj.userData?.partyMember || obj.userData?.tennisCast);
   if (selected === obj) selectObject(null);
   if (companion === obj) {
     companion = null;
@@ -7392,6 +8039,9 @@ function detachPlacedObject(obj) {
   scene.remove(obj);
   const i = pickables.indexOf(obj);
   if (i >= 0) pickables.splice(i, 1);
+  if (wasParty && partySnapshotEnabled && !sceneLoading) {
+    snapshotPartyFromWorld();
+  }
 }
 
 function attachPlacedObject(obj) {
@@ -8414,31 +9064,39 @@ async function boot() {
   }
 
   loadTrafficLaneZ();
+  // Fresh session: no cast from a previous play (hard refresh / reopen)
+  persistentParty = [];
+  partySnapshotEnabled = false;
+  try {
+    localStorage.removeItem("skate_life_party_v1");
+  } catch {
+    /* */
+  }
 
-  // Scene slots: default empty; named JSON only loads when user clicks (e.g. Sahne 1)
+  // Always boot on street — empty cast until user adds characters this session
   try {
     sceneCatalog = await fetchSceneCatalog();
     renderSceneSlots();
-    let localData = null;
-    try {
-      const raw = localStorage.getItem(SCENE_STORAGE_KEY);
-      if (raw) localData = JSON.parse(raw);
-    } catch {
-      /* */
+    const hasStreet = sceneCatalog.some((s) => s.id === "street");
+    if (hasStreet) {
+      await loadNamedScene("street");
+    } else {
+      let localData = null;
+      try {
+        const raw = localStorage.getItem(SCENE_STORAGE_KEY);
+        if (raw) localData = JSON.parse(raw);
+      } catch {
+        /* */
+      }
+      if (
+        localData?.version === 1 &&
+        Array.isArray(localData.objects) &&
+        localData.objects.length
+      ) {
+        await loadScene(localData, { persist: false });
+      }
     }
-    const isNamedSlot =
-      !!localData?.sceneId &&
-      sceneCatalog.some((s) => s.id === localData.sceneId);
-    // Restore freehand edits only — not named slots (those need a button click)
-    if (
-      !isNamedSlot &&
-      localData?.version === 1 &&
-      Array.isArray(localData.objects) &&
-      localData.objects.length
-    ) {
-      await loadScene(localData, { persist: false });
-    }
-      } catch (err) {
+  } catch (err) {
     console.warn("scene restore", err);
   }
 

@@ -75,12 +75,21 @@ body {
   display: none !important;
 }
 
-#ui-toggle {
+#ui-top-bar {
   position: absolute;
   top: 10px;
   left: 12px;
-  /* Above overlay palettes (z=12) so Gizle stays clickable when menus open */
+  /* Above overlay palettes (z=12) so Gizle / Yeniden Başla stay clickable */
   z-index: 20;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  pointer-events: none;
+}
+
+#ui-top-bar > button {
+  pointer-events: auto;
   padding: 7px 12px;
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -91,13 +100,13 @@ body {
   letter-spacing: 0.04em;
   text-transform: uppercase;
   cursor: pointer;
-  pointer-events: auto;
   -webkit-tap-highlight-color: transparent;
   touch-action: manipulation;
 }
 
 #ui-toggle:hover,
-#ui-toggle[aria-pressed="true"] {
+#ui-toggle[aria-pressed="true"],
+#ui-restart:hover {
   border-color: #3a5244;
   background: #18221c;
 }
@@ -420,8 +429,59 @@ body {
 
 
 #truth-dare-crowd.hidden,
-#red-light-cast.hidden {
+#red-light-cast.hidden,
+#tennis-live-sim.hidden {
   display: none;
+}
+
+#tennis-live-sim {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 3px;
+  background: #0a100d;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  align-items: center;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+#tennis-live-sim .crowd-label {
+  padding: 0 6px 0 8px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+#tennis-live-sim button {
+  appearance: none;
+  border: 0;
+  border-radius: 999px;
+  padding: 5px 9px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+#tennis-live-sim button:hover {
+  color: var(--ink);
+  background: #1c2a22;
+  color: var(--accent);
+}
+
+#tennis-live-stats {
+  flex: 1 1 100%;
+  padding: 4px 8px 2px;
+  font-size: 11px;
+  font-weight: 650;
+  color: var(--accent);
+  letter-spacing: 0.02em;
 }
 
 #truth-dare-crowd button.hidden {

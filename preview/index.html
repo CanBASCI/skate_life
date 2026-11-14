@@ -6,7 +6,7 @@
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
     <meta http-equiv="Pragma" content="no-cache" />
     <title>skate_life — editor</title>
-    <link rel="stylesheet" href="./style.css?v=20251114bubble16" />
+    <link rel="stylesheet" href="./style.css?v=20251114tennisCast" />
     <script type="importmap">
       {
         "imports": {
@@ -18,7 +18,10 @@
   </head>
   <body>
     <div id="layout" class="ui-chrome-hidden">
-      <button type="button" id="ui-toggle" title="Menüleri ve WASD bilgisini göster" aria-pressed="true">Menü</button>
+      <div id="ui-top-bar">
+        <button type="button" id="ui-toggle" title="Menüleri ve WASD bilgisini göster" aria-pressed="true">Menü</button>
+        <button type="button" id="ui-restart" title="Oyunu sıfırla — street, boş cast">Yeniden Başla</button>
+      </div>
       <aside id="palette-left" class="palette">
         <div id="view-controls">
           <div id="viewport-toggle" title="Oyun alanı oranı">
@@ -70,6 +73,18 @@
             <button type="button" data-rlcast="9">9</button>
             <button type="button" data-rlcast="10">10</button>
           </div>
+          <div id="tennis-live-sim" class="hidden" title="TikTok like / hediye simülasyonu — 2v2 tenis test">
+            <span class="crowd-label">oyuncu</span>
+            <button type="button" data-tncast="2" title="1v1 — 2 random karakter">2</button>
+            <button type="button" data-tncast="4" title="2v2 — 4 random karakter">4</button>
+            <span class="crowd-label">live</span>
+            <button type="button" data-tnsim="like-a" title="Takım A +1 like">Like A</button>
+            <button type="button" data-tnsim="like-b" title="Takım B +1 like">Like B</button>
+            <button type="button" data-tnsim="gift-a" title="Takım A hediye">Hediye A</button>
+            <button type="button" data-tnsim="gift-b" title="Takım B hediye">Hediye B</button>
+            <button type="button" data-tnsim="reset" title="Like/hediye sıfırla">Sıfırla</button>
+            <div id="tennis-live-stats" class="tennis-live-stats">A 0·0 (0) · B 0·0 (0)</div>
+          </div>
         </div>
         <header>
           <h1>Objects</h1>
@@ -111,6 +126,7 @@
         </div>
         <div id="chat-dock">
           <div id="chat-cmds" aria-label="Oyun komutları">
+            <button type="button" data-cmd="/play" title="Red light: dizil ve oyunu başlat">/play</button>
             <button type="button" data-cmd="/R3" title="Sağa 3 birim (red light: 3 sn)">/R3</button>
             <button type="button" data-cmd="/N2" title="Kuzeye 2 birim (red light: 2 sn)">/N2</button>
             <button type="button" data-cmd="/dance" title="Dans">/dance</button>
@@ -140,6 +156,6 @@
     <div id="stamina" class="hidden"><div id="stamina-fill"></div></div>
     <div id="drag-ghost" class="hidden"></div>
     <div id="world-labels"></div>
-    <script type="module" src="./main.js?v=20251114hideLanes"></script>
+    <script type="module" src="./main.js?v=20251114tennisCast"></script>
   </body>
 </html>

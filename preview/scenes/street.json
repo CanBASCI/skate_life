@@ -258,7 +258,7 @@
       "kind": "object",
       "id": "0c185fd2-fd73-45b5-9215-dc0ef23c3381",
       "path": "assets/props/balls/basketball/32x32/day",
-      "x": 26.59,
+      "x": 25.61,
       "z": -25.91,
       "scale": 1,
       "dir": "north-west"
@@ -312,8 +312,8 @@
       "kind": "object",
       "id": "bc9c4190-994f-4710-9061-2e97aea39d23",
       "path": "assets/props/balls/football/32x32/day",
-      "x": -33.79,
-      "z": 9.33,
+      "x": 16.17,
+      "z": 13.47,
       "scale": 1,
       "dir": "south-east"
     },
