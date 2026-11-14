@@ -17,16 +17,89 @@
 html,
 body {
   margin: 0;
-  height: 100%;
+  width: 100%;
+  height: var(--app-height, 100%);
+  max-height: var(--app-height, 100%);
   background: var(--bg);
   color: var(--ink);
   overflow: hidden;
+  position: fixed;
+  left: 0;
+  top: 0;
+  right: 0;
+  overscroll-behavior: none;
+  touch-action: manipulation;
 }
 
 #layout {
+  /* Stage always full-bleed + centered; menus overlay so they don't shove the game */
   display: grid;
-  grid-template-columns: 260px 1fr 260px;
-  height: 100%;
+  grid-template-columns: 1fr;
+  grid-template-rows: 1fr;
+  position: relative;
+  width: 100%;
+  height: var(--app-height, 100%);
+  max-height: var(--app-height, 100%);
+  overflow: hidden;
+}
+
+#layout > #stage {
+  grid-column: 1;
+  grid-row: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+#layout > #palette-left,
+#layout > #palette-right {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: min(260px, 42vw);
+  max-width: 280px;
+  z-index: 12;
+  box-shadow: 0 0 24px #00000066;
+}
+
+#layout > #palette-left {
+  left: 0;
+}
+
+#layout > #palette-right {
+  right: 0;
+}
+
+#layout.ui-chrome-hidden #palette-left,
+#layout.ui-chrome-hidden #palette-right,
+#layout.ui-chrome-hidden #hud {
+  display: none !important;
+}
+
+#ui-toggle {
+  position: absolute;
+  top: 10px;
+  left: 12px;
+  /* Above overlay palettes (z=12) so Gizle stays clickable when menus open */
+  z-index: 20;
+  padding: 7px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  cursor: pointer;
+  pointer-events: auto;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+#ui-toggle:hover,
+#ui-toggle[aria-pressed="true"] {
+  border-color: #3a5244;
+  background: #18221c;
 }
 
 .palette {
@@ -202,18 +275,17 @@ body {
 }
 
 #view-controls {
-  position: absolute;
-  top: 10px;
-  right: 12px;
-  z-index: 4;
+  flex: 0 0 auto;
   display: flex;
   flex-direction: column;
-  align-items: flex-end;
+  align-items: stretch;
   gap: 6px;
-  max-height: calc(100% - 20px);
+  max-height: min(42vh, 320px);
   overflow-y: auto;
   overflow-x: hidden;
-  padding-bottom: 4px;
+  /* Room for fixed #ui-toggle (Gizle) at top-left over the palette */
+  padding: 48px 10px 8px;
+  border-bottom: 1px solid var(--line);
   pointer-events: auto;
 }
 
@@ -308,10 +380,18 @@ body {
   flex-wrap: wrap;
   gap: 4px;
   padding: 3px;
-  background: var(--panel);
+  background: #0a100d;
   border: 1px solid var(--line);
   border-radius: 999px;
   align-items: center;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+#palette-left #street-walk {
+  width: 100%;
+  box-sizing: border-box;
+  background: #0a100d;
 }
 
 /* Scene list: 2 per row, then wrap (not one long horizontal strip) */
@@ -320,12 +400,12 @@ body {
   grid-template-columns: 1fr 1fr;
   gap: 4px;
   padding: 4px;
-  background: var(--panel);
+  background: #0a100d;
   border: 1px solid var(--line);
   border-radius: 12px;
   align-items: stretch;
   width: 100%;
-  max-width: 280px;
+  max-width: none;
   box-sizing: border-box;
 }
 
@@ -338,13 +418,6 @@ body {
   width: 100%;
 }
 
-#scene-slots .scene-slot button:first-child {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
 
 #truth-dare-crowd.hidden,
 #red-light-cast.hidden {
@@ -391,12 +464,20 @@ body {
 }
 
 .scene-slot {
-  display: inline-flex;
+  display: flex;
   align-items: stretch;
-  gap: 0;
+  min-width: 0;
   border-radius: 999px;
   overflow: hidden;
   border: 1px solid transparent;
+}
+
+.scene-slot > button {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .scene-slot.active {
@@ -422,23 +503,6 @@ body {
   cursor: pointer;
 }
 
-#scene-slots .scene-slot button {
-  border-radius: 0;
-}
-
-#scene-slots .scene-slot button:first-child {
-  padding-right: 6px;
-}
-
-#scene-slots .scene-slot-json {
-  padding-left: 6px;
-  padding-right: 9px;
-  font-size: 10px;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  opacity: 0.75;
-  border-left: 1px solid #ffffff18;
-}
 
 #viewport-toggle button:hover,
 #bg-toggle button:hover,
@@ -446,11 +510,6 @@ body {
 #scene-toggle button:hover,
 #scene-slots button:hover {
   color: var(--ink);
-}
-
-#scene-slots .scene-slot-json:hover {
-  opacity: 1;
-  color: var(--accent);
 }
 
 #viewport-toggle button.active,
@@ -741,7 +800,8 @@ body {
   background: #0a100d;
   color: var(--ink);
   font: inherit;
-  font-size: 12px;
+  /* 16px prevents iOS Safari zoom-on-focus (which rescales the whole game) */
+  font-size: 16px;
   outline: none;
 }
 
@@ -819,7 +879,7 @@ body {
   border-radius: 10px;
   background: #f3f1ea;
   color: #1c221c;
-  font-size: 14px;
+  font-size: 16px;
   font-weight: 500;
   line-height: 1.35;
   text-align: center;
@@ -1100,7 +1160,8 @@ body {
 }
 
 @media (max-width: 960px) {
-  #layout {
-    grid-template-columns: 200px 1fr 200px;
+  #layout > #palette-left,
+  #layout > #palette-right {
+    width: min(220px, 78vw);
   }
 }

@@ -160,6 +160,8 @@ export class Player {
       moveScale = null,
       /** () => true — red_light DQ: ignore WASD / jump until game ends */
       inputLocked = null,
+      /** () => true — truth-dare settled: no walk/run, jump/dance/sit ok */
+      positionLocked = null,
     } = {},
   ) {
     this.scene = scene;
@@ -171,6 +173,7 @@ export class Player {
     this.walkOnly = walkOnly;
     this.moveScale = moveScale;
     this.inputLocked = inputLocked;
+    this.positionLocked = positionLocked;
     this.radius = radius;
     this.keys = new Set();
     this.facing = "south";
@@ -377,6 +380,25 @@ export class Player {
       : !!this.inputLocked;
   }
 
+  isPositionLocked() {
+    return typeof this.positionLocked === "function"
+      ? !!this.positionLocked()
+      : !!this.positionLocked;
+  }
+
+  static MOVE_KEY_CODES = new Set([
+    "KeyW",
+    "KeyA",
+    "KeyS",
+    "KeyD",
+    "ArrowUp",
+    "ArrowDown",
+    "ArrowLeft",
+    "ArrowRight",
+    "ShiftLeft",
+    "ShiftRight",
+  ]);
+
   onKeyDown(e) {
     const tag = e.target?.tagName;
     if (
@@ -387,6 +409,8 @@ export class Player {
       return;
     }
     if (this.isInputLocked()) return;
+    // Truth-dare seat/row: block walk keys, allow Space/H/G for jump/dance
+    if (this.isPositionLocked() && Player.MOVE_KEY_CODES.has(e.code)) return;
     if (e.repeat) {
       this.keys.add(e.code);
       return;
@@ -402,7 +426,7 @@ export class Player {
       else this.startOneShot("jump");
     } else if ((e.code === "KeyV" || e.code === "KeyF") && !this.skating) {
       e.preventDefault();
-      if (this.isWalkOnly()) return;
+      if (this.isWalkOnly() || this.isPositionLocked()) return;
       const v = this.findVault?.() || null;
       if (v) this.startVault(v);
       else this.startOneShot("vault");
@@ -501,11 +525,15 @@ export class Player {
   /** Absolute-dir scripted move (chat /R3). On skateboard keeps skateIdle + skate speed. */
   startScriptMove(dx, dz, distance, speed, opts = {}) {
     if (!this.mesh || this.driving || !(distance > 0)) return false;
+    // Formation entrance may pass allowLockedMove; chat walk must not
+    if (this.isPositionLocked() && !opts.allowLockedMove) return false;
     const len = Math.hypot(dx, dz);
     if (!len) return false;
     this.sitting = false;
     // Drop formation pin so chat /N20 & entrance runs aren't snapped back
-    if (this.mesh.userData) this.mesh.userData.formationSlot = null;
+    if (this.mesh.userData && !opts.keepFormationSlot) {
+      this.mesh.userData.formationSlot = null;
+    }
     const walkOnly = this.isWalkOnly();
     const scale = this.getMoveScale();
     // forceRun: red_light entrance only — bypass walkOnly for scripted run-in
@@ -653,6 +681,14 @@ export class Player {
       }
       if (this.syncDepth) this.syncDepth(this.mesh);
       return;
+    }
+
+    // Truth-dare settled: strip walk/run keys so jump/dance stay in place
+    if (this.isPositionLocked()) {
+      for (const code of Player.MOVE_KEY_CODES) this.keys.delete(code);
+      if (this.scriptMove && !this.scriptMove.allowLockedMove) {
+        this.scriptMove = null;
+      }
     }
 
     // Chat scripted move (/R3) — overrides WASD until done or /stop

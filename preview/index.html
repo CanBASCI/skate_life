@@ -2,11 +2,11 @@
 <html lang="tr">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=overlays-content" />
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
     <meta http-equiv="Pragma" content="no-cache" />
     <title>skate_life — editor</title>
-    <link rel="stylesheet" href="./style.css?v=20251114walkFit" />
+    <link rel="stylesheet" href="./style.css?v=20251114bubble16" />
     <script type="importmap">
       {
         "imports": {
@@ -17,20 +17,9 @@
     </script>
   </head>
   <body>
-    <div id="layout">
+    <div id="layout" class="ui-chrome-hidden">
+      <button type="button" id="ui-toggle" title="Menüleri ve WASD bilgisini göster" aria-pressed="true">Menü</button>
       <aside id="palette-left" class="palette">
-        <header>
-          <h1>Objects</h1>
-          <input id="obj-filter" type="search" placeholder="Ara…" autocomplete="off" />
-        </header>
-        <div id="obj-cats" class="palette-body"></div>
-      </aside>
-
-      <main id="stage">
-        <div id="hud">
-          <span><kbd>WASD</kbd> hareket · <kbd>Shift</kbd> koş · <kbd>Space</kbd> zıpla/vault · <kbd>H</kbd> dans · <kbd>E</kbd> araç/kaykay · <kbd>P</kbd> pet · <kbd>Q</kbd> yön · yol: <kbd>Shift</kbd>+<kbd>←→↑↓</kbd> uç uca · <kbd>Ctrl+Z</kbd> geri al</span>
-          <span id="status">Yükleniyor…</span>
-        </div>
         <div id="view-controls">
           <div id="viewport-toggle" title="Oyun alanı oranı">
             <button type="button" data-vp="fill" class="active">Varsayılan</button>
@@ -58,7 +47,7 @@
             <button type="button" id="scene-load">JSON yapıştır</button>
             <button type="button" id="scene-clear">Sahne sil</button>
           </div>
-          <div id="scene-slots" title="Kayıtlı sahneler — isim = ayarla · json = dosyadaki sahneyi yükle"></div>
+          <div id="scene-slots" title="Kayıtlı sahneler"></div>
           <div id="truth-dare-crowd" class="hidden" title="Street / night club kalabalık">
             <span class="crowd-label">kalabalık</span>
             <button type="button" data-crowd="5">5</button>
@@ -81,6 +70,18 @@
             <button type="button" data-rlcast="9">9</button>
             <button type="button" data-rlcast="10">10</button>
           </div>
+        </div>
+        <header>
+          <h1>Objects</h1>
+          <input id="obj-filter" type="search" placeholder="Ara…" autocomplete="off" />
+        </header>
+        <div id="obj-cats" class="palette-body"></div>
+      </aside>
+
+      <main id="stage">
+        <div id="hud">
+          <span><kbd>WASD</kbd> hareket · <kbd>Shift</kbd> koş · <kbd>Space</kbd> zıpla/vault · <kbd>H</kbd> dans · <kbd>E</kbd> araç/kaykay · <kbd>P</kbd> pet · <kbd>Q</kbd> yön · yol: <kbd>Shift</kbd>+<kbd>←→↑↓</kbd> uç uca · <kbd>Ctrl+Z</kbd> geri al</span>
+          <span id="status">Yükleniyor…</span>
         </div>
         <div id="scene-modal" class="hidden" aria-hidden="true">
           <div class="scene-modal-card">
@@ -139,6 +140,6 @@
     <div id="stamina" class="hidden"><div id="stamina-fill"></div></div>
     <div id="drag-ghost" class="hidden"></div>
     <div id="world-labels"></div>
-    <script type="module" src="./main.js?v=20251114editOnly"></script>
+    <script type="module" src="./main.js?v=20251114hideLanes"></script>
   </body>
 </html>

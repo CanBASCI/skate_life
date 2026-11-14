@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
-import { Player, dirFromVector, FEET_NUDGE_Z } from "./player.js?v=skateScript";
+import { Player, dirFromVector, FEET_NUDGE_Z } from "./player.js?v=tdLock";
 import {
   loadCatalog,
   groupByCat,
@@ -40,7 +40,41 @@ const colToggle = document.getElementById("col-toggle");
 const VP_STORAGE_KEY = "skate_life_viewport";
 const BG_STORAGE_KEY = "skate_life_bg";
 const COL_DEBUG_KEY = "skate_life_col_debug";
+const UI_CHROME_KEY = "skate_life_ui_chrome_hidden";
 const SCENE_STORAGE_KEY = "skate_life_scene_v1";
+const layoutEl = document.getElementById("layout");
+const uiToggleBtn = document.getElementById("ui-toggle");
+// Default: menus + WASD HUD hidden; only show if user previously chose "Menü".
+let uiChromeHidden = localStorage.getItem(UI_CHROME_KEY) !== "0";
+
+function applyUiChromeHidden(hidden) {
+  uiChromeHidden = !!hidden;
+  layoutEl?.classList.toggle("ui-chrome-hidden", uiChromeHidden);
+  if (uiToggleBtn) {
+    uiToggleBtn.setAttribute("aria-pressed", uiChromeHidden ? "true" : "false");
+    uiToggleBtn.textContent = uiChromeHidden ? "Menü" : "Gizle";
+    uiToggleBtn.title = uiChromeHidden
+      ? "Menüleri ve WASD bilgisini göster"
+      : "Menüleri ve WASD bilgisini gizle";
+  }
+  try {
+    localStorage.setItem(UI_CHROME_KEY, uiChromeHidden ? "1" : "0");
+  } catch {
+    /* ignore */
+  }
+  // Wait for grid columns to reflow, then size canvas to #stage only
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      resize();
+    });
+  });
+}
+
+uiToggleBtn?.addEventListener("click", (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+  applyUiChromeHidden(!uiChromeHidden);
+});
 /** @type {"fill" | "9x16"} */
 let viewportMode =
   localStorage.getItem(VP_STORAGE_KEY) === "9x16" ? "9x16" : "fill";
@@ -73,6 +107,15 @@ function isFootballScene(id = activeSceneId) {
 }
 function isTennisScene(id = activeSceneId) {
   return id === "tennis";
+}
+function isTruthDareScene(id = activeSceneId) {
+  return id === "dogrulukmu_cesaretmi";
+}
+/** After lineup: stay on seat/row — chat + /dance /jump /sit only. */
+function isTruthDarePositionLocked(obj) {
+  if (!truthDareActive || !isTruthDareScene()) return false;
+  if (!obj?.userData) return false;
+  return !!obj.userData.formationSlot && !obj.userData.formationMove;
 }
 /** Football / tennis — walkZone, top-layer actors, soft push. */
 function isPlayfieldScene(id = activeSceneId) {
@@ -553,6 +596,10 @@ function applyViewportMode(mode) {
 }
 
 function resize() {
+  // Soft keyboard / iOS focus-zoom must not reflow the WebGL stage
+  if (chatKeyboardOpen) return;
+  // Always measure #stage (center column) — never lockedShell, or Menü açılınca
+  // canvas full-width kalıp oyun sağa kaymış gibi görünür
   const sw = stageEl?.clientWidth || window.innerWidth;
   const sh = stageEl?.clientHeight || window.innerHeight;
   let w;
@@ -590,7 +637,104 @@ function resize() {
   camera.updateProjectionMatrix();
   renderer.setSize(w, h, false);
 }
-window.addEventListener("resize", resize);
+
+/** Mobile soft keyboard / iOS focus-zoom — freeze shell px while typing. */
+let chatKeyboardOpen = false;
+let lockedShell = { w: 0, h: 0 };
+/** Snapshot taken on chat focus — restore exactly on blur (ignore mid-keyboard sizes). */
+let shellBeforeKeyboard = null;
+
+function applyAppShellSize(w, h) {
+  lockedShell = { w: Math.round(w), h: Math.round(h) };
+  const root = document.documentElement;
+  root.style.setProperty("--app-width", `${lockedShell.w}px`);
+  root.style.setProperty("--app-height", `${lockedShell.h}px`);
+  // Only pin height against keyboard; width stays 100% so Menü grid can reflow
+  if (layoutEl) {
+    layoutEl.style.width = "";
+    layoutEl.style.height = `${lockedShell.h}px`;
+  }
+}
+
+function measureAppShell() {
+  // Prefer layout viewport; avoid visualViewport (shrinks with keyboard / zoom)
+  const w =
+    window.screen?.width && window.outerWidth
+      ? Math.min(window.innerWidth, document.documentElement.clientWidth || window.innerWidth)
+      : document.documentElement.clientWidth || window.innerWidth;
+  const h = Math.max(
+    window.innerHeight || 0,
+    document.documentElement.clientHeight || 0,
+  );
+  return { w: Math.round(w), h: Math.round(h) };
+}
+
+function lockAppShell({ force = false } = {}) {
+  if (chatKeyboardOpen && !force) return;
+  if (chatKeyboardOpen && force && shellBeforeKeyboard) {
+    applyAppShellSize(shellBeforeKeyboard.w, shellBeforeKeyboard.h);
+    return;
+  }
+  const { w, h } = measureAppShell();
+  // Same-ish width + height drop ≈ keyboard — keep previous shell
+  if (
+    !force &&
+    lockedShell.h > 0 &&
+    Math.abs(w - lockedShell.w) < 60 &&
+    h < lockedShell.h * 0.9
+  ) {
+    return;
+  }
+  // Width jitter from URL bar / keyboard — keep width stable unless rotate
+  if (
+    !force &&
+    lockedShell.w > 0 &&
+    Math.abs(w - lockedShell.w) < 60 &&
+    Math.abs(h - lockedShell.h) < 120
+  ) {
+    return;
+  }
+  if (
+    force ||
+    lockedShell.h === 0 ||
+    Math.abs(w - lockedShell.w) >= 60 ||
+    h >= lockedShell.h
+  ) {
+    applyAppShellSize(
+      Math.abs(w - lockedShell.w) < 60 && lockedShell.w ? lockedShell.w : w,
+      Math.abs(w - lockedShell.w) >= 60 ? h : Math.max(h, lockedShell.h || h),
+    );
+  }
+}
+
+function onShellViewportChange() {
+  if (chatKeyboardOpen) return;
+  lockAppShell({ force: false });
+  resize();
+}
+
+window.addEventListener("resize", onShellViewportChange);
+window.addEventListener("orientationchange", () => {
+  chatKeyboardOpen = false;
+  shellBeforeKeyboard = null;
+  setTimeout(() => {
+    lockAppShell({ force: true });
+    resize();
+  }, 300);
+});
+if (window.visualViewport) {
+  window.visualViewport.addEventListener("resize", onShellViewportChange);
+  window.visualViewport.addEventListener("scroll", () => {
+    // iOS sometimes pans the visual viewport while keyboard is up — pin scroll
+    if (!chatKeyboardOpen || !window.visualViewport) return;
+    const vv = window.visualViewport;
+    if (vv.offsetTop || vv.offsetLeft) {
+      window.scrollTo(0, 0);
+    }
+  });
+}
+lockAppShell({ force: true });
+applyUiChromeHidden(uiChromeHidden);
 viewportToggle?.addEventListener("click", (e) => {
   const btn = e.target.closest("button[data-vp]");
   if (!btn) return;
@@ -1689,9 +1833,11 @@ async function resolveCharacterStatePath(path, wantSit) {
 
 async function setCharacterSitPose(obj, sitting) {
   if (!obj?.userData || obj.userData.kind !== "character") return false;
+  const token = nextCharacterAnimToken(obj);
   const nextPath =
     (await resolveCharacterStatePath(obj.userData.path, !!sitting)) ||
     characterStatePath(obj.userData.path, sitting ? "sit" : "stand");
+  if (!isCharacterAnimToken(obj, token)) return false;
   if (!nextPath) {
     statusEl.textContent = "Bu karakterde sit/stand yok";
     return false;
@@ -1699,6 +1845,7 @@ async function setCharacterSitPose(obj, sitting) {
   const dir = obj.userData.dir || "south";
   const dirs = obj.userData.dirs?.length ? obj.userData.dirs : DIRS;
   const rotTextures = await loadRotationTextures(nextPath, dirs);
+  if (!isCharacterAnimToken(obj, token)) return false;
   if (!Object.keys(rotTextures).length) {
     statusEl.textContent = sitting ? "Sit animasyonu yok" : "Stand bulunamadı";
     return false;
@@ -1744,6 +1891,19 @@ async function handleChatCommand(raw) {
         ? `${name} üstte — oyun bitene kadar komut yok`
         : `${name} diskalifiye — oyun bitene kadar komut yok`;
     return;
+  }
+
+  const tdLocked = isTruthDarePositionLocked(who);
+  if (tdLocked) {
+    // Allow chat + /dance /jump /sit /stop — no walk / mount / relocate
+    if (
+      lower === "/e" ||
+      /^\/(n|s|e|w|r|l|ne|nw|se|sw|n-e|n-w|s-e|s-w)\s*\d/i.test(lower)
+    ) {
+      statusEl.textContent =
+        "doğrulukmu — yerinde kal · yazı /dance /jump /sit /stop";
+      return;
+    }
   }
 
   if (lower === "/dance") {
@@ -1849,6 +2009,40 @@ async function handleChatCommand(raw) {
   }
 
   if (lower === "/stop") {
+    if (tdLocked) {
+      // Cancel dance/sit/jump in place — keep formation slot
+      if (isPlayer) {
+        if (player.busy === "dance") player.stopDance?.();
+        else if (player.sitting) {
+          player.sitting = false;
+          player.anim = "idle";
+          player.frame = 0;
+          player.accum = 0;
+          player.applyFrame?.();
+        } else if (player.busy === "jump") {
+          player.busy = null;
+          player.anim = "idle";
+          player.frame = 0;
+          player.accum = 0;
+          player.applyFrame?.();
+        }
+        statusEl.textContent = `${name}: stop`;
+        return;
+      }
+      clearNpcScriptMoves(who);
+      if (who.userData?.busy === "jump") finishNpcJump(who);
+      if (who.userData?.dancing || who.userData?.animName === "dance") {
+        await setCharacterDancing(who, false);
+      } else if (
+        who.userData?.sitting ||
+        /\/states\/sit/i.test(who.userData?.path || "")
+      ) {
+        await setCharacterSitPose(who, false);
+      } else {
+        statusEl.textContent = `${name}: stop`;
+      }
+      return;
+    }
     if (isPlayer) {
       // /stop = in (vehicle/skate) when mounted; else cancel dance/sit/walk
       if (player.skating && occupiedSkateboard) {
@@ -1892,7 +2086,12 @@ async function handleChatCommand(raw) {
   const m = lower.match(
     /^\/(n|s|e|w|r|l|ne|nw|se|sw|n-e|n-w|s-e|s-w)\s*(\d+(?:\.\d+)?)\s*$/i,
   );
-  if (m) {
+    if (m) {
+    if (tdLocked) {
+      statusEl.textContent =
+        "doğrulukmu — yerinde kal · yazı /dance /jump /sit /stop";
+      return;
+    }
     const dirName = parseChatDirToken(m[1]);
     const birim = Number(m[2]);
     if (!dirName || !Number.isFinite(birim) || birim <= 0) {
@@ -1959,6 +2158,19 @@ async function handleChatCommand(raw) {
   statusEl.textContent = "Komut: /R3 /dance /jump /sit /e /stop (büyük/küçük harf OK)";
 }
 
+function dismissChatKeyboard() {
+  if (!chatInput) return;
+  chatInput.blur();
+  chatKeyboardOpen = false;
+  if (shellBeforeKeyboard) {
+    applyAppShellSize(shellBeforeKeyboard.w, shellBeforeKeyboard.h);
+  } else {
+    lockAppShell({ force: true });
+  }
+  shellBeforeKeyboard = null;
+  requestAnimationFrame(() => resize());
+}
+
 function sendChatMessage() {
   if (!chatInput) return;
   const text = chatInput.value.trim();
@@ -1972,6 +2184,7 @@ function sendChatMessage() {
       console.warn(err);
       statusEl.textContent = err.message || String(err);
     });
+    if (window.matchMedia?.("(pointer: coarse)")?.matches) dismissChatKeyboard();
     return;
   }
 
@@ -1982,6 +2195,7 @@ function sendChatMessage() {
     who === player?.mesh
       ? `${PLAYER_CHAT_NAME}: ${msg}`
       : `${shortCharacterName(who.userData?.label, who.userData?.path)}: ${msg}`;
+  if (window.matchMedia?.("(pointer: coarse)")?.matches) dismissChatKeyboard();
 }
 
 /** Match sprite depth: higher world Z = closer to camera / more “in front”. */
@@ -2089,11 +2303,29 @@ chatInput?.addEventListener("keydown", (e) => {
     sendChatMessage();
   } else if (e.key === "Escape") {
     e.preventDefault();
-    chatInput.blur();
+    dismissChatKeyboard();
   }
 });
 chatInput?.addEventListener("focus", () => {
   player?.keys?.clear?.();
+  // Freeze current shell BEFORE keyboard / iOS zoom mutates viewport
+  lockAppShell({ force: true });
+  shellBeforeKeyboard = { w: lockedShell.w, h: lockedShell.h };
+  chatKeyboardOpen = true;
+});
+chatInput?.addEventListener("blur", () => {
+  // Wait for keyboard close / zoom-out, then restore pre-focus shell exactly
+  setTimeout(() => {
+    if (document.activeElement === chatInput) return;
+    chatKeyboardOpen = false;
+    if (shellBeforeKeyboard) {
+      applyAppShellSize(shellBeforeKeyboard.w, shellBeforeKeyboard.h);
+    } else {
+      lockAppShell({ force: true });
+    }
+    shellBeforeKeyboard = null;
+    resize();
+  }, 280);
 });
 
 document.getElementById("chat-cmds")?.addEventListener("click", (e) => {
@@ -3150,8 +3382,32 @@ async function loadAnimFrames(path, slug, dir) {
   return frames;
 }
 
+/** Bump so in-flight attachRun/Walk/Idle can't overwrite a newer pose. */
+function nextCharacterAnimToken(obj) {
+  if (!obj?.userData) return 0;
+  obj.userData._animSeq = (obj.userData._animSeq || 0) + 1;
+  return obj.userData._animSeq;
+}
+
+function isCharacterAnimToken(obj, token) {
+  return !!obj?.userData && obj.userData._animSeq === token;
+}
+
+/** Stop gait immediately; async idle/sit must still be started by caller. */
+function stopCharacterGait(obj) {
+  if (!obj?.userData) return;
+  nextCharacterAnimToken(obj);
+  const name = obj.userData.animName;
+  if (name === "run" || name === "walk") {
+    obj.userData.animName = null;
+    obj.userData.anim = null;
+  }
+}
+
 async function attachIdle(obj, path, dir, { allowSouthFallback = true } = {}) {
+  const token = nextCharacterAnimToken(obj);
   const slug = obj.userData.idleSlug || (await resolveIdleSlug(path));
+  if (!isCharacterAnimToken(obj, token)) return false;
   if (!slug) return false;
   obj.userData.idleSlug = slug;
   let frames = await loadAnimFrames(path, slug, dir);
@@ -3163,6 +3419,7 @@ async function attachIdle(obj, path, dir, { allowSouthFallback = true } = {}) {
   if (!frames.length) {
     frames = await loadAnimFrames(path, slug, "unknown");
   }
+  if (!isCharacterAnimToken(obj, token)) return false;
   if (!frames.length) return false;
   obj.userData.animName = "idle";
   obj.userData.anim = {
@@ -3206,10 +3463,12 @@ async function ensureDanceAvailable(obj) {
 }
 
 async function attachDance(obj, path, dir, { allowSouthFallback = true } = {}) {
+  const token = nextCharacterAnimToken(obj);
   const slug =
     obj.userData.danceSlug ||
     (await resolveDanceSlug(path)) ||
     null;
+  if (!isCharacterAnimToken(obj, token)) return false;
   if (!slug) return false;
   obj.userData.danceSlug = slug;
   let frames = await loadAnimFrames(path, slug, dir);
@@ -3219,6 +3478,7 @@ async function attachDance(obj, path, dir, { allowSouthFallback = true } = {}) {
   if (!frames.length) {
     frames = await loadAnimFrames(path, slug, "unknown");
   }
+  if (!isCharacterAnimToken(obj, token)) return false;
   if (!frames.length) return false;
   obj.userData.animName = "dance";
   obj.userData.dancing = true;
@@ -3275,8 +3535,10 @@ async function resolveWalkSlug(path) {
 
 /** Character walk loop (same pipeline as idle/dance). */
 async function attachWalk(obj, path, dir, { allowSouthFallback = true } = {}) {
+  const token = nextCharacterAnimToken(obj);
   const slug =
     obj.userData.walkSlug || (await resolveWalkSlug(path)) || "walk";
+  if (!isCharacterAnimToken(obj, token)) return false;
   obj.userData.walkSlug = slug;
   let frames = await loadAnimFrames(path, slug, dir);
   if (!frames.length && allowSouthFallback && dir !== "south") {
@@ -3285,6 +3547,7 @@ async function attachWalk(obj, path, dir, { allowSouthFallback = true } = {}) {
   if (!frames.length) {
     frames = await loadAnimFrames(path, slug, "unknown");
   }
+  if (!isCharacterAnimToken(obj, token)) return false;
   if (!frames.length) return false;
   obj.userData.dancing = false;
   obj.userData.animName = "walk";
@@ -3321,7 +3584,9 @@ async function resolveRunSlug(path) {
 /** Character run loop — used when casting into truth-dare circle. */
 async function attachRun(obj, path, dir, { allowSouthFallback = true } = {}) {
   // red_light: only used for cast entrance (scriptActorTo run:true)
+  const token = nextCharacterAnimToken(obj);
   const slug = (await resolveRunSlug(path)) || "run";
+  if (!isCharacterAnimToken(obj, token)) return false;
   let frames = await loadAnimFrames(path, slug, dir);
   if (!frames.length && allowSouthFallback && dir !== "south") {
     frames = await loadAnimFrames(path, slug, "south");
@@ -3329,6 +3594,7 @@ async function attachRun(obj, path, dir, { allowSouthFallback = true } = {}) {
   if (!frames.length) {
     frames = await loadAnimFrames(path, slug, "unknown");
   }
+  if (!isCharacterAnimToken(obj, token)) return false;
   // Fallback to walk if this character has no run clip
   if (!frames.length) {
     return attachWalk(obj, path, dir, { allowSouthFallback });
@@ -3370,7 +3636,9 @@ async function attachJump(obj, path, dir, { allowSouthFallback = true } = {}) {
   if (isRedLightScene()) return false;
   if (!obj?.userData || obj.userData.kind !== "character") return false;
   if (obj.userData.driving || obj.userData.busy === "jump") return false;
+  const token = nextCharacterAnimToken(obj);
   const slug = (await resolveJumpSlug(path)) || "jump";
+  if (!isCharacterAnimToken(obj, token)) return false;
   let frames = await loadAnimFrames(path, slug, dir);
   if (!frames.length && allowSouthFallback && dir !== "south") {
     frames = await loadAnimFrames(path, slug, "south");
@@ -3378,6 +3646,7 @@ async function attachJump(obj, path, dir, { allowSouthFallback = true } = {}) {
   if (!frames.length) {
     frames = await loadAnimFrames(path, slug, "unknown");
   }
+  if (!isCharacterAnimToken(obj, token)) return false;
   if (!frames.length) return false;
   clearNpcScriptMoves(obj);
   obj.userData.dancing = false;
@@ -4065,7 +4334,42 @@ function serializeScene() {
   };
   const wz = serializeWalkZone();
   if (wz) out.walkZone = wz;
+  // Street traffic lane Z — sarı east (sol→sağ) / mavi west (sağ→sol)
+  if (isStreetLikeScene()) {
+    out.trafficLanes = {
+      east: roundSceneNum(getTrafficLaneZ("east")),
+      west: roundSceneNum(getTrafficLaneZ("west")),
+    };
+  }
   return out;
+}
+
+function applyTrafficLanesFromScene(data) {
+  const lanes = data?.trafficLanes;
+  if (!lanes || typeof lanes !== "object") return false;
+  let applied = false;
+  if (Number.isFinite(Number(lanes.east))) {
+    trafficLanes.east = Number(lanes.east);
+    applied = true;
+  }
+  if (Number.isFinite(Number(lanes.west))) {
+    trafficLanes.west = Number(lanes.west);
+    applied = true;
+  }
+  if (applied) {
+    try {
+      localStorage.setItem(
+        TRAFFIC_LANE_KEY,
+        JSON.stringify({
+          east: getTrafficLaneZ("east"),
+          west: getTrafficLaneZ("west"),
+        }),
+      );
+    } catch {
+      /* */
+    }
+  }
+  return applied;
 }
 
 function persistScene() {
@@ -4203,8 +4507,62 @@ function disposeTrafficLaneGizmo() {
   trafficLaneGizmo = null;
 }
 
+function addTrafficLaneVisual(g, dir, z, color, handleColor) {
+  const matLine = new THREE.LineBasicMaterial({
+    color,
+    depthTest: false,
+    transparent: true,
+    opacity: 0.95,
+  });
+  const pts = [
+    new THREE.Vector3(-TRAFFIC_SPAWN_X, 6, z),
+    new THREE.Vector3(TRAFFIC_SPAWN_X, 6, z),
+  ];
+  const line = new THREE.Line(
+    new THREE.BufferGeometry().setFromPoints(pts),
+    matLine,
+  );
+  line.frustumCulled = false;
+  line.renderOrder = 100001;
+  g.add(line);
+
+  const strip = new THREE.Mesh(
+    new THREE.BoxGeometry(TRAFFIC_SPAWN_X * 2, 2, 24),
+    new THREE.MeshBasicMaterial({
+      color,
+      transparent: true,
+      opacity: 0.2,
+      depthTest: false,
+      depthWrite: false,
+    }),
+  );
+  strip.position.set(0, 3, z);
+  strip.userData.trafficLaneHit = true;
+  strip.userData.trafficLaneDir = dir;
+  strip.frustumCulled = false;
+  strip.renderOrder = 100000;
+  g.add(strip);
+
+  for (const x of [-TRAFFIC_SPAWN_X, 0, TRAFFIC_SPAWN_X]) {
+    const handle = new THREE.Mesh(
+      new THREE.SphereGeometry(15, 14, 14),
+      new THREE.MeshBasicMaterial({
+        color: handleColor,
+        depthTest: false,
+        depthWrite: false,
+      }),
+    );
+    handle.position.set(x, 10, z);
+    handle.userData.trafficLaneHit = true;
+    handle.userData.trafficLaneDir = dir;
+    handle.frustumCulled = false;
+    handle.renderOrder = 100002;
+    g.add(handle);
+  }
+}
+
 function updateTrafficLaneGizmo() {
-  // Lane guides hidden in-game; Z still comes from saved trafficLanes / defaults
+  // Lane guides hidden while positions are good — Z still from trafficLanes / localStorage
   disposeTrafficLaneGizmo();
 }
 
@@ -4217,6 +4575,9 @@ function setTrafficLaneZ(dir, z) {
     obj.position.z = z;
     syncDepth(obj);
   }
+  updateTrafficLaneGizmo();
+  saveTrafficLaneZ();
+  if (!sceneLoading) schedulePersistScene();
 }
 
 function clearTraffic() {
@@ -4376,7 +4737,14 @@ function beginPostOfficeEntrance(obj, dest, { stagger = 0, isPlayer = false } = 
     attachWalk(obj, obj.userData.path, walkDir, { allowSouthFallback: true }).catch(
       () => {},
     );
-    enqueueNpcWalk(obj, dx, dz, dist, 110, stagger);
+    enqueueNpcWalk(obj, dx, dz, dist, 110, stagger, {
+      onDone: () => {
+        stopCharacterGait(obj);
+        attachIdle(obj, obj.userData.path, obj.userData.dir || walkDir, {
+          allowSouthFallback: true,
+        }).catch(() => {});
+      },
+    });
   } else {
     attachIdle(obj, obj.userData.path, walkDir, { allowSouthFallback: true }).catch(
       () => {},
@@ -4478,6 +4846,8 @@ async function loadScene(data, { persist = true } = {}) {
       placed += 1;
     }
     selectObject(null);
+    // Scene JSON trafficLanes wins over stale localStorage defaults
+    applyTrafficLanesFromScene(data);
     if (persist) persistScene();
     syncTrafficForScene();
     // Street: Main + cast → JSON player home; later spawns use same fixed point
@@ -4667,7 +5037,7 @@ function renderSceneSlots() {
     btn.type = "button";
     btn.textContent = s.label || s.id;
     btn.dataset.scene = s.id;
-    btn.title = `${s.label || s.id} — sahneyi yükle / ayarla`;
+    btn.title = `${s.label || s.id} — sahneyi yükle`;
     if (s.id === activeSceneId) btn.classList.add("active");
     btn.addEventListener("click", () => {
       loadNamedScene(s.id).catch((err) => {
@@ -4676,22 +5046,7 @@ function renderSceneSlots() {
       });
     });
 
-    const jsonBtn = document.createElement("button");
-    jsonBtn.type = "button";
-    jsonBtn.className = "scene-slot-json";
-    jsonBtn.textContent = "json";
-    jsonBtn.dataset.scene = s.id;
-    jsonBtn.title = `${s.file || s.id + ".json"} — dosyadaki JSON sahnesini yükle`;
-    if (s.id === activeSceneId) jsonBtn.classList.add("active");
-    jsonBtn.addEventListener("click", () => {
-      loadNamedScene(s.id).catch((err) => {
-        console.warn(err);
-        statusEl.textContent = err.message || String(err);
-      });
-    });
-
     slot.appendChild(btn);
-    slot.appendChild(jsonBtn);
     sceneSlotsEl.appendChild(slot);
   }
 }
@@ -6309,6 +6664,8 @@ function scriptActorTo(
     if (gen != null && gen !== redLightGame.entranceGen) return;
     snapToTarget();
     obj.userData.formationMove = false;
+    // Kill late attachRun/Walk so arrival idle/sit isn't overwritten (stuck run)
+    if (!isPlayer) stopCharacterGait(obj);
     // Truth-dare seats pin; red_light: pin on lineup while countdown pending
     if (
       isRedLightScene() &&
@@ -7202,6 +7559,11 @@ inspDance?.addEventListener("click", async () => {
 
 inspX.addEventListener("change", () => {
   if (!selected) return;
+  if (isTruthDarePositionLocked(selected)) {
+    inspX.value = Math.round(selected.position.x);
+    statusEl.textContent = "doğrulukmu — yerinde · konum kilitli";
+    return;
+  }
   const fromX = selected.position.x;
   const toX = Number(inspX.value) || 0;
   selected.position.x = toX;
@@ -7215,6 +7577,11 @@ inspX.addEventListener("change", () => {
 });
 inspZ.addEventListener("change", () => {
   if (!selected) return;
+  if (isTruthDarePositionLocked(selected)) {
+    inspZ.value = Math.round(selected.position.z);
+    statusEl.textContent = "doğrulukmu — yerinde · konum kilitli";
+    return;
+  }
   const fromZ = selected.position.z;
   const toZ = Number(inspZ.value) || 0;
   selected.position.z = toZ;
@@ -7386,6 +7753,26 @@ function onPointerDown(event) {
   // If a palette ghost is active but user grabbed a placed object, move that — don't spawn
   setPointerFromEvent(event);
 
+  // Traffic lane lines (street) — yellow east / cyan west
+  if (trafficEnabled && trafficLaneGizmo) {
+  raycaster.setFromCamera(pointer, camera);
+    raycaster.camera = camera;
+    const laneHits = raycaster.intersectObject(trafficLaneGizmo, true);
+    const hit = laneHits.find((h) => h.object?.userData?.trafficLaneHit);
+    if (hit) {
+      if (placing) endPaletteDrag();
+      trafficLaneDragDir =
+        hit.object.userData.trafficLaneDir === "west" ? "west" : "east";
+      controls.enabled = false;
+      renderer.domElement.setPointerCapture(event.pointerId);
+      statusEl.textContent =
+        trafficLaneDragDir === "east"
+          ? "Sol→sağ şerit (sarı) — sürükle"
+          : "Sağ→sol şerit (mavi) — sürükle";
+      return;
+    }
+  }
+
   // Collision polygon handles (night_club object OR street walk zone)
   const gp0 = groundHit();
   const nightColObj =
@@ -7538,6 +7925,13 @@ function onPointerDown(event) {
     statusEl.textContent = "Koşu bitince sürükleyebilirsin";
     return;
   }
+  // Truth-dare settled — select ok, drag/move no
+  if (isTruthDarePositionLocked(obj)) {
+    if (placing) endPaletteDrag();
+    selectObject(obj);
+    statusEl.textContent = "doğrulukmu — yerinde · sürükleme yok";
+    return;
+  }
   // Finish / DQ lock — stay put (lane run uses formationMove, blocked above)
   if (
     redLightGame.active &&
@@ -7568,6 +7962,15 @@ function onPointerMove(event) {
   if (placing) {
     dragGhost.style.left = `${event.clientX}px`;
     dragGhost.style.top = `${event.clientY}px`;
+    return;
+  }
+  if (trafficLaneDragDir) {
+    setPointerFromEvent(event);
+    const gp = groundHit();
+    if (!gp) return;
+    setTrafficLaneZ(trafficLaneDragDir, gp.z);
+    const label = trafficLaneDragDir === "east" ? "sol→sağ" : "sağ→sol";
+    statusEl.textContent = `${label} şerit Z: ${Math.round(gp.z)}`;
     return;
   }
   if (colCornerDrag) {
@@ -7612,6 +8015,20 @@ function onPointerMove(event) {
 }
 
 async function onPointerUp(event) {
+  if (trafficLaneDragDir) {
+    const dir = trafficLaneDragDir;
+    trafficLaneDragDir = null;
+    saveTrafficLaneZ();
+    if (viewportMode !== "9x16") controls.enabled = true;
+    const label = dir === "east" ? "sol→sağ" : "sağ→sol";
+    statusEl.textContent = `${label} şerit kaydedildi · Z ${Math.round(getTrafficLaneZ(dir))}`;
+    try {
+      renderer.domElement.releasePointerCapture(event.pointerId);
+    } catch {
+      /* */
+    }
+    return;
+  }
   if (colCornerDrag) {
     if (colCornerDrag.street) {
       const from = colCornerDrag.from;
@@ -7771,6 +8188,12 @@ window.addEventListener("keydown", (e) => {
 
   // E: skateboard / vehicle enter-exit (priority over rotate)
   if ((e.key === "e" || e.key === "E") && !e.repeat) {
+    if (isTruthDarePositionLocked(player?.mesh)) {
+      e.preventDefault();
+      statusEl.textContent =
+        "doğrulukmu — yerinde kal · yazı /dance /jump /sit /stop";
+      return;
+    }
     if (player?.skating && occupiedSkateboard) {
       e.preventDefault();
       exitSkateboard();
@@ -7978,6 +8401,7 @@ async function boot() {
           (player?.mesh?.userData?.redLightFinished ||
             player?.mesh?.userData?.redLightFinishing))
       ),
+    positionLocked: () => isTruthDarePositionLocked(player?.mesh),
   }).load();
   applyColDebugVisible(colDebugVisible);
   // player not in pickables editor list
