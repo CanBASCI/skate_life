@@ -2503,6 +2503,7 @@ function syncWorldLabels() {
             entry.bubbleEl.textContent !== "/play"
           ) {
             entry.bubbleEl.textContent = "/play";
+            entry.bubbleEl.classList.remove("rl-countdown-em");
             entry.bubbleEl.classList.remove("hidden");
           }
           entry.hideAt = now + 60000;
@@ -8224,8 +8225,12 @@ function redLightDogBubble(text, holdMs = 1200) {
   entry.nameEl.textContent = "";
   entry.nameEl.classList.add("hidden");
   entry.obj = dog;
+  const msg = String(text);
+  // Countdown digits + "!" are 25% larger than /play · Yerlerinize text
+  const emph = /^(\d+|!)$/.test(msg.trim());
   entry.bubbleEl.classList.add("rl-countdown");
-  entry.bubbleEl.textContent = String(text);
+  entry.bubbleEl.classList.toggle("rl-countdown-em", emph);
+  entry.bubbleEl.textContent = msg;
   entry.bubbleEl.classList.remove("hidden");
   entry.hideAt = performance.now() + holdMs;
   entry.root.classList.remove("hidden");
@@ -8668,6 +8673,7 @@ function tickRedLightGame(dt) {
         entry.hideAt = performance.now() + 60000;
         entry.bubbleEl.textContent = "/play";
         entry.bubbleEl.classList.add("rl-countdown");
+        entry.bubbleEl.classList.remove("rl-countdown-em");
         entry.bubbleEl.classList.remove("hidden");
       }
     }
