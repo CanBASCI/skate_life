@@ -837,13 +837,23 @@ body {
 }
 
 .world-label-bubble.bubble-danger {
-  color: #e11d2e;
+  background: #e11d2e;
+  color: #fff;
   font-weight: 700;
 }
 
+.world-label-bubble.bubble-danger::after {
+  border-top-color: #e11d2e;
+}
+
 .world-label-bubble.bubble-success {
-  color: #1a9f4b;
+  background: #1a9f4b;
+  color: #fff;
   font-weight: 700;
+}
+
+.world-label-bubble.bubble-success::after {
+  border-top-color: #1a9f4b;
 }
 
 .world-label-bubble.hidden {

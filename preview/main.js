@@ -1707,11 +1707,13 @@ async function handleChatCommand(raw) {
   if (
     isRedLightDq(who) ||
     who.userData?.redLightEliminating ||
-    (redLightGame.active && isRedLightFinished(who))
+    (redLightGame.active &&
+      (isRedLightFinished(who) || isRedLightFinishing(who)))
   ) {
-    statusEl.textContent = isRedLightFinished(who)
-      ? `${name} üstte bekliyor — oyun bitene kadar komut yok`
-      : `${name} diskalifiye — oyun bitene kadar komut yok`;
+    statusEl.textContent =
+      isRedLightFinished(who) || isRedLightFinishing(who)
+        ? `${name} üstte — oyun bitene kadar komut yok`
+        : `${name} diskalifiye — oyun bitene kadar komut yok`;
     return;
   }
 
@@ -5027,6 +5029,7 @@ function clearRedLightDqFlags() {
     o.userData.redLightDq = false;
     o.userData.redLightEliminating = false;
     o.userData.redLightFinished = false;
+    o.userData.redLightFinishing = false;
     if (o.userData.formationSlot && isRedLightScene()) {
       o.userData.formationSlot = null;
     }
@@ -5036,11 +5039,16 @@ function clearRedLightDqFlags() {
     player.mesh.userData.redLightDq = false;
     player.mesh.userData.redLightEliminating = false;
     player.mesh.userData.redLightFinished = false;
+    player.mesh.userData.redLightFinishing = false;
   }
 }
 
 function isRedLightFinished(obj) {
   return !!obj?.userData?.redLightFinished;
+}
+
+function isRedLightFinishing(obj) {
+  return !!obj?.userData?.redLightFinishing;
 }
 
 function listRedLightAlive() {
@@ -5257,7 +5265,14 @@ function redLightDqCorner() {
 }
 
 function isRedLightActorMoving(obj) {
-  if (!obj || isRedLightDq(obj) || isRedLightFinished(obj)) return false;
+  if (
+    !obj ||
+    isRedLightDq(obj) ||
+    isRedLightFinished(obj) ||
+    isRedLightFinishing(obj)
+  ) {
+    return false;
+  }
   // DQ run-out / entrance lineup don't count as "caught walking"
   if (obj.userData?.redLightEliminating) return false;
   if (obj.userData?.formationMove && !redLightGame.active) return false;
@@ -5285,7 +5300,13 @@ function isRedLightActorMoving(obj) {
 function catchRedLightMovers() {
   if (!redLightGame.active || redLightGame.phase !== "watching") return;
   for (const obj of listRedLightPlayers()) {
-    if (isRedLightDq(obj) || isRedLightFinished(obj)) continue;
+    if (
+      isRedLightDq(obj) ||
+      isRedLightFinished(obj) ||
+      isRedLightFinishing(obj)
+    ) {
+      continue;
+    }
     if (isRedLightActorMoving(obj)) disqualifyRedLightActor(obj);
   }
 }
@@ -5313,7 +5334,12 @@ function exitRedLightActorFromMatch(obj) {
 }
 
 function disqualifyRedLightActor(obj) {
-  if (!obj?.userData || obj.userData.redLightDq || obj.userData.redLightFinished) {
+  if (
+    !obj?.userData ||
+    obj.userData.redLightDq ||
+    obj.userData.redLightFinished ||
+    obj.userData.redLightFinishing
+  ) {
     return;
   }
   obj.userData.redLightDq = true;
@@ -5438,47 +5464,35 @@ function redLightFinishHoldPos(obj) {
   const r =
     obj === player?.mesh ? player?.radius || 22 : NPC_WALK_RADIUS || 18;
   const edge = redLightFinishEdge();
-  // Feet just inside üst edge; mesh = feet - FEET_NUDGE_Z
-  const feetZ = edge.z + Math.max(10, r * 0.45);
-  let x = laneX;
-  let z = feetZ - FEET_NUDGE_Z;
-  const clamped = projectIntoWalkZone(x, feetZ, r);
-  x = clamped.x;
-  z = clamped.z - FEET_NUDGE_Z;
-  return { x, z };
+  // Slightly inside üst edge so lateral run along the line isn't jammed
+  const feetZ = edge.z + Math.max(20, r * 1.05);
+  const clamped = projectIntoWalkZone(laneX, feetZ, r);
+  return { x: clamped.x, z: clamped.z - FEET_NUDGE_Z };
 }
 
-/** Reached üst collision — wait facing south until everyone arrives. */
-function markRedLightFinished(obj) {
-  if (!obj?.userData || obj.userData.redLightFinished || obj.userData.redLightDq) {
-    return;
-  }
+/** Arrived at lane hold — face south, bubble, pin. */
+function settleRedLightFinished(obj, hold) {
+  if (!obj?.userData || obj.userData.redLightDq) return;
   const isPlayer = !!(player?.mesh && obj === player.mesh);
+  const pos = hold || redLightFinishHoldPos(obj);
+
+  obj.userData.redLightFinishing = false;
   obj.userData.redLightFinished = true;
   obj.userData.formationMove = false;
 
-  // Stop any walk / chat move — locked at finish
   if (isPlayer) {
     player.keys?.clear();
     player.scriptMove = null;
-    player.stopActions?.();
-  } else {
-    clearNpcScriptMoves(obj);
-  }
-
-  // Snap to alt-lane X on the üst edge
-  const hold = redLightFinishHoldPos(obj);
-  if (isPlayer) {
-    player.mesh.position.set(hold.x, 0, hold.z);
-    player.syncRing?.(hold.x, hold.z);
+    player.mesh.position.set(pos.x, 0, pos.z);
+    player.syncRing?.(pos.x, pos.z);
     if (player.syncDepth) player.syncDepth(player.mesh);
   } else {
-    obj.position.set(hold.x, 0, hold.z);
+    clearNpcScriptMoves(obj);
+    obj.position.set(pos.x, 0, pos.z);
     syncDepth(obj);
   }
 
   faceRedLightActorSouth(obj, { settle: true });
-  // Always force south idle even if already marked south
   if (!isPlayer) {
     obj.userData.dir = "south";
     applyFacing(obj, "south");
@@ -5487,7 +5501,7 @@ function markRedLightFinished(obj) {
     }).catch(() => {});
   }
 
-  obj.userData.formationSlot = { x: hold.x, z: hold.z };
+  obj.userData.formationSlot = { x: pos.x, z: pos.z };
   speakAs(obj, "Vardın", { success: true, holdMs: 4000 });
 
   const name = isPlayer
@@ -5496,13 +5510,59 @@ function markRedLightFinished(obj) {
   const alive = listRedLightAlive();
   const done = alive.filter((o) => isRedLightFinished(o)).length;
   statusEl.textContent = `${name} üstte — ${done}/${alive.length} (aşağı bakıyor, kilitli)`;
+  checkRedLightGameOver();
+}
+
+/** Reached üst collision — run to alt-lane X, then lock facing south. */
+function markRedLightFinished(obj) {
+  if (
+    !obj?.userData ||
+    obj.userData.redLightFinished ||
+    obj.userData.redLightFinishing ||
+    obj.userData.redLightDq
+  ) {
+    return;
+  }
+  const isPlayer = !!(player?.mesh && obj === player.mesh);
+  const hold = redLightFinishHoldPos(obj);
+  const dist = Math.hypot(obj.position.x - hold.x, obj.position.z - hold.z);
+
+  // Already on lane — settle in place
+  if (dist <= 16) {
+    settleRedLightFinished(obj, hold);
+    return;
+  }
+
+  obj.userData.redLightFinishing = true;
+  obj.userData.formationSlot = null;
+
+  if (isPlayer) {
+    player.keys?.clear();
+    player.scriptMove = null;
+    player.stopActions?.();
+  } else {
+    clearNpcScriptMoves(obj);
+  }
+
+  const name = isPlayer
+    ? PLAYER_CHAT_NAME
+    : shortCharacterName(obj.userData?.label, obj.userData?.path);
+  statusEl.textContent = `${name} üst çizgide lane'ine koşuyor…`;
+
+  scriptActorTo(obj, hold.x, hold.z, {
+    run: true,
+    faceDir: "south",
+    idleOnArrive: true,
+    onDone: () => settleRedLightFinished(obj, hold),
+  });
+  if (isPlayer && player.scriptMove) player.scriptMove._rlFinish = true;
 }
 
 function checkRedLightWinners() {
   if (!redLightGame.active) return;
 
   for (const obj of listRedLightAlive()) {
-    if (isRedLightFinished(obj)) continue;
+    if (isRedLightFinished(obj) || isRedLightFinishing(obj)) continue;
     if (redLightTouchesFinish(obj)) markRedLightFinished(obj);
   }
 
@@ -6067,7 +6127,8 @@ function scriptActorTo(
     if (
       isRedLightScene() &&
       !obj.userData?.redLightDq &&
-      !obj.userData?.redLightFinished
+      !obj.userData?.redLightFinished &&
+      !obj.userData?.redLightFinishing
     ) {
       obj.userData.formationSlot = null;
     } else {
@@ -7285,16 +7346,18 @@ function onPointerDown(event) {
     statusEl.textContent = "Koşu bitince sürükleyebilirsin";
     return;
   }
-  // Finish / DQ lock — stay put
+  // Finish / DQ lock — stay put (lane run uses formationMove, blocked above)
   if (
     redLightGame.active &&
-    (obj.userData?.redLightFinished || obj.userData?.redLightDq)
+    (obj.userData?.redLightFinished ||
+      obj.userData?.redLightFinishing ||
+      obj.userData?.redLightDq)
   ) {
     if (placing) endPaletteDrag();
     selectObject(obj);
-    statusEl.textContent = obj.userData.redLightFinished
-      ? "Üstte bekliyor — hareket yok"
-      : "Diskalifiye — hareket yok";
+    statusEl.textContent = obj.userData.redLightDq
+      ? "Diskalifiye — hareket yok"
+      : "Üstte — hareket yok";
     return;
   }
   // Moving an existing piece cancels pending palette place
@@ -7719,7 +7782,9 @@ async function boot() {
       !!(
         player?.mesh?.userData?.redLightDq ||
         player?.mesh?.userData?.redLightEliminating ||
-        (redLightGame.active && player?.mesh?.userData?.redLightFinished)
+        (redLightGame.active &&
+          (player?.mesh?.userData?.redLightFinished ||
+            player?.mesh?.userData?.redLightFinishing))
       ),
   }).load();
   applyColDebugVisible(colDebugVisible);
