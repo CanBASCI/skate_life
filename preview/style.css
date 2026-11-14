@@ -32,10 +32,11 @@ body {
 }
 
 #layout {
-  /* Stage always full-bleed + centered; menus overlay so they don't shove the game */
+  /* Menus live beside #stage — never painted over the game canvas */
   display: grid;
-  grid-template-columns: 1fr;
+  grid-template-columns: minmax(220px, 280px) minmax(0, 1fr) minmax(220px, 280px);
   grid-template-rows: 1fr;
+  grid-template-areas: "left stage right";
   position: relative;
   width: 100%;
   height: var(--app-height, 100%);
@@ -43,53 +44,51 @@ body {
   overflow: hidden;
 }
 
+/* Stream / OBS: game only — no rail, no chrome on the canvas */
+#layout.ui-chrome-hidden {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas: "stage";
+}
+
+#ui-chrome-rail {
+  display: none !important;
+}
+
 #layout > #stage {
-  grid-column: 1;
-  grid-row: 1;
+  grid-area: stage;
   min-width: 0;
   min-height: 0;
 }
 
-#layout > #palette-left,
-#layout > #palette-right {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  width: min(260px, 42vw);
-  max-width: 280px;
-  z-index: 12;
-  box-shadow: 0 0 24px #00000066;
-}
-
 #layout > #palette-left {
-  left: 0;
+  grid-area: left;
+  min-width: 0;
+  z-index: 12;
+  border-right: 1px solid var(--line);
 }
 
 #layout > #palette-right {
-  right: 0;
+  grid-area: right;
+  min-width: 0;
+  z-index: 12;
+  border-left: 1px solid var(--line);
 }
 
 #layout.ui-chrome-hidden #palette-left,
-#layout.ui-chrome-hidden #palette-right,
-#layout.ui-chrome-hidden #hud {
+#layout.ui-chrome-hidden #palette-right {
   display: none !important;
 }
 
 #ui-top-bar {
-  position: absolute;
-  top: 10px;
-  left: 12px;
-  /* Above overlay palettes (z=12) so Gizle / Yeniden Başla stay clickable */
-  z-index: 20;
+  flex: 0 0 auto;
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
   align-items: center;
-  pointer-events: none;
+  padding: 8px 8px 0;
 }
 
 #ui-top-bar > button {
-  pointer-events: auto;
   padding: 7px 12px;
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -105,7 +104,6 @@ body {
 }
 
 #ui-toggle:hover,
-#ui-toggle[aria-pressed="true"],
 #ui-restart:hover {
   border-color: #3a5244;
   background: #18221c;
@@ -419,6 +417,71 @@ body {
 #night-club-col button.active {
   background: #1c2a22;
   color: var(--accent);
+}
+
+#live-bridge-panel {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 3px;
+  background: #0a100d;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  align-items: center;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+#live-bridge-panel .crowd-label {
+  padding: 0 6px 0 8px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.live-bridge-status {
+  font-size: 10px;
+  font-weight: 650;
+  color: var(--muted);
+  padding: 0 4px;
+  min-width: 3.5em;
+}
+
+.live-bridge-status.on {
+  color: var(--accent);
+}
+
+#live-yt-video {
+  flex: 1 1 120px;
+  min-width: 0;
+  padding: 5px 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #060a08;
+  color: var(--ink);
+  font: inherit;
+  font-size: 11px;
+  outline: none;
+}
+
+#live-bridge-panel button {
+  appearance: none;
+  border: 0;
+  border-radius: 999px;
+  padding: 5px 9px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+#live-bridge-panel button:hover {
+  color: var(--accent);
+  background: #1c2a22;
 }
 
 #viewport-toggle,
@@ -782,37 +845,20 @@ body {
 }
 
 #hud {
-  --hud-left: 50%;
-  --hud-top: 10px;
-  position: absolute;
-  top: var(--hud-top);
-  left: var(--hud-left);
-  transform: translateX(-50%);
-  z-index: 6;
+  flex: 0 0 auto;
   display: flex;
   flex-direction: column;
-  align-items: center;
+  align-items: stretch;
   gap: 4px;
-  padding: 8px 14px;
-  background: var(--panel);
+  margin: 8px;
+  padding: 8px 10px;
+  background: #0a100d;
   border: 1px solid var(--line);
-  border-radius: 999px;
+  border-radius: 12px;
   font-size: 11px;
   color: var(--muted);
-  pointer-events: auto;
-  cursor: grab;
-  user-select: none;
-  touch-action: none;
-  white-space: nowrap;
-}
-
-#hud.hud-moved {
-  transform: none;
-}
-
-#hud.hud-dragging {
-  cursor: grabbing;
-  opacity: 0.92;
+  white-space: normal;
+  line-height: 1.35;
 }
 
 #status {
@@ -911,96 +957,6 @@ body {
   background: #0a100d;
   color: var(--accent);
   font-size: 10px;
-}
-
-#chat-dock {
-  position: absolute;
-  left: 50%;
-  bottom: 12px;
-  transform: translateX(-50%);
-  z-index: 5;
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 6px;
-  width: min(420px, calc(100% - 24px));
-  pointer-events: none;
-}
-
-#chat-cmds {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 4px;
-  padding: 0 2px;
-  pointer-events: auto;
-}
-
-#chat-cmds button {
-  appearance: none;
-  border: 1px solid var(--line);
-  border-radius: 7px;
-  padding: 3px 7px;
-  background: #0a100de8;
-  color: var(--muted);
-  font: inherit;
-  font-size: 10px;
-  font-weight: 650;
-  letter-spacing: 0.02em;
-  cursor: pointer;
-  line-height: 1.2;
-}
-
-#chat-cmds button:hover {
-  color: var(--accent);
-  border-color: #3a5244;
-}
-
-#chat-bar {
-  display: flex;
-  gap: 8px;
-  padding: 6px;
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  backdrop-filter: blur(8px);
-  pointer-events: auto;
-}
-
-#chat-input {
-  flex: 1;
-  min-width: 0;
-  padding: 8px 10px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: #0a100d;
-  color: var(--ink);
-  font: inherit;
-  /* 16px prevents iOS Safari zoom-on-focus (which rescales the whole game) */
-  font-size: 16px;
-  outline: none;
-}
-
-#chat-input:focus {
-  border-color: #3a5244;
-}
-
-#chat-send {
-  appearance: none;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 8px 12px;
-  background: #1c2a22;
-  color: var(--accent);
-  font: inherit;
-  font-size: 12px;
-  font-weight: 650;
-  cursor: pointer;
-  white-space: nowrap;
-}
-
-#chat-send:hover {
-  border-color: var(--accent);
 }
 
 #world-labels {
@@ -1377,9 +1333,83 @@ body {
   display: none;
 }
 
+#chat-dock {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  border-top: 1px solid var(--line);
+  background: #0a100d;
+}
+
+#chat-cmds {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+#chat-cmds button {
+  appearance: none;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 3px 7px;
+  background: #060a08;
+  color: var(--muted);
+  font: inherit;
+  font-size: 10px;
+  font-weight: 650;
+  cursor: pointer;
+  line-height: 1.2;
+}
+
+#chat-cmds button:hover {
+  color: var(--accent);
+  border-color: #3a5244;
+}
+
+#chat-bar {
+  display: flex;
+  gap: 8px;
+}
+
+#chat-input {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #060a08;
+  color: var(--ink);
+  font: inherit;
+  font-size: 16px;
+  outline: none;
+}
+
+#chat-input:focus {
+  border-color: #3a5244;
+}
+
+#chat-send {
+  appearance: none;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 12px;
+  background: #1c2a22;
+  color: var(--accent);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+#chat-send:hover {
+  border-color: var(--accent);
+}
+
 @media (max-width: 960px) {
-  #layout > #palette-left,
-  #layout > #palette-right {
-    width: min(220px, 78vw);
+  #layout:not(.ui-chrome-hidden) {
+    grid-template-columns: minmax(180px, 42vw) minmax(0, 1fr) minmax(160px, 36vw);
   }
 }

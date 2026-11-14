@@ -9,6 +9,10 @@ import {
   OBJ_CAT_ORDER,
   OBJ_CAT_LABEL,
 } from "./catalog.js";
+import {
+  connectLiveBridge,
+  bridgePost,
+} from "./liveBridge.js";
 
 const REF = 96;
 const BUILDING_SCALE = 1.85;
@@ -39,7 +43,7 @@ const bgToggle = document.getElementById("bg-toggle");
 const colToggle = document.getElementById("col-toggle");
 const VP_STORAGE_KEY = "skate_life_viewport";
 const BG_STORAGE_KEY = "skate_life_bg";
-const COL_DEBUG_KEY = "skate_life_col_debug";
+const COL_DEBUG_KEY = "skate_life_col_debug_v2";
 const UI_CHROME_KEY = "skate_life_ui_chrome_hidden";
 const SCENE_STORAGE_KEY = "skate_life_scene_v1";
 const layoutEl = document.getElementById("layout");
@@ -80,10 +84,29 @@ function applyUiChromeHidden(hidden) {
   });
 }
 
+function toggleUiChrome() {
+  applyUiChromeHidden(!uiChromeHidden);
+}
+
 uiToggleBtn?.addEventListener("click", (e) => {
   e.preventDefault();
   e.stopPropagation();
-  applyUiChromeHidden(!uiChromeHidden);
+  toggleUiChrome();
+});
+
+/** OBS’te menü yok — sadece M ile aç/kapa */
+window.addEventListener("keydown", (e) => {
+  if (e.code !== "KeyM" || e.repeat || e.metaKey || e.ctrlKey || e.altKey) return;
+  const t = e.target;
+  if (
+    t instanceof HTMLInputElement ||
+    t instanceof HTMLTextAreaElement ||
+    t?.isContentEditable
+  ) {
+    return;
+  }
+  e.preventDefault();
+  toggleUiChrome();
 });
 
 /** Soft restart: empty cast, street — no full page refresh. */
@@ -107,6 +130,10 @@ async function restartSession() {
     if (tennisFanDanceTimer) {
       clearTimeout(tennisFanDanceTimer);
       tennisFanDanceTimer = null;
+    }
+    if (tennisPointResetTimer) {
+      clearTimeout(tennisPointResetTimer);
+      tennisPointResetTimer = null;
     }
     tennisFanDanceGen += 1;
     tennisRally.scoreA = 0;
@@ -140,6 +167,7 @@ async function restartSession() {
     }
     clearTennisCast();
     clearCrowdExtras();
+    clearLiveUsers();
     for (const obj of [...listPartyCharacters()]) {
       clearNpcScriptMoves(obj);
       detachPlacedObject(obj);
@@ -157,6 +185,7 @@ async function restartSession() {
     } catch {
       /* UI helpers may not be ready */
     }
+    stopStreetBgm({ resetIndex: true });
     if (sceneCatalog.some((s) => s.id === "street")) {
       await loadNamedScene("street");
     }
@@ -182,7 +211,8 @@ let viewportMode =
 /** @type {"grass" | "black"} */
 let bgMode = localStorage.getItem(BG_STORAGE_KEY) === "black" ? "black" : "grass";
 /** Show green feet collision disks (player + pet). */
-let colDebugVisible = localStorage.getItem(COL_DEBUG_KEY) !== "hide";
+/** Default off — green feet ring only if user chose "Col göster". */
+let colDebugVisible = localStorage.getItem(COL_DEBUG_KEY) === "show";
 /** @type {THREE.Group | null} */
 let petColRing = null;
 const PET_COL_RADIUS = 12;
@@ -230,6 +260,73 @@ function isWalkZoneScene(id = activeSceneId) {
 function isCrowdScene(id = activeSceneId) {
   return isStreetLikeScene(id) || isNightClubScene(id);
 }
+
+/** Street + doğrulukmu: play tracks back-to-back, then loop. */
+const STREET_BGM_FILES = ["pixel-peace.mp3", "faded-pixel-heart.mp3"];
+let streetBgmAudio = null;
+let streetBgmIndex = 0;
+let streetBgmWanted = false;
+let streetBgmUnlockBound = false;
+
+function streetBgmTrackUrl(file) {
+  return new URL(`./audio/${file}`, import.meta.url).href;
+}
+
+function stopStreetBgm({ resetIndex = true } = {}) {
+  streetBgmWanted = false;
+  if (streetBgmAudio) {
+    streetBgmAudio.onended = null;
+    try {
+      streetBgmAudio.pause();
+    } catch {
+      /* */
+    }
+    streetBgmAudio.removeAttribute("src");
+    streetBgmAudio.load();
+    streetBgmAudio = null;
+  }
+  if (resetIndex) streetBgmIndex = 0;
+}
+
+function ensureStreetBgmUnlock() {
+  if (streetBgmUnlockBound) return;
+  streetBgmUnlockBound = true;
+  const resume = () => {
+    if (streetBgmWanted) playStreetBgmAt(streetBgmIndex);
+  };
+  window.addEventListener("pointerdown", resume, { once: true, capture: true });
+  window.addEventListener("keydown", resume, { once: true, capture: true });
+}
+
+function playStreetBgmAt(index) {
+  if (!streetBgmWanted || !STREET_BGM_FILES.length) return;
+  const n = STREET_BGM_FILES.length;
+  streetBgmIndex = ((index % n) + n) % n;
+  const url = streetBgmTrackUrl(STREET_BGM_FILES[streetBgmIndex]);
+  if (!streetBgmAudio) {
+    streetBgmAudio = new Audio();
+    streetBgmAudio.preload = "auto";
+    streetBgmAudio.volume = 0.42;
+  }
+  streetBgmAudio.onended = () => playStreetBgmAt(streetBgmIndex + 1);
+  streetBgmAudio.src = url;
+  streetBgmAudio.currentTime = 0;
+  const p = streetBgmAudio.play();
+  if (p?.catch) {
+    p.catch(() => ensureStreetBgmUnlock());
+  }
+}
+
+/** Start/keep BGM on street-like scenes; stop elsewhere. Soft street↔truth keeps playing. */
+function syncStreetBgm() {
+  if (isStreetLikeScene()) {
+    streetBgmWanted = true;
+    if (streetBgmAudio && !streetBgmAudio.paused) return;
+    playStreetBgmAt(streetBgmIndex);
+    return;
+  }
+  stopStreetBgm({ resetIndex: true });
+}
 /** @type {{ id: string, label?: string, file?: string }[]} */
 let sceneCatalog = [];
 const sceneCopyBtn = document.getElementById("scene-copy");
@@ -266,6 +363,9 @@ let tennisMatchEndTimer = null;
 let tennisFanDanceGen = 0;
 /** @type {ReturnType<typeof setTimeout> | null} */
 let tennisFanDanceTimer = null;
+/** Delay before ball teleports to serve after a point. */
+/** @type {ReturnType<typeof setTimeout> | null} */
+let tennisPointResetTimer = null;
 /** Last court NPCs + fans for “aynı karakterler” restart. */
 let tennisMatchRoster = null;
 const TENNIS_WIN_SCORE = 10;
@@ -454,7 +554,6 @@ window.addEventListener("resize", () => {
   if (inspPos && inspector && !inspector.classList.contains("hidden")) {
     applyInspPos(inspPos.left, inspPos.top);
   }
-  if (hudPos && hudEl) applyHudPos(hudPos.left, hudPos.top);
 });
 
 /**
@@ -462,70 +561,6 @@ window.addEventListener("resize", () => {
  * Fixed until the scene is reloaded; does not follow Main while he moves.
  */
 let streetGatherTarget = { x: -0.33, z: 188.96 };
-
-/** Free position of #hud after first drag (px, relative to #stage). */
-let hudPos = /** @type {{ left: number, top: number } | null} */ (null);
-
-function hudParentSize() {
-  const parent = hudEl?.parentElement;
-  return {
-    w: parent?.clientWidth || window.innerWidth,
-    h: parent?.clientHeight || window.innerHeight,
-  };
-}
-
-function clampHudPos(left, top) {
-  const { w: pw, h: ph } = hudParentSize();
-  const panelW = hudEl?.offsetWidth || 0;
-  const panelH = hudEl?.offsetHeight || 0;
-  const pad = 8;
-  return {
-    left: Math.max(pad, Math.min(pw - panelW - pad, left)),
-    top: Math.max(pad, Math.min(ph - panelH - pad, top)),
-  };
-}
-
-function applyHudPos(left, top) {
-  if (!hudEl) return;
-  hudPos = clampHudPos(left, top);
-  hudEl.classList.add("hud-moved");
-  hudEl.style.setProperty("--hud-left", `${hudPos.left}px`);
-  hudEl.style.setProperty("--hud-top", `${hudPos.top}px`);
-}
-
-hudEl?.addEventListener("pointerdown", (e) => {
-  if (e.button !== 0 || !hudEl) return;
-  e.preventDefault();
-  e.stopPropagation();
-  hudEl.setPointerCapture(e.pointerId);
-  hudEl.classList.add("hud-dragging");
-  const rect = hudEl.getBoundingClientRect();
-  const parent = hudEl.parentElement?.getBoundingClientRect();
-  const originLeft = rect.left - (parent?.left || 0);
-  const originTop = rect.top - (parent?.top || 0);
-  if (!hudPos) applyHudPos(originLeft, originTop);
-  const startX = e.clientX;
-  const startY = e.clientY;
-  const fromLeft = hudPos.left;
-  const fromTop = hudPos.top;
-  const onMove = (ev) => {
-    applyHudPos(fromLeft + (ev.clientX - startX), fromTop + (ev.clientY - startY));
-  };
-  const onUp = (ev) => {
-    try {
-      hudEl.releasePointerCapture(ev.pointerId);
-    } catch {
-      /* */
-    }
-    hudEl.classList.remove("hud-dragging");
-    hudEl.removeEventListener("pointermove", onMove);
-    hudEl.removeEventListener("pointerup", onUp);
-    hudEl.removeEventListener("pointercancel", onUp);
-  };
-  hudEl.addEventListener("pointermove", onMove);
-  hudEl.addEventListener("pointerup", onUp);
-  hudEl.addEventListener("pointercancel", onUp);
-});
 
 const dragGhost = document.getElementById("drag-ghost");
 /** @type {THREE.Group | null} */
@@ -1576,7 +1611,7 @@ function showPromptAbove(obj, text, key = "/E") {
 const worldLabelsRoot = document.getElementById("world-labels");
 const chatInput = document.getElementById("chat-input");
 const chatSendBtn = document.getElementById("chat-send");
-const PLAYER_CHAT_NAME = "Main";
+const PLAYER_CHAT_NAME = "Admin";
 const BUBBLE_DURATION_MS = 4500;
 /** @type {Map<string, { root: HTMLElement, nameEl: HTMLElement, bubbleEl: HTMLElement, hideAt: number, obj: THREE.Object3D | null }>} */
 const worldLabelMap = new Map();
@@ -2030,9 +2065,9 @@ async function setCharacterSitPose(obj, sitting) {
   return true;
 }
 
-async function handleChatCommand(raw) {
+async function handleChatCommand(raw, speakerOverride = null) {
   const text = String(raw || "").trim();
-  const who = chatSpeaker();
+  const who = speakerOverride || chatSpeaker();
   if (!who) {
     statusEl.textContent = "Komut için karakter yok";
     return;
@@ -2044,6 +2079,22 @@ async function handleChatCommand(raw) {
     isPlayer
       ? PLAYER_CHAT_NAME
       : shortCharacterName(who.userData?.label, who.userData?.path);
+
+  // /add5char /add50char … = kalabalık panelindeki 5/10/20/30/40/50 butonu
+  const addCrowd = lower.match(/^\/add(\d+)char$/);
+  if (addCrowd) {
+    const n = Number(addCrowd[1]);
+    if (!TRUTH_DARE_CROWD_COUNTS.includes(n)) {
+      statusEl.textContent = `Kalabalık: ${TRUTH_DARE_CROWD_COUNTS.join(" / ")} · örn /add50char`;
+      return;
+    }
+    if (!isCrowdScene()) {
+      statusEl.textContent = "/addNchar · street / night club / doğrulukmu";
+      return;
+    }
+    await setTruthDareCrowdCount(n);
+    return;
+  }
 
   if (
     isRedLightDq(who) ||
@@ -2367,7 +2418,7 @@ async function handleChatCommand(raw) {
   }
 
   statusEl.textContent =
-    "Komut: /play /R3 /dance /jump /sit /e /stop (büyük/küçük harf OK)";
+    "Komut: /play /add50char /R3 /dance /jump /sit /e /stop";
 }
 
 function dismissChatKeyboard() {
@@ -2408,6 +2459,363 @@ function sendChatMessage() {
       ? `${PLAYER_CHAT_NAME}: ${msg}`
       : `${shortCharacterName(who.userData?.label, who.userData?.path)}: ${msg}`;
   if (window.matchMedia?.("(pointer: coarse)")?.matches) dismissChatKeyboard();
+}
+
+/** @type {Map<string, THREE.Object3D>} channelId / live user id → character mesh */
+const liveUsers = new Map();
+const LIVE_YT_VIDEO_KEY = "skate_life_yt_video_id";
+const LIVE_PARTY_CAP = 40;
+
+/** Live chat scene votes — >50% of signed-in chars → switch. */
+const SCENE_VOTE_CMDS = {
+  "/tennis": "tennis",
+  "/dc": "dogrulukmu_cesaretmi",
+  "/nc": "night_club_inside",
+  "/rl": "red_light_green_light",
+};
+/** @type {Map<string, string>} liveUserId → sceneId */
+const sceneVotes = new Map();
+let sceneVoteSwitching = false;
+
+function liveCharacterCount() {
+  let n = 0;
+  for (const obj of liveUsers.values()) {
+    if (obj?.parent) n += 1;
+  }
+  return n;
+}
+
+function clearSceneVotesForUser(userId) {
+  const id = String(userId || "");
+  if (id) sceneVotes.delete(id);
+}
+
+function countVotesForScene(sceneId) {
+  let n = 0;
+  for (const [uid, sid] of sceneVotes) {
+    if (sid !== sceneId) continue;
+    if (!liveUsers.get(uid)?.parent) continue;
+    n += 1;
+  }
+  return n;
+}
+
+/**
+ * @param {{ id: string, name: string }} user
+ * @param {string} sceneId
+ * @param {string} cmd
+ */
+async function registerSceneVote(user, sceneId, cmd) {
+  const uid = String(user?.id || "").trim();
+  const who = liveUsers.get(uid);
+  if (!who?.parent) {
+    statusEl.textContent = "Sahne oyu · önce /signin";
+    return;
+  }
+  if (sceneVoteSwitching) {
+    statusEl.textContent = "Sahne değişiyor…";
+    return;
+  }
+  if (activeSceneId === sceneId) {
+    speakAs(who, cmd);
+    statusEl.textContent = `Zaten ${sceneId}`;
+    return;
+  }
+
+  sceneVotes.set(uid, sceneId);
+  speakAs(who, cmd);
+
+  const total = liveCharacterCount();
+  const forScene = countVotesForScene(sceneId);
+  const need = Math.floor(total / 2) + 1;
+  statusEl.textContent = `Oy ${cmd} · ${forScene}/${total} (>%50 → ${need})`;
+
+  if (total > 0 && forScene > total * 0.5) {
+    sceneVoteSwitching = true;
+    sceneVotes.clear();
+    statusEl.textContent = `Oy kazandı ${cmd} · sahne açılıyor…`;
+    try {
+      await loadNamedScene(sceneId);
+      statusEl.textContent = `Sahne · ${sceneId} (oy)`;
+    } catch (err) {
+      console.warn(err);
+      statusEl.textContent = err?.message || String(err);
+    } finally {
+      sceneVoteSwitching = false;
+    }
+  }
+}
+
+function findLiveUserIdForMesh(obj) {
+  if (!obj) return null;
+  for (const [id, mesh] of liveUsers) {
+    if (mesh === obj) return id;
+  }
+  return null;
+}
+
+function unlinkLiveUserMesh(obj) {
+  const id = findLiveUserIdForMesh(obj);
+  if (id) {
+    liveUsers.delete(id);
+    clearSceneVotesForUser(id);
+  }
+}
+
+function clearLiveUsers() {
+  const objs = [...liveUsers.values()];
+  liveUsers.clear();
+  sceneVotes.clear();
+  for (const obj of objs) {
+    const key = labelKeyFor(obj);
+    if (key) removeWorldLabel(key);
+    clearNpcScriptMoves(obj);
+    detachPlacedObject(obj);
+    disposePlacedObject(obj);
+  }
+}
+
+function liveSpawnAnchor() {
+  if (player?.mesh) {
+    return {
+      x: player.mesh.position.x + (Math.random() - 0.5) * 40,
+      z: player.mesh.position.z + 28 + Math.random() * 24,
+    };
+  }
+  if (streetGatherTarget) {
+    return {
+      x: streetGatherTarget.x + (Math.random() - 0.5) * 40,
+      z: streetGatherTarget.z + (Math.random() - 0.5) * 40,
+    };
+  }
+  return { x: (Math.random() - 0.5) * 60, z: 180 + Math.random() * 40 };
+}
+
+/**
+ * @param {{ id: string, name: string }} user
+ */
+async function liveSignIn(user) {
+  const id = String(user?.id || "").trim();
+  const name = String(user?.name || "viewer").trim() || "viewer";
+  if (!id) return;
+
+  const existing = liveUsers.get(id);
+  if (existing && existing.parent) {
+    speakAs(existing, "zaten burdayım");
+    statusEl.textContent = `${name} zaten içerde`;
+    return;
+  }
+  if (existing) liveUsers.delete(id);
+
+  if (liveUsers.size >= LIVE_PARTY_CAP) {
+    statusEl.textContent = `Live dolu (max ${LIVE_PARTY_CAP})`;
+    return;
+  }
+
+  const catalog = crowdCharacterCatalog();
+  if (!catalog.length) {
+    statusEl.textContent = "Live için boy/girl karakter yok";
+    return;
+  }
+  const item = catalog[Math.floor(Math.random() * catalog.length)];
+  const pos = liveSpawnAnchor();
+  const obj = await spawnItem(item, pos.x, pos.z, {
+    dir: "south",
+    exactPos: true,
+    recordUndo: false,
+    select: false,
+    editable: false,
+  });
+  if (!obj) return;
+  obj.userData.partyMember = true;
+  obj.userData.editable = false;
+  obj.userData.liveUserId = id;
+  obj.userData.liveUserName = name;
+  obj.userData.label = name;
+  liveUsers.set(id, obj);
+  if (selected === obj) selectObject(null);
+  try {
+    snapshotPartyFromWorld();
+  } catch {
+    /* */
+  }
+  const greetings = [
+    "Selamlar",
+    "Merhabalar",
+    "Ben Geldim",
+    "Hey!",
+    "Selam",
+    "Geldik",
+  ];
+  speakAs(obj, greetings[Math.floor(Math.random() * greetings.length)]);
+  statusEl.textContent = `${name} oyuna girdi (/signin)`;
+}
+
+/**
+ * @param {{ id: string, name: string }} user
+ */
+async function liveSignOut(user) {
+  const id = String(user?.id || "").trim();
+  const name = String(user?.name || "viewer").trim() || "viewer";
+  const obj = liveUsers.get(id);
+  if (!obj) {
+    statusEl.textContent = `${name} zaten dışarıda`;
+    return;
+  }
+  liveUsers.delete(id);
+  clearSceneVotesForUser(id);
+  const key = labelKeyFor(obj);
+  if (key) removeWorldLabel(key);
+  clearNpcScriptMoves(obj);
+  detachPlacedObject(obj);
+  disposePlacedObject(obj);
+  try {
+    snapshotPartyFromWorld();
+  } catch {
+    /* */
+  }
+  statusEl.textContent = `${name} çıktı (/signout)`;
+}
+
+/**
+ * @param {import("./liveBridge.js").LiveEvent} ev
+ */
+function handleLiveEvent(ev) {
+  if (!ev || ev.type === "status") {
+    if (ev?.text) {
+      const st = document.getElementById("live-bridge-status");
+      if (st && /youtube connected/i.test(ev.text)) {
+        st.textContent = "yt ok";
+        st.classList.add("on");
+      } else if (st && /youtube disconnected|poll error/i.test(ev.text)) {
+        st.textContent = /error/i.test(ev.text) ? "yt err" : "ws";
+      }
+    }
+    return;
+  }
+
+  const user = ev.user || { id: "anon", name: "anon" };
+  const text = String(ev.text || "").trim();
+
+  if (ev.type === "gift" || ev.type === "like") {
+    if (
+      isTennisScene() &&
+      tennisPlayLinedUp &&
+      !tennisMatchOver &&
+      !tennisMatchEnding
+    ) {
+      const team =
+        ev.team === "a" || ev.team === "b"
+          ? ev.team
+          : Math.random() < 0.5
+            ? "a"
+            : "b";
+      simulateTennisLive(ev.type === "gift" ? `gift-${team}` : `like-${team}`);
+    }
+    return;
+  }
+
+  if (ev.type !== "comment" || !text) return;
+
+  const lower = text.toLowerCase();
+  if (lower === "/signin" || lower === "/join") {
+    liveSignIn(user).catch((err) => {
+      console.warn(err);
+      statusEl.textContent = err.message || String(err);
+    });
+    return;
+  }
+  if (lower === "/signout" || lower === "/leave") {
+    liveSignOut(user).catch((err) => {
+      console.warn(err);
+      statusEl.textContent = err.message || String(err);
+    });
+    return;
+  }
+
+  const who = liveUsers.get(String(user.id || ""));
+  if (!who || !who.parent) return;
+
+  const voteScene = SCENE_VOTE_CMDS[lower];
+  if (voteScene) {
+    registerSceneVote(user, voteScene, lower).catch((err) => {
+      console.warn(err);
+      statusEl.textContent = err?.message || String(err);
+    });
+    return;
+  }
+
+  if (text.startsWith("/")) {
+    handleChatCommand(text, who).catch((err) => {
+      console.warn(err);
+      statusEl.textContent = err.message || String(err);
+    });
+    return;
+  }
+
+  const msg = text.slice(0, CHAT_MSG_MAX);
+  speakAs(who, msg);
+  statusEl.textContent = `${shortCharacterName(who.userData?.label, who.userData?.path)}: ${msg}`;
+}
+
+function setLiveBridgeStatusUi(connected, detail) {
+  const st = document.getElementById("live-bridge-status");
+  if (!st) return;
+  st.textContent = connected ? detail || "bağlı" : detail || "kopuk";
+  st.classList.toggle("on", !!connected);
+}
+
+function initLiveBridgeUi() {
+  const videoInput = document.getElementById("live-yt-video");
+  const connectBtn = document.getElementById("live-yt-connect");
+  const disconnectBtn = document.getElementById("live-yt-disconnect");
+  try {
+    const saved = localStorage.getItem(LIVE_YT_VIDEO_KEY);
+    if (saved && videoInput) videoInput.value = saved;
+  } catch {
+    /* */
+  }
+
+  connectBtn?.addEventListener("click", (e) => {
+    e.preventDefault();
+    const videoId = String(videoInput?.value || "").trim();
+    if (!videoId) {
+      statusEl.textContent = "YouTube video id / URL yaz";
+      return;
+    }
+    try {
+      localStorage.setItem(LIVE_YT_VIDEO_KEY, videoId);
+    } catch {
+      /* */
+    }
+    statusEl.textContent = "YouTube bağlanıyor…";
+    bridgePost("/youtube/connect", { videoId })
+      .then((data) => {
+        statusEl.textContent = `YouTube chat bağlı${data?.videoId ? ` · ${data.videoId}` : ""}`;
+        setLiveBridgeStatusUi(true, "yt ok");
+      })
+      .catch((err) => {
+        console.warn(err);
+        statusEl.textContent = err.message || String(err);
+      });
+  });
+
+  disconnectBtn?.addEventListener("click", (e) => {
+    e.preventDefault();
+    bridgePost("/youtube/disconnect", {})
+      .then(() => {
+        statusEl.textContent = "YouTube kesildi";
+        setLiveBridgeStatusUi(true, "ws");
+      })
+      .catch((err) => {
+        statusEl.textContent = err.message || String(err);
+      });
+  });
+
+  connectLiveBridge({
+    onEvent: handleLiveEvent,
+    onStatus: setLiveBridgeStatusUi,
+  });
 }
 
 /** Match sprite depth: higher world Z = closer to camera / more “in front”. */
@@ -2522,6 +2930,16 @@ function syncWorldLabels() {
   syncTennisScoreboard();
 }
 
+document.getElementById("chat-cmds")?.addEventListener("click", (e) => {
+  const btn = e.target.closest("button[data-cmd]");
+  if (!btn || !chatInput) return;
+  const cmd = btn.getAttribute("data-cmd");
+  if (!cmd) return;
+  e.preventDefault();
+  chatInput.value = cmd;
+  sendChatMessage();
+});
+
 chatSendBtn?.addEventListener("click", () => sendChatMessage());
 chatInput?.addEventListener("keydown", (e) => {
   if (e.key === "Enter") {
@@ -2553,16 +2971,6 @@ chatInput?.addEventListener("blur", () => {
     shellBeforeKeyboard = null;
     resize();
   }, 280);
-});
-
-document.getElementById("chat-cmds")?.addEventListener("click", (e) => {
-  const btn = e.target.closest("button[data-cmd]");
-  if (!btn || !chatInput) return;
-  const cmd = btn.getAttribute("data-cmd");
-  if (!cmd) return;
-  e.preventDefault();
-  chatInput.value = cmd;
-  sendChatMessage();
 });
 
 function enterVehicle(veh, rider = player?.mesh) {
@@ -4855,6 +5263,8 @@ function snapshotPartyFromWorld() {
       id: d.catalogId || null,
       scale: d.scale ?? 1,
       dir: d.dir || "south",
+      liveUserId: d.liveUserId || null,
+      liveUserName: d.liveUserName || null,
     });
   }
   persistentParty = list;
@@ -4864,6 +5274,7 @@ async function restorePartyIntoScene() {
   if (!persistentParty.length) return 0;
   // Wipe any survivors so restore never stacks (e.g. 50 → 75)
   clearAllPartyCharacters();
+  liveUsers.clear();
   const home = streetGatherTarget || player?.mesh?.position || { x: 0, z: 200 };
   const club = isNightClubScene();
   const street = isStreetLikeScene();
@@ -4923,6 +5334,15 @@ async function restorePartyIntoScene() {
       obj.userData.partyMember = true;
       obj.userData.crowdExtra = true;
       obj.userData.editable = true;
+      if (entry.liveUserId) {
+        const lid = String(entry.liveUserId);
+        const lname = String(entry.liveUserName || entry.liveUserId);
+        obj.userData.liveUserId = lid;
+        obj.userData.liveUserName = lname;
+        obj.userData.label = lname;
+        obj.userData.editable = false;
+        liveUsers.set(lid, obj);
+      }
       syncDepth(obj);
       if (club && slot) {
         obj.userData.formationMove = true;
@@ -5101,7 +5521,7 @@ function addTrafficLaneVisual(g, dir, z, color, handleColor) {
 }
 
 function updateTrafficLaneGizmo() {
-  // Lane guides hidden while positions are good — Z still from trafficLanes / localStorage
+  // Şerit konumları street.json / localStorage’da — çizgiler yayında görünmesin
   disposeTrafficLaneGizmo();
 }
 
@@ -5468,6 +5888,7 @@ async function loadScene(data, { persist = true, carryParty = true } = {}) {
   } finally {
     sceneLoading = false;
     partySnapshotEnabled = true;
+    syncStreetBgm();
   }
 }
 
@@ -5833,12 +6254,23 @@ function awardTennisPoint(scorer, reason) {
     tennisRally.scoreA >= TENNIS_WIN_SCORE ||
     tennisRally.scoreB >= TENNIS_WIN_SCORE
   ) {
+    if (tennisPointResetTimer) {
+      clearTimeout(tennisPointResetTimer);
+      tennisPointResetTimer = null;
+    }
     const winner = tennisRally.scoreA >= TENNIS_WIN_SCORE ? "a" : "b";
     endTennisMatch(winner).catch((err) => console.warn(err));
     return;
   }
-  // Point won → everyone to home slots; ball starts at random scorer player
-  resetTennisAfterPoint(scorer).catch((err) => console.warn(err));
+  // Hold ball at death spot, then serve — no instant teleport
+  if (tennisPointResetTimer) {
+    clearTimeout(tennisPointResetTimer);
+    tennisPointResetTimer = null;
+  }
+  tennisPointResetTimer = setTimeout(() => {
+    tennisPointResetTimer = null;
+    resetTennisAfterPoint(scorer).catch((err) => console.warn(err));
+  }, 1100);
 }
 
 /** After a point: snap court cast to first lineup spots; serve from random scorer. */
@@ -6627,6 +7059,10 @@ function clearTennisMatchLocks() {
     clearTimeout(tennisFanDanceTimer);
     tennisFanDanceTimer = null;
   }
+  if (tennisPointResetTimer) {
+    clearTimeout(tennisPointResetTimer);
+    tennisPointResetTimer = null;
+  }
   tennisFanDanceGen += 1;
   tennisMatchActive = false;
   tennisPlayLinedUp = false;
@@ -7241,7 +7677,7 @@ function parkMainAsTennisSpectator() {
 }
 
 /**
- * /play on tennis: random party NPCs only → 2 (1v1) or 4 (2v2).
+ * /play on tennis: always 2v2 (4). Party/live chars first; spawn NPCs to fill.
  * Main is spectator (not on court). Rest → A/B sideline fans.
  * @param {{ force?: boolean, keepRoster?: boolean }} [opts]
  */
@@ -7260,6 +7696,10 @@ async function startTennisPlay(opts = {}) {
   tennisMatchActive = true;
   tennisMatchOver = false;
   tennisMatchEnding = false;
+  if (tennisPointResetTimer) {
+    clearTimeout(tennisPointResetTimer);
+    tennisPointResetTimer = null;
+  }
   try {
     clearNpcScriptMoves();
     if (player?.scriptMove) player.scriptMove = null;
@@ -7320,7 +7760,8 @@ async function startTennisPlay(opts = {}) {
       const pool = listPartyCharacters().filter(
         (o) => o.visible !== false && o !== player?.mesh,
       );
-      n = pool.length >= 4 ? 4 : 2;
+      // Always 2v2 — fill missing slots with random NPCs
+      n = 4;
       const shuffled = shuffleInPlace([...pool]);
       selected = shuffled.slice(0, Math.min(n, shuffled.length));
       const selectedSet = new Set(selected);
@@ -7338,8 +7779,10 @@ async function startTennisPlay(opts = {}) {
       }
 
       const catalog = shuffleInPlace([...crowdCharacterCatalog()]);
+      let catIdx = 0;
       while (selected.length < n && catalog.length) {
-        const item = catalog[selected.length % catalog.length];
+        const item = catalog[catIdx % catalog.length];
+        catIdx += 1;
         try {
           const obj = await spawnItem(item, 0, 220, {
             dir: "south",
@@ -7361,13 +7804,13 @@ async function startTennisPlay(opts = {}) {
         }
       }
       tennisMatchRoster = {
-        n,
+        n: 4,
         selected: [...selected],
         fans: [...fans],
       };
     }
 
-    // Court = random NPCs only (no Main)
+    // Court = always 2v2 when possible (no Main)
     const slots = tennisCastSlots(selected.length >= 4 ? 4 : 2);
     n = slots.length;
     const actors = selected
@@ -9480,6 +9923,7 @@ async function softSwitchStreetVariant(sceneId) {
     syncStreetWalkUi();
     syncTrafficForScene();
     syncTruthDareCrowdUi();
+    syncStreetBgm();
     await startTruthDareFormation();
     persistScene();
     return;
@@ -9491,6 +9935,7 @@ async function softSwitchStreetVariant(sceneId) {
   syncStreetWalkUi();
   syncTrafficForScene();
   syncTruthDareCrowdUi();
+  syncStreetBgm();
   persistScene();
   statusEl.textContent = "street — overlay kalktı (konumlar geri)";
 }
@@ -9979,6 +10424,7 @@ function detachPlacedObject(obj) {
     companion = null;
     disposePetColRing();
   }
+  unlinkLiveUserMesh(obj);
   scene.remove(obj);
   const i = pickables.indexOf(obj);
   if (i >= 0) pickables.splice(i, 1);
@@ -10745,8 +11191,10 @@ async function onPointerUp(event) {
     trafficLaneDragDir = null;
     saveTrafficLaneZ();
     if (viewportMode !== "9x16") controls.enabled = true;
-    const label = dir === "east" ? "sol→sağ" : "sağ→sol";
-    statusEl.textContent = `${label} şerit kaydedildi · Z ${Math.round(getTrafficLaneZ(dir))}`;
+    const e = getTrafficLaneZ("east");
+    const w = getTrafficLaneZ("west");
+    statusEl.textContent =
+      `Şerit kaydedildi · "trafficLanes": { "east": ${e.toFixed(2)}, "west": ${w.toFixed(2)} }`;
     try {
       renderer.domElement.releasePointerCapture(event.pointerId);
     } catch {
@@ -11188,6 +11636,7 @@ async function boot() {
     console.warn("scene restore", err);
   }
 
+  initLiveBridgeUi();
   statusEl.textContent = "Hazır";
 }
 
@@ -11436,6 +11885,17 @@ function tickBallPhysics(dt) {
       isTennisScene() &&
       (tennisPlayLinedUp || tennisMatchEnding);
     if (phy.vy == null) phy.vy = 0;
+
+    // Point scored — keep ball frozen where it died until serve reset
+    if (tennisAir && tennisRally.pointDead) {
+      phy.vx = 0;
+      phy.vz = 0;
+      phy.vy = 0;
+      phy.tennisArc = null;
+      ball.position.y = 0;
+      syncDepth(ball);
+      continue;
+    }
 
     let sp = Math.hypot(phy.vx, phy.vz);
     if (sp > BALL_MAX_SPEED) {

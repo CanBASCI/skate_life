@@ -12,7 +12,7 @@
       href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="./style.css?v=20251114tennisCast" />
+    <link rel="stylesheet" href="./style.css?v=20251114obsClean" />
     <script type="importmap">
       {
         "imports": {
@@ -24,11 +24,15 @@
   </head>
   <body>
     <div id="layout" class="ui-chrome-hidden">
-      <div id="ui-top-bar">
-        <button type="button" id="ui-toggle" title="Menüleri ve WASD bilgisini göster" aria-pressed="true">Menü</button>
-        <button type="button" id="ui-restart" title="Oyunu sıfırla — street, boş cast">Yeniden Başla</button>
-      </div>
       <aside id="palette-left" class="palette">
+        <div id="ui-top-bar">
+          <button type="button" id="ui-toggle" title="Menüleri gizle" aria-pressed="false">Gizle</button>
+          <button type="button" id="ui-restart" title="Oyunu sıfırla — street, boş cast">Yeniden Başla</button>
+        </div>
+        <div id="hud">
+          <span><kbd>WASD</kbd> hareket · <kbd>Shift</kbd> koş · <kbd>Space</kbd> zıpla · <kbd>H</kbd> dans · <kbd>E</kbd> bin · <kbd>M</kbd> menü</span>
+          <span id="status">Yükleniyor…</span>
+        </div>
         <div id="view-controls">
           <div id="viewport-toggle" title="Oyun alanı oranı">
             <button type="button" data-vp="fill" class="active">Varsayılan</button>
@@ -39,8 +43,8 @@
             <button type="button" data-bg="black">Lacivert</button>
           </div>
           <div id="col-toggle" title="Karakter / pet collision alanı">
-            <button type="button" data-col="show" class="active">Col göster</button>
-            <button type="button" data-col="hide">Col gizle</button>
+            <button type="button" data-col="show">Col göster</button>
+            <button type="button" data-col="hide" class="active">Col gizle</button>
           </div>
           <div id="street-walk" class="hidden" title="Walk zone — karakter + top fiziği sınırı (street / red_light)">
             <label class="insp-check"><input id="street-walk-on" type="checkbox" /> Alan düzenle</label>
@@ -57,6 +61,19 @@
           <div id="night-club-col" class="hidden" title="Night club walk alanını göster / gizle — collision aynı kalır">
             <button type="button" data-nccol="show">Club col göster</button>
             <button type="button" data-nccol="hide" class="active">Club col gizle</button>
+          </div>
+          <div id="live-bridge-panel" title="YouTube / live bridge">
+            <span class="crowd-label">Live</span>
+            <span id="live-bridge-status" class="live-bridge-status">kopuk</span>
+            <input
+              id="live-yt-video"
+              type="text"
+              spellcheck="false"
+              autocomplete="off"
+              placeholder="YouTube video id / URL"
+            />
+            <button type="button" id="live-yt-connect" title="Bridge → YouTube chat">Bağla</button>
+            <button type="button" id="live-yt-disconnect" title="YouTube poll durdur">Kes</button>
           </div>
           <div id="scene-toggle" title="9:16 sahne düzeni JSON">
             <button type="button" id="scene-copy">JSON kopyala</button>
@@ -109,13 +126,22 @@
           <input id="obj-filter" type="search" placeholder="Ara…" autocomplete="off" />
         </header>
         <div id="obj-cats" class="palette-body"></div>
+        <div id="chat-dock">
+          <div id="chat-cmds" aria-label="Oyun komutları">
+            <button type="button" data-cmd="/play" title="Red light / tenis: dizil ve başlat">/play</button>
+            <button type="button" data-cmd="/dance" title="Dans">/dance</button>
+            <button type="button" data-cmd="/jump" title="Zıpla">/jump</button>
+            <button type="button" data-cmd="/sit" title="Otur">/sit</button>
+            <button type="button" data-cmd="/stop" title="Dur">/stop</button>
+          </div>
+          <div id="chat-bar">
+            <input id="chat-input" type="text" maxlength="48" autocomplete="off" placeholder="Mesaj veya / komut…" />
+            <button type="button" id="chat-send">Gönder</button>
+          </div>
+        </div>
       </aside>
 
       <main id="stage">
-        <div id="hud">
-          <span><kbd>WASD</kbd> hareket · <kbd>Shift</kbd> koş · <kbd>Space</kbd> zıpla/vault · <kbd>H</kbd> dans · <kbd>E</kbd> araç/kaykay · <kbd>P</kbd> pet · <kbd>Q</kbd> yön · yol: <kbd>Shift</kbd>+<kbd>←→↑↓</kbd> uç uca · <kbd>Ctrl+Z</kbd> geri al</span>
-          <span id="status">Yükleniyor…</span>
-        </div>
         <div id="scene-modal" class="hidden" aria-hidden="true">
           <div class="scene-modal-card">
             <h2>Sahne JSON</h2>
@@ -142,22 +168,6 @@
           </div>
           <button type="button" id="insp-delete" class="danger">Sil</button>
         </div>
-        <div id="chat-dock">
-          <div id="chat-cmds" aria-label="Oyun komutları">
-            <button type="button" data-cmd="/play" title="Red light / tenis: dizil ve başlat">/play</button>
-            <button type="button" data-cmd="/R3" title="Sağa 3 birim (red light: 3 sn)">/R3</button>
-            <button type="button" data-cmd="/N2" title="Kuzeye 2 birim (red light: 2 sn)">/N2</button>
-            <button type="button" data-cmd="/dance" title="Dans">/dance</button>
-            <button type="button" data-cmd="/jump" title="Zıpla">/jump</button>
-            <button type="button" data-cmd="/sit" title="Otur">/sit</button>
-            <button type="button" data-cmd="/e" title="Bin / in">/e</button>
-            <button type="button" data-cmd="/stop" title="Dur">/stop</button>
-          </div>
-          <div id="chat-bar">
-            <input id="chat-input" type="text" maxlength="48" autocomplete="off" placeholder="Mesaj veya / komut…" />
-            <button type="button" id="chat-send">Gönder</button>
-          </div>
-        </div>
       </main>
 
       <aside id="palette-right" class="palette">
@@ -175,6 +185,6 @@
     <div id="drag-ghost" class="hidden"></div>
     <div id="world-labels"></div>
     <div id="tennis-scoreboard" class="hidden" aria-live="polite">Y 0 — 0 A</div>
-    <script type="module" src="./main.js?v=20251114tennisCast"></script>
+    <script type="module" src="./main.js?v=20251114addNchar"></script>
   </body>
 </html>
