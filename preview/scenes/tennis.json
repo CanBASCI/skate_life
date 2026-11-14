@@ -1,0 +1,489 @@
+{
+  "version": 1,
+  "revision": 11,
+  "sceneId": "tennis",
+  "label": "tennis",
+  "viewport": "9x16",
+  "bg": "grass",
+  "player": {
+    "x": 99.88,
+    "z": 258.67,
+    "facing": "east"
+  },
+  "objects": [
+    {
+      "kind": "object",
+      "id": "eb6b77d9-67b3-4e7d-b5ca-6868349a0e6b",
+      "path": "assets/buildings/tenniscourt/256x256/day",
+      "x": 2.85,
+      "z": 567.18,
+      "scale": 4,
+      "dir": "south",
+      "col": {
+        "enabled": false,
+        "pts": [
+          {
+            "fx": -0.42,
+            "fz": -0.45
+          },
+          {
+            "fx": 0.42,
+            "fz": -0.45
+          },
+          {
+            "fx": 0.42,
+            "fz": 0.12
+          },
+          {
+            "fx": -0.42,
+            "fz": 0.12
+          }
+        ]
+      }
+    },
+    {
+      "kind": "object",
+      "id": "ground-dirt-day",
+      "path": "assets/props/ground/dirt/64x64/day",
+      "x": -205.32,
+      "z": 589.24,
+      "scale": 1,
+      "dir": "south"
+    },
+    {
+      "kind": "object",
+      "id": "ground-dirt-day",
+      "path": "assets/props/ground/dirt/64x64/day",
+      "x": -141.32,
+      "z": 589.24,
+      "scale": 1,
+      "dir": "south"
+    },
+    {
+      "kind": "object",
+      "id": "ground-dirt-day",
+      "path": "assets/props/ground/dirt/64x64/day",
+      "x": -77.32,
+      "z": 589.24,
+      "scale": 1,
+      "dir": "south"
+    },
+    {
+      "kind": "object",
+      "id": "ground-dirt-day",
+      "path": "assets/props/ground/dirt/64x64/day",
+      "x": -13.32,
+      "z": 589.24,
+      "scale": 1,
+      "dir": "south"
+    },
+    {
+      "kind": "object",
+      "id": "ground-dirt-day",
+      "path": "assets/props/ground/dirt/64x64/day",
+      "x": 50.68,
+      "z": 589.24,
+      "scale": 1,
+      "dir": "south"
+    },
+    {
+      "kind": "object",
+      "id": "ground-dirt-day",
+      "path": "assets/props/ground/dirt/64x64/day",
+      "x": 114.68,
+      "z": 589.24,
+      "scale": 1,
+      "dir": "south"
+    },
+    {
+      "kind": "object",
+      "id": "ground-dirt-day",
+      "path": "assets/props/ground/dirt/64x64/day",
+      "x": 178.68,
+      "z": 589.24,
+      "scale": 1,
+      "dir": "south"
+    },
+    {
+      "kind": "object",
+      "id": "ground-dirt-day",
+      "path": "assets/props/ground/dirt/64x64/day",
+      "x": 242.68,
+      "z": 589.24,
+      "scale": 1,
+      "dir": "south"
+    },
+    {
+      "kind": "object",
+      "id": "ground-dirt-day",
+      "path": "assets/props/ground/dirt/64x64/day",
+      "x": 242.68,
+      "z": 653.24,
+      "scale": 1,
+      "dir": "south"
+    },
+    {
+      "kind": "object",
+      "id": "ground-dirt-day",
+      "path": "assets/props/ground/dirt/64x64/day",
+      "x": 178.68,
+      "z": 653.24,
+      "scale": 1,
+      "dir": "south"
+    },
+    {
+      "kind": "object",
+      "id": "ground-dirt-day",
+      "path": "assets/props/ground/dirt/64x64/day",
+      "x": 114.68,
+      "z": 653.24,
+      "scale": 1,
+      "dir": "south"
+    },
+    {
+      "kind": "object",
+      "id": "ground-dirt-day",
+      "path": "assets/props/ground/dirt/64x64/day",
+      "x": 50.68,
+      "z": 653.24,
+      "scale": 1,
+      "dir": "south"
+    },
+    {
+      "kind": "object",
+      "id": "ground-dirt-day",
+      "path": "assets/props/ground/dirt/64x64/day",
+      "x": -13.32,
+      "z": 653.24,
+      "scale": 1,
+      "dir": "south"
+    },
+    {
+      "kind": "object",
+      "id": "ground-dirt-day",
+      "path": "assets/props/ground/dirt/64x64/day",
+      "x": -77.32,
+      "z": 653.24,
+      "scale": 1,
+      "dir": "south"
+    },
+    {
+      "kind": "object",
+      "id": "ground-dirt-day",
+      "path": "assets/props/ground/dirt/64x64/day",
+      "x": -141.32,
+      "z": 653.24,
+      "scale": 1,
+      "dir": "south"
+    },
+    {
+      "kind": "object",
+      "id": "ground-dirt-day",
+      "path": "assets/props/ground/dirt/64x64/day",
+      "x": -205.32,
+      "z": 653.24,
+      "scale": 1,
+      "dir": "south"
+    },
+    {
+      "kind": "object",
+      "id": "ground-dirt-day",
+      "path": "assets/props/ground/dirt/64x64/day",
+      "x": -205.32,
+      "z": 717.24,
+      "scale": 1,
+      "dir": "south"
+    },
+    {
+      "kind": "object",
+      "id": "ground-dirt-day",
+      "path": "assets/props/ground/dirt/64x64/day",
+      "x": -141.32,
+      "z": 717.24,
+      "scale": 1,
+      "dir": "south"
+    },
+    {
+      "kind": "object",
+      "id": "ground-dirt-day",
+      "path": "assets/props/ground/dirt/64x64/day",
+      "x": -77.32,
+      "z": 717.24,
+      "scale": 1,
+      "dir": "south"
+    },
+    {
+      "kind": "object",
+      "id": "ground-dirt-day",
+      "path": "assets/props/ground/dirt/64x64/day",
+      "x": -13.32,
+      "z": 717.24,
+      "scale": 1,
+      "dir": "south"
+    },
+    {
+      "kind": "object",
+      "id": "ground-dirt-day",
+      "path": "assets/props/ground/dirt/64x64/day",
+      "x": 50.68,
+      "z": 717.24,
+      "scale": 1,
+      "dir": "south"
+    },
+    {
+      "kind": "object",
+      "id": "ground-dirt-day",
+      "path": "assets/props/ground/dirt/64x64/day",
+      "x": 114.68,
+      "z": 717.24,
+      "scale": 1,
+      "dir": "south"
+    },
+    {
+      "kind": "object",
+      "id": "ground-dirt-day",
+      "path": "assets/props/ground/dirt/64x64/day",
+      "x": 178.68,
+      "z": 717.24,
+      "scale": 1,
+      "dir": "south"
+    },
+    {
+      "kind": "object",
+      "id": "ground-dirt-day",
+      "path": "assets/props/ground/dirt/64x64/day",
+      "x": 242.68,
+      "z": 717.24,
+      "scale": 1,
+      "dir": "south"
+    },
+    {
+      "kind": "object",
+      "id": "ground-dirt-day",
+      "path": "assets/props/ground/dirt/64x64/day",
+      "x": 242.68,
+      "z": 781.24,
+      "scale": 1,
+      "dir": "south"
+    },
+    {
+      "kind": "object",
+      "id": "ground-dirt-day",
+      "path": "assets/props/ground/dirt/64x64/day",
+      "x": 178.68,
+      "z": 781.24,
+      "scale": 1,
+      "dir": "south"
+    },
+    {
+      "kind": "object",
+      "id": "ground-dirt-day",
+      "path": "assets/props/ground/dirt/64x64/day",
+      "x": 114.68,
+      "z": 781.24,
+      "scale": 1,
+      "dir": "south"
+    },
+    {
+      "kind": "object",
+      "id": "ground-dirt-day",
+      "path": "assets/props/ground/dirt/64x64/day",
+      "x": 50.68,
+      "z": 781.24,
+      "scale": 1,
+      "dir": "south"
+    },
+    {
+      "kind": "object",
+      "id": "ground-dirt-day",
+      "path": "assets/props/ground/dirt/64x64/day",
+      "x": -13.32,
+      "z": 781.24,
+      "scale": 1,
+      "dir": "south"
+    },
+    {
+      "kind": "object",
+      "id": "ground-dirt-day",
+      "path": "assets/props/ground/dirt/64x64/day",
+      "x": -77.32,
+      "z": 781.24,
+      "scale": 1,
+      "dir": "south"
+    },
+    {
+      "kind": "object",
+      "id": "ground-dirt-day",
+      "path": "assets/props/ground/dirt/64x64/day",
+      "x": -141.32,
+      "z": 781.24,
+      "scale": 1,
+      "dir": "south"
+    },
+    {
+      "kind": "object",
+      "id": "ground-dirt-day",
+      "path": "assets/props/ground/dirt/64x64/day",
+      "x": -205.32,
+      "z": 781.24,
+      "scale": 1,
+      "dir": "south"
+    },
+    {
+      "kind": "object",
+      "id": "ground-dirt-day",
+      "path": "assets/props/ground/dirt/64x64/day",
+      "x": -205.32,
+      "z": 845.24,
+      "scale": 1,
+      "dir": "south"
+    },
+    {
+      "kind": "object",
+      "id": "ground-dirt-day",
+      "path": "assets/props/ground/dirt/64x64/day",
+      "x": -141.32,
+      "z": 845.24,
+      "scale": 1,
+      "dir": "south"
+    },
+    {
+      "kind": "object",
+      "id": "ground-dirt-day",
+      "path": "assets/props/ground/dirt/64x64/day",
+      "x": -77.32,
+      "z": 845.24,
+      "scale": 1,
+      "dir": "south"
+    },
+    {
+      "kind": "object",
+      "id": "ground-dirt-day",
+      "path": "assets/props/ground/dirt/64x64/day",
+      "x": -13.32,
+      "z": 845.24,
+      "scale": 1,
+      "dir": "south"
+    },
+    {
+      "kind": "object",
+      "id": "ground-dirt-day",
+      "path": "assets/props/ground/dirt/64x64/day",
+      "x": 50.68,
+      "z": 845.24,
+      "scale": 1,
+      "dir": "south"
+    },
+    {
+      "kind": "object",
+      "id": "ground-dirt-day",
+      "path": "assets/props/ground/dirt/64x64/day",
+      "x": 114.68,
+      "z": 845.24,
+      "scale": 1,
+      "dir": "south"
+    },
+    {
+      "kind": "object",
+      "id": "ground-dirt-day",
+      "path": "assets/props/ground/dirt/64x64/day",
+      "x": 178.68,
+      "z": 845.24,
+      "scale": 1,
+      "dir": "south"
+    },
+    {
+      "kind": "object",
+      "id": "ground-dirt-day",
+      "path": "assets/props/ground/dirt/64x64/day",
+      "x": 242.68,
+      "z": 845.24,
+      "scale": 1,
+      "dir": "south"
+    },
+    {
+      "kind": "object",
+      "id": "468b842d-e086-4352-866e-50288fc0b035",
+      "path": "assets/props/outdoorPark/bench/96x96/day",
+      "x": -176.2,
+      "z": 629.31,
+      "scale": 0.8,
+      "dir": "north"
+    },
+    {
+      "kind": "object",
+      "id": "468b842d-e086-4352-866e-50288fc0b035",
+      "path": "assets/props/outdoorPark/bench/96x96/day",
+      "x": -70.17,
+      "z": 634.45,
+      "scale": 0.8,
+      "dir": "north"
+    },
+    {
+      "kind": "object",
+      "id": "468b842d-e086-4352-866e-50288fc0b035",
+      "path": "assets/props/outdoorPark/bench/96x96/day",
+      "x": 75.09,
+      "z": 633.17,
+      "scale": 0.8,
+      "dir": "north"
+    },
+    {
+      "kind": "object",
+      "id": "468b842d-e086-4352-866e-50288fc0b035",
+      "path": "assets/props/outdoorPark/bench/96x96/day",
+      "x": 178.38,
+      "z": 632.6,
+      "scale": 0.8,
+      "dir": "north"
+    },
+    {
+      "kind": "object",
+      "id": "899018b2-8bb1-479e-9ee7-a5354efc7089",
+      "path": "assets/props/outdoorPark/tree/95x105/default",
+      "x": -163.62,
+      "z": 861.31,
+      "scale": 1.5,
+      "dir": "south"
+    },
+    {
+      "kind": "object",
+      "id": "899018b2-8bb1-479e-9ee7-a5354efc7089",
+      "path": "assets/props/outdoorPark/tree/95x105/default",
+      "x": 2.13,
+      "z": 861.45,
+      "scale": 1.5,
+      "dir": "south"
+    },
+    {
+      "kind": "object",
+      "id": "899018b2-8bb1-479e-9ee7-a5354efc7089",
+      "path": "assets/props/outdoorPark/tree/95x105/default",
+      "x": 168.51,
+      "z": 860.98,
+      "scale": 1.5,
+      "dir": "south"
+    }
+  ],
+  "walkZone": {
+    "enabled": true,
+    "pts": [
+      [
+        -174.76,
+        -273.56
+      ],
+      [
+        174.77,
+        -269.92
+      ],
+      [
+        236.06,
+        382.05
+      ],
+      [
+        -229.88,
+        383.59
+      ]
+    ]
+  }
+}

@@ -20,6 +20,16 @@
       "id": "red_light_green_light",
       "label": "red_light_green_light",
       "file": "red_light_green_light.json"
+    },
+    {
+      "id": "football",
+      "label": "football",
+      "file": "football.json"
+    },
+    {
+      "id": "tennis",
+      "label": "tennis",
+      "file": "tennis.json"
     }
   ]
 }

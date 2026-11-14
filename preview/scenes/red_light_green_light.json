@@ -1,14 +1,14 @@
 {
   "version": 1,
-  "revision": 2,
+  "revision": 10,
   "sceneId": "red_light_green_light",
   "label": "red_light_green_light",
   "viewport": "9x16",
   "bg": "black",
   "player": {
-    "x": -142,
-    "z": -246.87,
-    "facing": "north"
+    "x": -61.63,
+    "z": 56.26,
+    "facing": "south"
   },
   "objects": [
     {
@@ -888,22 +888,10 @@
   "walkZone": {
     "enabled": true,
     "pts": [
-      [
-        -185.86,
-        -294.91
-      ],
-      [
-        191.34,
-        -291.91
-      ],
-      [
-        240.79,
-        386.74
-      ],
-      [
-        -236.34,
-        382.87
-      ]
+      [-185.86, -294.91],
+      [191.34, -291.91],
+      [240.79, 386.74],
+      [-236.34, 382.87]
     ]
   }
 }

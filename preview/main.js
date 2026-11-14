@@ -68,9 +68,19 @@ function isNightClubScene(id = activeSceneId) {
 function isRedLightScene(id = activeSceneId) {
   return id === "red_light_green_light";
 }
+function isFootballScene(id = activeSceneId) {
+  return id === "football";
+}
+function isTennisScene(id = activeSceneId) {
+  return id === "tennis";
+}
+/** Football / tennis — walkZone, top-layer actors, soft push. */
+function isPlayfieldScene(id = activeSceneId) {
+  return isFootballScene(id) || isTennisScene(id);
+}
 /** Scenes with shared walkZone (chars + ball bounce). */
 function isWalkZoneScene(id = activeSceneId) {
-  return isStreetLikeScene(id) || isRedLightScene(id);
+  return isStreetLikeScene(id) || isRedLightScene(id) || isPlayfieldScene(id);
 }
 /** Crowd spawn buttons: street family + night club. */
 function isCrowdScene(id = activeSceneId) {
@@ -893,12 +903,17 @@ function isForegroundActor(obj) {
   return false;
 }
 
-/** red_light: chars / pets / balls draw above courts & props. */
-function isRedLightTopLayer(obj) {
-  if (!isRedLightScene() || !obj?.userData) return false;
+/** red_light / football / tennis: chars / pets / balls draw above courts & buildings. */
+function isPlayfieldTopLayer(obj) {
+  if (!(isRedLightScene() || isPlayfieldScene()) || !obj?.userData) return false;
   if (isForegroundActor(obj)) return true;
   if (obj.userData.ball || isBallPath(obj.userData.path)) return true;
   return false;
+}
+
+/** @deprecated alias — prefer isPlayfieldTopLayer */
+function isRedLightTopLayer(obj) {
+  return isPlayfieldTopLayer(obj);
 }
 
 function syncDepth(obj) {
@@ -908,14 +923,21 @@ function syncDepth(obj) {
   // Cutaway rooms stay behind characters / pets / props in the scene
   else if (/night_club_inside/i.test(p)) layerBias = -4500;
   else if (isInteriorPath(p)) layerBias = -3500;
+  // Buildings / courts stay visually behind actors on playfields
+  else if (
+    (isPlayfieldScene() || isRedLightScene()) &&
+    /\/buildings\//i.test(p)
+  ) {
+    layerBias = -2000;
+  }
 
   let order = Math.round(obj.position.z * 10 + layerBias);
   if (isForegroundActor(obj)) {
     const cover = interiorCoverOrder(obj.position.x, obj.position.z);
     if (cover) order = Math.max(order, cover);
   }
-  // red_light_green_light: characters + pets + balls above court/props
-  if (isRedLightTopLayer(obj)) order += 200000;
+  // red_light / football: characters + pets + balls above court/props
+  if (isPlayfieldTopLayer(obj)) order += 200000;
   // vault/jump: draw player in front of props/cars (sprites ignore depthTest paint order)
   if (
     obj.userData?.controllable &&
@@ -2231,9 +2253,9 @@ function isInteriorPath(path) {
   return /\/interiors\//i.test(path || "");
 }
 
-/** Object-tied walkable polygon (night_club). Street uses sceneWalkZone instead. */
+/** Object-tied walkable polygon (night_club / stadium / tennis court). Street uses sceneWalkZone. */
 function hasEditableCollision(path) {
-  return /night_club_inside/i.test(path || "");
+  return /night_club_inside|footballstadium|tenniscourt/i.test(path || "");
 }
 
 function defaultColData() {
@@ -2566,9 +2588,9 @@ function viewBoundsBlock(px, pz, radius = 22) {
 /** Soft personal space at feet — stops cast stacking on the same pixel. */
 const CHAR_SEP_MIN = 30;
 const CHAR_SEP_PUSH = 70;
-/** red_light: no hard char-block — movers shove others via soft-sep. */
+/** red_light / football / tennis: no hard char-block — movers shove via soft-sep. */
 function charsCanPushEachOther(id = activeSceneId) {
-  return isRedLightScene(id);
+  return isRedLightScene(id) || isPlayfieldScene(id);
 }
 
 function isSeparableCharacter(obj) {
@@ -8359,15 +8381,15 @@ void main() {`,
 }
 
 function isFlatCourtBuilding(path) {
-  return /basketballcourt|tenniscourt|footballfield|soccer|playground/i.test(
+  return /basketballcourt|tenniscourt|footballfield|footballstadium|soccer|playground/i.test(
     path || "",
   );
 }
 
 function tickBuildingOcclusion() {
   if (!player?.mesh) return;
-  // red_light: actors draw on top of court — no facade cutout halo
-  if (isRedLightScene()) {
+  // red_light / football / tennis: actors on top of court — no facade cutout halo
+  if (isRedLightScene() || isPlayfieldScene()) {
     for (const obj of pickables) {
       const u = obj.material?.userData?.seeThrough;
       if (u) u.uCutEnabled.value = 0;
@@ -8432,9 +8454,9 @@ function tick(now) {
   tickRedLightGame(dt);
   tickCharacterSeparation(dt);
   tickTraffic(dt);
-  // Keep characters / pets (and red_light balls) above rooms/courts after moves
+  // Keep characters / pets / balls above rooms/courts after moves
   for (const obj of pickables) {
-    if (isForegroundActor(obj) || isRedLightTopLayer(obj)) syncDepth(obj);
+    if (isForegroundActor(obj) || isPlayfieldTopLayer(obj)) syncDepth(obj);
   }
   if (player) {
     if (occupiedVehicle) driveVehicle(dt);
