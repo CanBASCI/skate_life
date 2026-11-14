@@ -15,6 +15,11 @@
       "label": "doğrulukmu_cesaretmi",
       "file": "dogrulukmu_cesaretmi.json",
       "base": "street"
+    },
+    {
+      "id": "red_light_green_light",
+      "label": "red_light_green_light",
+      "file": "red_light_green_light.json"
     }
   ]
 }

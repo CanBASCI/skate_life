@@ -44,7 +44,7 @@
             <button type="button" data-col="show" class="active">Col göster</button>
             <button type="button" data-col="hide">Col gizle</button>
           </div>
-          <div id="street-walk" class="hidden" title="Collision her zaman aktif (walkZone.enabled) — kutu sadece düzenleme çizgisini gösterir">
+          <div id="street-walk" class="hidden" title="Walk zone — karakter + top fiziği sınırı (street / red_light)">
             <label class="insp-check"><input id="street-walk-on" type="checkbox" /> Alan düzenle</label>
             <button type="button" id="street-walk-fit">Görünüme sığdır</button>
             <button type="button" id="street-walk-reset">Sıfırla</button>
@@ -67,6 +67,19 @@
             <button type="button" data-crowd="30">30</button>
             <button type="button" data-crowd="40">40</button>
             <button type="button" data-crowd="50">50</button>
+          </div>
+          <div id="red-light-cast" class="hidden" title="Red light — max 10, walk zone ALT kenarı, yukarı (north) bakarak yan yana">
+            <span class="crowd-label">oyuncu</span>
+            <button type="button" data-rlcast="1">1</button>
+            <button type="button" data-rlcast="2">2</button>
+            <button type="button" data-rlcast="3">3</button>
+            <button type="button" data-rlcast="4">4</button>
+            <button type="button" data-rlcast="5">5</button>
+            <button type="button" data-rlcast="6">6</button>
+            <button type="button" data-rlcast="7">7</button>
+            <button type="button" data-rlcast="8">8</button>
+            <button type="button" data-rlcast="9">9</button>
+            <button type="button" data-rlcast="10">10</button>
           </div>
         </div>
         <div id="scene-modal" class="hidden" aria-hidden="true">
@@ -97,8 +110,8 @@
         </div>
         <div id="chat-dock">
           <div id="chat-cmds" aria-label="Oyun komutları">
-            <button type="button" data-cmd="/R3" title="Sağa 3 birim">/R3</button>
-            <button type="button" data-cmd="/N2" title="Kuzeye 2 birim">/N2</button>
+            <button type="button" data-cmd="/R3" title="Sağa 3 birim (red light: 3 sn)">/R3</button>
+            <button type="button" data-cmd="/N2" title="Kuzeye 2 birim (red light: 2 sn)">/N2</button>
             <button type="button" data-cmd="/dance" title="Dans">/dance</button>
             <button type="button" data-cmd="/jump" title="Zıpla">/jump</button>
             <button type="button" data-cmd="/sit" title="Otur">/sit</button>

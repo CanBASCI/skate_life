@@ -65,6 +65,13 @@ function isStreetLikeScene(id = activeSceneId) {
 function isNightClubScene(id = activeSceneId) {
   return id === "night_club_inside";
 }
+function isRedLightScene(id = activeSceneId) {
+  return id === "red_light_green_light";
+}
+/** Scenes with shared walkZone (chars + ball bounce). */
+function isWalkZoneScene(id = activeSceneId) {
+  return isStreetLikeScene(id) || isRedLightScene(id);
+}
 /** Crowd spawn buttons: street family + night club. */
 function isCrowdScene(id = activeSceneId) {
   return isStreetLikeScene(id) || isNightClubScene(id);
@@ -80,11 +87,53 @@ const sceneJsonEl = document.getElementById("scene-json");
 const sceneModalCancel = document.getElementById("scene-modal-cancel");
 const sceneModalApply = document.getElementById("scene-modal-apply");
 const truthDareCrowdEl = document.getElementById("truth-dare-crowd");
+const redLightCastEl = document.getElementById("red-light-cast");
 const TRUTH_DARE_CROWD_COUNTS = [5, 10, 20, 30, 40, 50];
+const RED_LIGHT_CAST_MAX = 10;
 /** @type {Map<object, { x: number, z: number, dir: string, sitting: boolean, isPlayer: boolean }>} */
 let truthDareSnapshot = new Map();
 let truthDareActive = false;
 let truthDareCrowdCount = 0;
+/** Desired cast size on red_light (Main + NPCs), 1–10. */
+let redLightCastCount = 0;
+/** dog_3 counter game (red_light_green_light). */
+const RED_LIGHT_COUNT_MIN = 2;
+const RED_LIGHT_COUNT_MAX = 5;
+const RED_LIGHT_COUNT_BEAT = 1.05;
+const RED_LIGHT_WATCH_SEC = 3;
+const RED_LIGHT_MOVE_EPS = 10;
+/** @type {{
+ *   active: boolean,
+ *   pendingStart: boolean,
+ *   phase: 'idle'|'counting'|'watching',
+ *   countNum: number,
+ *   phaseT: number,
+ *   cornerI: number,
+ *   dogKey: string|null,
+ *   entranceGen: number,
+ *   pendingSince: number,
+ *   settleAcc: number,
+ * }} */
+const redLightGame = {
+  active: false,
+  pendingStart: false,
+  phase: "idle",
+  countNum: RED_LIGHT_COUNT_MIN,
+  phaseT: 0,
+  cornerI: 0,
+  dogKey: null,
+  entranceGen: 0,
+  pendingSince: 0,
+  settleAcc: 0,
+};
+const RED_LIGHT_ENTRANCE_TIMEOUT = 18;
+const RED_LIGHT_SETTLE_HOLD = 0.4;
+
+function randomRedLightCount() {
+  const lo = RED_LIGHT_COUNT_MIN;
+  const hi = RED_LIGHT_COUNT_MAX;
+  return lo + Math.floor(Math.random() * (hi - lo + 1));
+}
 const TRUTH_DARE_RUN_SPEED = 190;
 const TRUTH_DARE_WALK_SPEED = 110;
 const TRUTH_DARE_ROW_SIZE = 8;
@@ -739,10 +788,38 @@ function pickPriority(obj) {
   const d = obj?.userData || {};
   const p = d.path || "";
   let score = obj.renderOrder || 0;
-  // Characters / animals always beat cutaway rooms (club has opaque black bg)
+  // Characters / animals / balls always beat courts & cutaway rooms
   if (d.kind === "character" || isAnimalPath(p) || d.companion) score += 1_000_000;
+  if (d.ball || isBallPath(p)) score += 900_000;
+  // Buildings / props above ground tiles (grass always ray-hits under feet)
+  if (d.layer === "ground" || d.tileable) score -= 800_000;
+  if (/\/buildings\//i.test(p)) score += 100_000;
   if (isInteriorPath(p) || /night_club_inside/i.test(p)) score -= 1_000_000;
   return score;
+}
+
+/**
+ * Pets are ~32px — court/ground sprites eat mesh raycasts under the cursor.
+ * Prefer editable actors whose feet sit near the ground hit.
+ */
+function pickActorNearGround(gx, gz) {
+  let best = null;
+  let bestD = Infinity;
+  for (const obj of pickables) {
+    const d = obj?.userData;
+    if (!d?.editable || d.occupied) continue;
+    const animal = isAnimalPath(d.path) || !!d.companion;
+    const ball = !!d.ball || isBallPath(d.path);
+    const char = d.kind === "character";
+    if (!animal && !ball && !char) continue;
+    const radius = animal ? 52 : ball ? 40 : 44;
+    const dist = Math.hypot(gx - obj.position.x, gz - obj.position.z);
+    if (dist <= radius && dist < bestD) {
+      bestD = dist;
+      best = obj;
+    }
+  }
+  return best;
 }
 
 function opaqueHits(hits, alphaThr = 8) {
@@ -754,10 +831,17 @@ function opaqueHits(hits, alphaThr = 8) {
       out.push(hit);
       continue;
     }
-    if (!hit.uv) continue;
+    if (!hit.uv) {
+      // Sprites sometimes lack UV — still allow pets/chars/balls
+      if (isForegroundActor(hit.object) || ud?.ball) out.push(hit);
+      continue;
+    }
     const map = hit.object.material?.map;
     const data = map?.userData?.alpha;
-    if (!data) continue;
+    if (!data) {
+      if (isForegroundActor(hit.object) || ud?.ball) out.push(hit);
+      continue;
+    }
     const x = Math.min(data.width - 1, Math.max(0, Math.floor(hit.uv.x * data.width)));
     const y = Math.min(
       data.height - 1,
@@ -802,6 +886,14 @@ function isForegroundActor(obj) {
   return false;
 }
 
+/** red_light: chars / pets / balls draw above courts & props. */
+function isRedLightTopLayer(obj) {
+  if (!isRedLightScene() || !obj?.userData) return false;
+  if (isForegroundActor(obj)) return true;
+  if (obj.userData.ball || isBallPath(obj.userData.path)) return true;
+  return false;
+}
+
 function syncDepth(obj) {
   const p = obj.userData?.path || "";
   let layerBias = 0;
@@ -815,6 +907,8 @@ function syncDepth(obj) {
     const cover = interiorCoverOrder(obj.position.x, obj.position.z);
     if (cover) order = Math.max(order, cover);
   }
+  // red_light_green_light: characters + pets + balls above court/props
+  if (isRedLightTopLayer(obj)) order += 200000;
   // vault/jump: draw player in front of props/cars (sprites ignore depthTest paint order)
   if (
     obj.userData?.controllable &&
@@ -831,7 +925,7 @@ function defaultScale(item) {
   // tuned vs 96px character; E-ride / parked board same scale
   if (isSkateboardPath(item.path)) return 0.7;
   // roads / tileable paths — user prefers large default
-  if (/\/props\/ground\//i.test(item.path || "")) return 2;
+  if (/\/props\/ground\//i.test(item.path || "")) return 1;
   if (isRoadTileItem(item) || /\/props\/road\//i.test(item.path || "")) return 3;
   if (/americanschoolbus|schoolBus/i.test(item.path || "")) return 1.7;
   if (/\/ambulance\//i.test(item.path || "")) return 1.7;
@@ -857,7 +951,16 @@ function usesGroundPlane(item) {
 }
 
 function isRoadTileItem(item) {
-  return !!item?.tileable;
+  // Catalog flag OR any flat ground/road path (Shift+ok çoğaltma)
+  if (item?.tileable) return true;
+  return usesGroundPlane(item);
+}
+
+function isTileableObj(obj) {
+  const d = obj?.userData;
+  if (!d) return false;
+  if (d.tileable || d.layer === "ground") return true;
+  return /\/props\/(ground|road)\//i.test(d.path || "");
 }
 
 /** Snap tileable roads so segments meet edge-to-edge. */
@@ -1243,7 +1346,11 @@ function projectHeadScreen(obj) {
   return { sx, sy, scale };
 }
 
-function speakAs(obj, text) {
+function speakAs(
+  obj,
+  text,
+  { danger = false, success = false, holdMs = BUBBLE_DURATION_MS } = {},
+) {
   const msg = String(text || "").trim();
   if (!msg || !obj) return;
   const key = labelKeyFor(obj);
@@ -1255,8 +1362,10 @@ function speakAs(obj, text) {
   const entry = ensureWorldLabel(key, name, obj.userData?.path);
   entry.obj = obj;
   entry.bubbleEl.textContent = msg;
+  entry.bubbleEl.classList.toggle("bubble-danger", !!danger);
+  entry.bubbleEl.classList.toggle("bubble-success", !!success && !danger);
   entry.bubbleEl.classList.remove("hidden");
-  entry.hideAt = performance.now() + BUBBLE_DURATION_MS;
+  entry.hideAt = performance.now() + (Number(holdMs) > 0 ? holdMs : BUBBLE_DURATION_MS);
   entry.root.classList.remove("hidden");
 }
 
@@ -1318,6 +1427,8 @@ function clearNpcScriptMoves(obj = null) {
 function enqueueNpcWalk(obj, dx, dz, dist, speed = 110, wait = 0, opts = {}) {
   if (!obj || !(dist > 0)) return;
   clearNpcScriptMoves(obj);
+  // Free from formation pin so /N20 etc. can actually move
+  if (obj.userData) obj.userData.formationSlot = null;
   const len = Math.hypot(dx, dz) || 1;
   npcScriptMoves.push({
     obj,
@@ -1593,7 +1704,22 @@ async function handleChatCommand(raw) {
       ? PLAYER_CHAT_NAME
       : shortCharacterName(who.userData?.label, who.userData?.path);
 
+  if (
+    isRedLightDq(who) ||
+    who.userData?.redLightEliminating ||
+    (redLightGame.active && isRedLightFinished(who))
+  ) {
+    statusEl.textContent = isRedLightFinished(who)
+      ? `${name} üstte bekliyor — oyun bitene kadar komut yok`
+      : `${name} diskalifiye — oyun bitene kadar komut yok`;
+    return;
+  }
+
   if (lower === "/dance") {
+    if (isRedLightScene()) {
+      statusEl.textContent = "Red light — sadece yürüme";
+      return;
+    }
     if (isPlayer) {
       if (player.driving) {
         statusEl.textContent = "Araçtayken dans yok";
@@ -1608,6 +1734,10 @@ async function handleChatCommand(raw) {
   }
 
   if (lower === "/jump") {
+    if (isRedLightScene()) {
+      statusEl.textContent = "Red light — sadece yürüme";
+      return;
+    }
     if (isPlayer) {
       if (player.driving) {
         statusEl.textContent = "Araçtayken zıplama yok";
@@ -1727,7 +1857,7 @@ async function handleChatCommand(raw) {
     return;
   }
 
-  // /R3  /NE2  /w 10  — direction letter(s) + distance (case-insensitive)
+  // /R3  /NE2  /w 10 — other scenes: distance units; red_light: seconds walking
   const m = lower.match(
     /^\/(n|s|e|w|r|l|ne|nw|se|sw|n-e|n-w|s-e|s-w)\s*(\d+(?:\.\d+)?)\s*$/i,
   );
@@ -1735,7 +1865,9 @@ async function handleChatCommand(raw) {
     const dirName = parseChatDirToken(m[1]);
     const birim = Number(m[2]);
     if (!dirName || !Number.isFinite(birim) || birim <= 0) {
-      statusEl.textContent = "Komut: /R3 /N2 · /dance /jump /sit /stop";
+      statusEl.textContent = isRedLightScene()
+        ? "Komut: /N3 = 3 sn yürü · /stop"
+        : "Komut: /R3 /N2 · /dance /jump /sit /stop";
       return;
     }
     const vec = FACE_VEC[dirName];
@@ -1743,19 +1875,31 @@ async function handleChatCommand(raw) {
       statusEl.textContent = "Bilinmeyen yön";
       return;
     }
-    const dist = birim * CHAT_MOVE_UNIT;
+    const rl = isRedLightScene();
+    // red_light: Main full walk; NPCs keep quarter pace
+    const walkSpd =
+      TRUTH_DARE_WALK_SPEED * (rl && !isPlayer ? 0.25 : 1);
+    // red_light: number = seconds → distance = speed × time
+    const dist = rl ? walkSpd * birim : birim * CHAT_MOVE_UNIT;
     const [dx, dz] = vec;
+    const moveLabel = rl
+      ? `${name}: ${dirName} ${birim}s`
+      : `${name}: ${dirName} × ${birim}`;
     if (isPlayer) {
       if (player.driving) {
         statusEl.textContent = "Araçtayken yürüme komutu yok";
         return;
       }
-      player.startScriptMove(dx, dz, dist);
-      statusEl.textContent = `${name}: ${dirName} × ${birim}`;
+      player.startScriptMove(dx, dz, dist, walkSpd, { anim: "walk" });
+      statusEl.textContent = moveLabel;
       return;
     }
     who.userData.dir = dirName;
     if (who.userData.driving) {
+      if (rl) {
+        statusEl.textContent = "Red light — sadece yürüme";
+        return;
+      }
       const veh = findVehicleDrivenBy(who);
       if (veh) applyFacing(veh, dirName);
       enqueueNpcWalk(who, dx, dz, dist, 180);
@@ -1770,8 +1914,14 @@ async function handleChatCommand(raw) {
     if (!who.userData.skating) {
       await attachWalk(who, who.userData.path, dirName, { allowSouthFallback: true });
     }
-    enqueueNpcWalk(who, dx, dz, dist, who.userData.skating ? 200 : 110);
-    statusEl.textContent = `${name}: ${dirName} × ${birim}`;
+    enqueueNpcWalk(
+      who,
+      dx,
+      dz,
+      dist,
+      who.userData.skating && !rl ? 200 : walkSpd,
+    );
+    statusEl.textContent = moveLabel;
     return;
   }
 
@@ -1863,6 +2013,35 @@ function syncWorldLabels() {
       entry.bubbleEl.classList.add("hidden");
       entry.bubbleEl.textContent = "";
       entry.hideAt = 0;
+    }
+  }
+
+  // dog_3 countdown bubble (red light counter)
+  if (isRedLightScene() && (redLightGame.active || redLightGame.dogKey)) {
+    const dog = findRedLightCounterDog();
+    if (dog) {
+      const key = labelKeyFor(dog);
+      if (key) {
+        live.add(key);
+        const entry = ensureWorldLabel(key, " ", dog.userData?.path);
+        entry.root.classList.add("rl-dog-label");
+        entry.nameEl.textContent = "";
+        entry.nameEl.classList.add("hidden");
+        entry.bubbleEl.classList.add("rl-countdown");
+        entry.obj = dog;
+        const scr = projectHeadScreen(dog);
+        if (!scr) {
+          entry.root.classList.add("hidden");
+        } else {
+          // Don't shrink with tiny 32px dog sprite — keep ~20px readable
+          placeWorldLabel(entry, dog, { ...scr, scale: 1 });
+        }
+        if (entry.hideAt && now >= entry.hideAt) {
+          entry.bubbleEl.classList.add("hidden");
+          entry.bubbleEl.textContent = "";
+          entry.hideAt = 0;
+        }
+      }
     }
   }
 
@@ -2125,7 +2304,7 @@ function ensureStreetWalkZone() {
 }
 
 function streetWalkActive() {
-  return isStreetLikeScene() && !!ensureStreetWalkZone().enabled;
+  return isWalkZoneScene() && !!ensureStreetWalkZone().enabled;
 }
 
 /** Checkbox: show edit gizmo only — does not turn collision on/off. */
@@ -2268,15 +2447,15 @@ function pointInCol(px, pz, box, inset = 0) {
 }
 
 /**
- * Walkable-zone: stay inside once entered (night_club object + street scene zone).
+ * Walkable-zone: destination must stay inside (street / red_light).
+ * Balls are clamped in physics; night_club uses object col polys.
  */
 function containmentBlocksFor(fromX, fromZ, px, pz, radius) {
   const r = Math.max(0, radius || 0);
-  // Street: single scene polygon (characters). Balls clamped separately in physics.
   if (streetWalkActive()) {
     const pts = ensureStreetWalkZone().pts;
-    if (pointInPoly(fromX, fromZ, pts)) {
-      // leave blocked if feet would exit (with radius inset)
+    if (pts?.length) {
+      // Always require feet to remain inside — no leaving the play area
       if (!pointInPoly(px, pz, pts)) return true;
       if (r > 0 && distToPolyEdge(px, pz, pts) < r * 0.35) return true;
     }
@@ -2292,6 +2471,21 @@ function containmentBlocksFor(fromX, fromZ, px, pz, radius) {
   return false;
 }
 
+/** Pull a world XZ point back inside the active walk zone. */
+function projectIntoWalkZone(x, z, radius = 0) {
+  if (!streetWalkActive()) return { x, z };
+  const pts = ensureStreetWalkZone().pts;
+  if (!pts?.length) return { x, z };
+  const inset = Math.max(2, radius * 0.35);
+  if (pointInPoly(x, z, pts) && distToPolyEdge(x, z, pts) >= inset) {
+    return { x, z };
+  }
+  const hit = closestPolyEdgeHit(x, z, pts);
+  if (!hit) return { x, z };
+  // hit.nx is outward → step inward
+  return { x: hit.qx - hit.nx * inset, z: hit.qz - hit.nz * inset };
+}
+
 function containmentBlocks(px, pz, radius) {
   if (!player?.mesh) return false;
   const cx = player.mesh.position.x;
@@ -2305,20 +2499,23 @@ function actorBlocked(obj, px, pz, radius) {
   const fromX = obj.position.x;
   const fromZ = obj.position.z + FEET_NUDGE_Z;
   const formation = !!obj?.userData?.formationMove;
-  // Night club crowd enter only: ignore walk-zone / frame / cast (gate jam → teleport)
+  const elimRun = !!obj?.userData?.redLightEliminating;
+  // Entrance / DQ corner run: ignore walk-zone / frame / cast so they don't jam
   if (
-    formation &&
-    isNightClubScene() &&
-    obj.userData?.crowdExtra
+    elimRun ||
+    (formation &&
+      ((isNightClubScene() && obj.userData?.crowdExtra) || isRedLightScene()))
   ) {
     return solidBlocked(px, pz, r);
   }
   // Truth-dare / street formation: still skip other cast so rows don't stall
+  // red_light: soft-push only (no hard character block)
   return (
     solidBlocked(px, pz, r) ||
     containmentBlocksFor(fromX, fromZ, px, pz, r) ||
     viewBoundsBlock(px, pz, r) ||
     (!formation &&
+      !charsCanPushEachOther() &&
       characterBlocked(px, pz, Math.max(r * 0.7, CHAR_SEP_MIN * 0.85), obj))
   );
 }
@@ -2360,9 +2557,15 @@ function viewBoundsBlock(px, pz, radius = 22) {
 /** Soft personal space at feet — stops cast stacking on the same pixel. */
 const CHAR_SEP_MIN = 30;
 const CHAR_SEP_PUSH = 70;
+/** red_light: no hard char-block — movers shove others via soft-sep. */
+function charsCanPushEachOther(id = activeSceneId) {
+  return isRedLightScene(id);
+}
 
 function isSeparableCharacter(obj) {
   if (!obj?.visible || obj.visible === false) return false;
+  // DQ corner sprint — ghost through other cast (no soft-sep bump)
+  if (obj.userData?.redLightEliminating) return false;
   // Night club crowd only — dense enter/pack; street / doğrulukmu keep soft-sep
   if (obj.userData?.crowdExtra && isNightClubScene()) return false;
   if (obj === player?.mesh) return !occupiedVehicle;
@@ -2403,14 +2606,25 @@ function trySepMove(obj, dx, dz) {
   const nx = x0 + dx;
   const nz = z0 + dz;
   const r = obj === player?.mesh ? player.radius || 22 : NPC_WALK_RADIUS;
-  if (dx && !solidBlocked(nx, z0 + FEET_NUDGE_Z, r)) obj.position.x = nx;
-  if (dz && !solidBlocked(obj.position.x, nz + FEET_NUDGE_Z, r)) {
+  const feet = (x, z) => ({ x, z: z + FEET_NUDGE_Z });
+  const blocked = (x, z) =>
+    solidBlocked(x, z, r) ||
+    containmentBlocksFor(feet(x0, z0).x, feet(x0, z0).z, x, z, r);
+  if (dx && !blocked(nx, z0 + FEET_NUDGE_Z)) obj.position.x = nx;
+  if (dz && !blocked(obj.position.x, nz + FEET_NUDGE_Z)) {
     obj.position.z = nz;
   }
   if (obj.position.x !== x0 || obj.position.z !== z0) {
     syncDepth(obj);
     if (obj === player?.mesh) player.syncRing?.();
   }
+}
+
+function actorMoveSpeed(obj) {
+  if (obj === player?.mesh) {
+    return Math.hypot(player?.vx || 0, player?.vz || 0);
+  }
+  return Math.hypot(obj.userData?._moveDx || 0, obj.userData?._moveDz || 0);
 }
 
 /** Gentle push-apart so sprites don't fully overlap. */
@@ -2426,6 +2640,9 @@ function tickCharacterSeparation(dt) {
       if (o === player?.mesh) player.syncRing?.(slot.x, slot.z);
     }
   }
+  const pushMode = charsCanPushEachOther();
+  const sepMin = pushMode ? 36 : CHAR_SEP_MIN;
+  const sepPush = pushMode ? CHAR_SEP_PUSH * 2.2 : CHAR_SEP_PUSH;
   const actors = listSeparableCharacters().filter(
     (o) => o !== dragging && !o.userData?.formationSlot && !o.userData?.formationMove,
   );
@@ -2440,7 +2657,7 @@ function tickCharacterSeparation(dt) {
       let dx = bx - ax;
       let dz = bz - az;
       let dist = Math.hypot(dx, dz);
-      if (dist >= CHAR_SEP_MIN) continue;
+      if (dist >= sepMin) continue;
       if (dist < 0.05) {
         const ang = (i * 1.7 + j * 2.3) % (Math.PI * 2);
         dx = Math.cos(ang);
@@ -2449,14 +2666,25 @@ function tickCharacterSeparation(dt) {
       }
       const nx = dx / dist;
       const nz = dz / dist;
-      const overlap = CHAR_SEP_MIN - dist;
-      const push = Math.min(overlap * 0.6, CHAR_SEP_PUSH * dt);
+      const overlap = sepMin - dist;
+      const push = Math.min(overlap * (pushMode ? 0.85 : 0.6), sepPush * dt);
       const aPlayer = a === player?.mesh;
       const bPlayer = b === player?.mesh;
-      // Prefer sliding NPCs; nudge Main only lightly
       let pushA = push;
       let pushB = push;
-      if (aPlayer && !bPlayer) {
+      if (pushMode) {
+        // Mover shoves the other more; both can still give way
+        const aSp = actorMoveSpeed(a);
+        const bSp = actorMoveSpeed(b);
+        if (aSp > 0.4 && aSp >= bSp * 0.8) {
+          pushA = push * 0.25;
+          pushB = push * 1.15;
+        } else if (bSp > 0.4 && bSp >= aSp * 0.8) {
+          pushB = push * 0.25;
+          pushA = push * 1.15;
+        }
+      } else if (aPlayer && !bPlayer) {
+        // Prefer sliding NPCs; nudge Main only lightly
         pushA = push * 0.2;
         pushB = push * 0.95;
       } else if (bPlayer && !aPlayer) {
@@ -2471,7 +2699,13 @@ function tickCharacterSeparation(dt) {
 
 /** px/pz = feet world position (mesh.z + FEET_NUDGE_Z). */
 function playerCollides(px, pz, radius) {
-  const skipChar = !!player?.mesh?.userData?.formationMove;
+  const forming = !!player?.mesh?.userData?.formationMove;
+  const elimRun = !!player?.mesh?.userData?.redLightEliminating;
+  const skipChar = forming || elimRun || charsCanPushEachOther();
+  // Red light entrance / DQ run: don't freeze Main on walk-zone edge or cast
+  if ((forming || elimRun) && isRedLightScene()) {
+    return solidBlocked(px, pz, radius);
+  }
   return (
     solidBlocked(px, pz, radius) ||
     containmentBlocks(px, pz, radius) ||
@@ -3027,7 +3261,7 @@ async function attachWalk(obj, path, dir, { allowSouthFallback = true } = {}) {
     frames,
     frame: 0,
     accum: 0,
-    fps: 10,
+    fps: isRedLightScene() ? 3.25 : 13,
     dir,
   };
   setMap(obj, frames[0]);
@@ -3055,6 +3289,7 @@ async function resolveRunSlug(path) {
 
 /** Character run loop — used when casting into truth-dare circle. */
 async function attachRun(obj, path, dir, { allowSouthFallback = true } = {}) {
+  // red_light: only used for cast entrance (scriptActorTo run:true)
   const slug = (await resolveRunSlug(path)) || "run";
   let frames = await loadAnimFrames(path, slug, dir);
   if (!frames.length && allowSouthFallback && dir !== "south") {
@@ -3101,6 +3336,7 @@ async function resolveJumpSlug(path) {
 
 /** One-shot jump for cast (other players) — same idea as Main startJump. */
 async function attachJump(obj, path, dir, { allowSouthFallback = true } = {}) {
+  if (isRedLightScene()) return false;
   if (!obj?.userData || obj.userData.kind !== "character") return false;
   if (obj.userData.driving || obj.userData.busy === "jump") return false;
   const slug = (await resolveJumpSlug(path)) || "jump";
@@ -3249,6 +3485,7 @@ async function spawnCompanion() {
 }
 
 function tickCompanions(dt) {
+  // Only P-key companion follows — catalog animals stay where placed
   if (!companion || !player?.mesh) return;
   if (!pickables.includes(companion)) {
     companion = null;
@@ -3261,13 +3498,15 @@ function tickCompanions(dt) {
     return;
   }
   if (!companion.visible) companion.visible = true;
+  // Editor drag wins — don't yank the pet back while placing it
+  if (dragging === companion) {
+    syncPetColRing();
+    return;
+  }
   const follow = player.mesh;
   const px = follow.position.x;
   const pz = follow.position.z;
-  // stay slightly behind the leader's facing
-  const face = occupiedVehicle
-    ? occupiedVehicle.userData.dir || "south"
-    : player.facing || "south";
+  const face = player.facing || "south";
   const behind = {
     south: [0, -1],
     north: [0, 1],
@@ -3301,6 +3540,13 @@ function tickCompanions(dt) {
   } else {
     setPetClip(companion, "idle", companion.userData.dir || face);
   }
+  const clamped = projectIntoWalkZone(
+    companion.position.x,
+    companion.position.z,
+    PET_COL_RADIUS,
+  );
+  companion.position.x = clamped.x;
+  companion.position.z = clamped.z;
   syncDepth(companion);
   syncPetColRing();
 }
@@ -3588,12 +3834,14 @@ async function spawnItem(item, x, z, opts = {}) {
       transparent: true,
       alphaTest: 0.05,
       depthWrite: false,
+      side: THREE.DoubleSide, // reliable pick/drag under ortho camera
     });
     obj = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), mat);
     obj.rotation.x = -Math.PI / 2;
     obj.position.set(x, 0.08, z);
     obj.scale.set(w * scale, h * scale, 1);
     userData.layer = "ground";
+    userData.tileable = true;
   } else {
   const mat = new THREE.SpriteMaterial({
     map: tex,
@@ -3645,9 +3893,36 @@ async function spawnItem(item, x, z, opts = {}) {
     statusEl.textContent = "Postane garajından ortaya geliyor…";
   }
 
+  // Red light: reject 11th+ character before select/undo
+  if (
+    isRedLightScene() &&
+    item.kind === "character" &&
+    !sceneLoading &&
+    !opts.traffic &&
+    opts.redLightLineup !== false &&
+    countRedLightCast() > RED_LIGHT_CAST_MAX
+  ) {
+    detachPlacedObject(obj);
+    disposePlacedObject(obj);
+    statusEl.textContent = `Max ${RED_LIGHT_CAST_MAX} karakter`;
+    return null;
+  }
+
   if (opts.select !== false) selectObject(obj);
   if (opts.recordUndo !== false && !opts.traffic) pushSpawnUndo(obj);
-  if (!sceneLoading && !opts.traffic && opts.editable !== false) schedulePersistScene();
+
+  // Red light: re-line cast at south edge facing north
+  if (
+    isRedLightScene() &&
+    item.kind === "character" &&
+    !sceneLoading &&
+    !opts.traffic &&
+    opts.redLightLineup !== false
+  ) {
+    await setRedLightCastCount(countRedLightCast());
+  } else if (!sceneLoading && !opts.traffic && opts.editable !== false) {
+    schedulePersistScene();
+  }
   return obj;
 }
 
@@ -3684,7 +3959,7 @@ function applySerializedCol(obj, colData) {
 }
 
 function serializeWalkZone() {
-  if (!isStreetLikeScene()) return undefined;
+  if (!isWalkZoneScene()) return undefined;
   const z = ensureStreetWalkZone();
   return {
     enabled: !!z.enabled,
@@ -3718,6 +3993,7 @@ function serializeScene() {
   const objects = [];
   for (const obj of pickables) {
   const d = obj.userData;
+    // P-key companion is transient; catalog animals save normally
     if (!d?.editable || d.companion || d.crowdExtra) continue;
     const entry = {
       kind: d.kind || "object",
@@ -3792,11 +4068,14 @@ function findCatalogItem(entry) {
 
 function clearEditableSceneObjects() {
   selectObject(null);
-  const doomed = pickables.filter((o) => o.userData?.editable && !o.userData?.companion);
+  // Clear pets too so scene swaps don't leave the previous dog behind
+  const doomed = pickables.filter((o) => o.userData?.editable);
   for (const obj of doomed) {
     detachPlacedObject(obj);
     disposePlacedObject(obj);
   }
+  companion = null;
+  disposePetColRing();
   undoStack.length = 0;
 }
 
@@ -4131,7 +4410,7 @@ async function loadScene(data, { persist = true } = {}) {
       applyViewportMode(data.viewport);
     }
     clearEditableSceneObjects();
-    applyWalkZone(isStreetLikeScene() ? data.walkZone : null);
+    applyWalkZone(isWalkZoneScene() ? data.walkZone : null);
     syncStreetWalkUi();
     if (player?.mesh && data.player) {
       player.mesh.position.x = Number(data.player.x) || 0;
@@ -4190,6 +4469,16 @@ async function loadScene(data, { persist = true } = {}) {
         missing > 0
           ? `Sahne: ${placed} obje (${missing} eksik asset)`
           : `Sahne yüklendi · ${placed} obje`;
+    }
+    if (isRedLightScene()) {
+      redLightCastCount = Math.min(
+        RED_LIGHT_CAST_MAX,
+        Math.max(0, countRedLightCast()),
+      );
+      syncRedLightCastUi();
+      stopRedLightGame({ clearDq: true });
+    } else {
+      stopRedLightGame({ clearDq: true });
     }
   } finally {
     sceneLoading = false;
@@ -4280,6 +4569,17 @@ truthDareCrowdEl?.addEventListener("click", (e) => {
   if (!TRUTH_DARE_CROWD_COUNTS.includes(n)) return;
   if (!isCrowdScene()) return;
   setTruthDareCrowdCount(n).catch((err) => {
+    console.warn(err);
+    statusEl.textContent = err.message || String(err);
+  });
+});
+redLightCastEl?.addEventListener("click", (e) => {
+  const btn = e.target?.closest?.("button[data-rlcast]");
+  if (!btn) return;
+  const n = Number(btn.getAttribute("data-rlcast"));
+  if (!Number.isFinite(n) || n < 1 || n > RED_LIGHT_CAST_MAX) return;
+  if (!isRedLightScene()) return;
+  setRedLightCastCount(n).catch((err) => {
     console.warn(err);
     statusEl.textContent = err.message || String(err);
   });
@@ -4442,6 +4742,858 @@ function syncTruthDareCrowdUi() {
     btn.classList.remove("hidden");
     btn.classList.toggle("active", show && n === truthDareCrowdCount);
   });
+  syncRedLightCastUi();
+}
+
+function syncRedLightCastUi() {
+  const panel = redLightCastEl;
+  if (!panel) return;
+  const show = isRedLightScene();
+  panel.classList.toggle("hidden", !show);
+  panel.querySelectorAll("button[data-rlcast]").forEach((btn) => {
+    const n = Number(btn.getAttribute("data-rlcast"));
+    btn.classList.toggle("active", show && n === redLightCastCount);
+  });
+}
+
+/** Editable cast on red_light (excludes Main mesh). */
+function listRedLightNpcs() {
+  return pickables.filter(
+    (o) =>
+      o.userData?.kind === "character" &&
+      o.userData?.editable !== false &&
+      !o.userData?.crowdExtra &&
+      o !== player?.mesh,
+  );
+}
+
+function countRedLightCast() {
+  const npcs = listRedLightNpcs().length;
+  return (player?.mesh ? 1 : 0) + npcs;
+}
+
+/**
+ * Start line at visual ALT of walk zone.
+ * X span matches ÜST edge width (narrower end) so walking north (−Z)
+ * doesn't hit the slanted side walls of the trapezoid.
+ */
+function redLightLineupSlots(count) {
+  const n = Math.max(1, Math.min(RED_LIGHT_CAST_MAX, Number(count) || 1));
+  if (!streetWalkActive()) {
+    const gap = 44;
+    const slots = [];
+    for (let i = 0; i < n; i++) {
+      slots.push({
+        x: (i - (n - 1) / 2) * gap,
+        z: 320,
+        dir: "north",
+      });
+    }
+    return slots;
+  }
+  const pts = ensureStreetWalkZone().pts;
+  if (!pts?.length) return [];
+
+  let ustI = 0;
+  let altI = 0;
+  let ustMid = Infinity;
+  let altMid = -Infinity;
+  for (let i = 0; i < pts.length; i++) {
+    const a = pts[i];
+    const b = pts[(i + 1) % pts.length];
+    const midZ = (a[1] + b[1]) / 2;
+    if (midZ < ustMid) {
+      ustMid = midZ;
+      ustI = i;
+    }
+    if (midZ > altMid) {
+      altMid = midZ;
+      altI = i;
+    }
+  }
+  const ustA = pts[ustI];
+  const ustB = pts[(ustI + 1) % pts.length];
+  const altA = pts[altI];
+  const altB = pts[(altI + 1) % pts.length];
+
+  // Same horizontal width as ÜST collision corners
+  let xL = Math.min(ustA[0], ustB[0]);
+  let xR = Math.max(ustA[0], ustB[0]);
+  // Tiny pad = feet radius so sides don't graze while walking up
+  const sidePad = Math.max(18, (NPC_WALK_RADIUS || 22) * 0.85);
+  xL += sidePad;
+  xR -= sidePad;
+  if (xR - xL < 40) {
+    const mid = (Math.min(ustA[0], ustB[0]) + Math.max(ustA[0], ustB[0])) / 2;
+    xL = mid - 20;
+    xR = mid + 20;
+  }
+
+  const inset = 14;
+  const zLine = (altA[1] + altB[1]) / 2 - inset;
+
+  const slots = [];
+  for (let i = 0; i < n; i++) {
+    const t = n === 1 ? 0.5 : i / (n - 1);
+    slots.push({
+      x: xL + t * (xR - xL),
+      z: zLine,
+      dir: "north",
+    });
+  }
+  return slots;
+}
+
+/** Sağ-üst (screen top-right): max X among low-Z corners of walk zone. */
+function redLightEntranceGate() {
+  if (!streetWalkActive()) return { x: 160, z: -260 };
+  const pts = ensureStreetWalkZone().pts;
+  if (!pts?.length) return { x: 160, z: -260 };
+  let minZ = Infinity;
+  let maxZ = -Infinity;
+  for (const [, z] of pts) {
+    minZ = Math.min(minZ, z);
+    maxZ = Math.max(maxZ, z);
+  }
+  const zBand = minZ + (maxZ - minZ) * 0.35; // üst half
+  let best = null;
+  let bestX = -Infinity;
+  for (const [x, z] of pts) {
+    if (z > zBand) continue;
+    if (x > bestX) {
+      bestX = x;
+      best = { x, z };
+    }
+  }
+  if (!best) {
+    // fallback: max X + min Z corner score
+    best = pts.reduce(
+      (a, p) => (p[0] - p[1] > a[0] - a[1] ? p : a),
+      pts[0],
+    );
+    best = { x: best[0], z: best[1] };
+  }
+  // Slightly inside poly so containment doesn't block the first step
+  return { x: best.x - 28, z: best.z + 28 };
+}
+
+/** Past the entrance (sağ-üst) — DQ exits the match here. */
+function redLightExitGate() {
+  const gate = redLightEntranceGate();
+  return { x: gate.x + 64, z: gate.z - 64 };
+}
+
+/**
+ * Set cast size 1–10: enter from sağ-üst, run to ALT lineup facing north.
+ */
+async function setRedLightCastCount(count) {
+  if (!isRedLightScene()) return;
+  const n = Math.max(1, Math.min(RED_LIGHT_CAST_MAX, Number(count) || 1));
+  statusEl.textContent = `${n} oyuncu giriyor…`;
+  const slots = redLightLineupSlots(n);
+  if (!slots.length) {
+    statusEl.textContent = "Walk zone yok — oyuncu dizilemedi";
+    return;
+  }
+  const gate = redLightEntranceGate();
+
+  // Stop any mid-run formation / clear pins so they can walk after
+  redLightGame.entranceGen += 1;
+  const entranceGen = redLightGame.entranceGen;
+  clearNpcScriptMoves();
+  if (player?.scriptMove) player.scriptMove = null;
+  clearRedLightEntranceFlags();
+  if (player?.mesh?.userData) {
+    player.mesh.userData.formationSlot = null;
+    player.mesh.userData.formationMove = false;
+  }
+  for (const o of listRedLightNpcs()) {
+    if (o.userData) {
+      o.userData.formationSlot = null;
+      o.userData.formationMove = false;
+    }
+  }
+
+  // Trim extra NPCs beyond n-1
+  const npcs = listRedLightNpcs();
+  const needNpcs = n - (player?.mesh ? 1 : 0);
+  while (npcs.length > needNpcs) {
+    const obj = npcs.pop();
+    detachPlacedObject(obj);
+    disposePlacedObject(obj);
+  }
+
+  // Spawn missing NPCs at the gate (not on the finish line)
+  const catalog = crowdCharacterCatalog();
+  if (!catalog.length && needNpcs > npcs.length) {
+    statusEl.textContent = "Katalogda boy/girl karakter yok";
+  }
+  while (npcs.length < needNpcs && catalog.length) {
+    const item = catalog[npcs.length % catalog.length];
+    const i = npcs.length;
+    const sx = gate.x - (i % 5) * 14;
+    const sz = gate.z + Math.floor(i / 5) * 12;
+    try {
+      const obj = await spawnItem(item, sx, sz, {
+        dir: "south",
+        exactPos: true,
+        recordUndo: false,
+        select: false,
+        playEntrance: false,
+        redLightLineup: false,
+      });
+      npcs.push(obj);
+    } catch (err) {
+      console.warn("red light cast spawn", err);
+      break;
+    }
+  }
+
+  // Line up order: Main in the middle of the row when possible
+  const actors = [];
+  if (player?.mesh) actors.push({ obj: player.mesh, isPlayer: true });
+  for (const obj of listRedLightNpcs()) {
+    actors.push({ obj, isPlayer: false });
+  }
+  if (actors.length > 1 && actors[0].isPlayer) {
+    const mid = Math.floor(actors.length / 2);
+    const main = actors.shift();
+    actors.splice(mid, 0, main);
+  }
+
+  for (let i = 0; i < Math.min(actors.length, slots.length); i++) {
+    const { obj, isPlayer } = actors[i];
+    const slot = slots[i];
+    // Queue along sağ-üst, then run to ALT slot
+    const lane = i % 5;
+    const wave = Math.floor(i / 5);
+    const sx = gate.x - lane * 14 - wave * 4;
+    const sz = gate.z + wave * 12 + (Math.random() - 0.5) * 4;
+    // Lane X = alt dizilim — finish’te aynı X’e oturur
+    obj.userData.redLightLaneX = slot.x;
+    obj.userData.redLightLaneZ = slot.z;
+    if (isPlayer) {
+      player.mesh.position.set(sx, 0, sz);
+      player.mesh.userData.spawnX = slot.x;
+      player.mesh.userData.spawnZ = slot.z;
+      player.facing = "south";
+      player.syncRing?.(sx, sz);
+      if (player.syncDepth) player.syncDepth(player.mesh);
+    } else {
+      obj.position.set(sx, 0, sz);
+      obj.userData.dir = "south";
+      obj.userData.spawnX = slot.x;
+      obj.userData.spawnZ = slot.z;
+      applyFacing(obj, "south");
+      syncDepth(obj);
+    }
+    scriptActorTo(obj, slot.x, slot.z, {
+      run: true, // red_light: run only on cast entrance
+      faceDir: slot.dir || "north",
+      idleOnArrive: true,
+      wait: i * 0.12,
+      moveGen: entranceGen,
+    });
+  }
+
+  redLightCastCount = n;
+  syncRedLightCastUi();
+  persistScene();
+  statusEl.textContent = `${n} oyuncu — sağ üstten alt çizgiye koşuyor`;
+  armRedLightGameAfterEntrance();
+}
+
+function findRedLightCounterDog() {
+  return (
+    pickables.find((o) => /smallAnimals\/dog_3/i.test(o.userData?.path || "")) ||
+    null
+  );
+}
+
+function listRedLightPlayers() {
+  const out = [];
+  if (player?.mesh) out.push(player.mesh);
+  for (const o of listRedLightNpcs()) out.push(o);
+  return out;
+}
+
+function isRedLightDq(obj) {
+  return !!obj?.userData?.redLightDq;
+}
+
+function clearRedLightDqFlags() {
+  for (const o of listRedLightPlayers()) {
+    if (!o?.userData) continue;
+    o.userData.redLightDq = false;
+    o.userData.redLightEliminating = false;
+    o.userData.redLightFinished = false;
+    if (o.userData.formationSlot && isRedLightScene()) {
+      o.userData.formationSlot = null;
+    }
+  }
+  if (player?.mesh) {
+    player.mesh.visible = true;
+    player.mesh.userData.redLightDq = false;
+    player.mesh.userData.redLightEliminating = false;
+    player.mesh.userData.redLightFinished = false;
+  }
+}
+
+function isRedLightFinished(obj) {
+  return !!obj?.userData?.redLightFinished;
+}
+
+function listRedLightAlive() {
+  return listRedLightPlayers().filter(
+    (o) => !isRedLightDq(o) && !o.userData?.redLightEliminating,
+  );
+}
+
+function stopRedLightGame({ clearDq = true } = {}) {
+  redLightGame.active = false;
+  redLightGame.pendingStart = false;
+  redLightGame.phase = "idle";
+  redLightGame.countNum = RED_LIGHT_COUNT_MIN;
+  redLightGame.phaseT = 0;
+  redLightGame.settleAcc = 0;
+  redLightGame.pendingSince = 0;
+  if (redLightGame.dogKey) {
+    const entry = worldLabelMap.get(redLightGame.dogKey);
+    if (entry) {
+      entry.bubbleEl.classList.add("hidden");
+      entry.bubbleEl.textContent = "";
+      entry.hideAt = 0;
+    }
+  }
+  redLightGame.dogKey = null;
+  if (clearDq) clearRedLightDqFlags();
+}
+
+function clearRedLightEntranceFlags() {
+  for (const o of listRedLightPlayers()) {
+    if (!o?.userData) continue;
+    o.userData.formationMove = false;
+  }
+  if (player?.scriptMove && !player.scriptMove._rlElim) {
+    player.scriptMove = null;
+  }
+}
+
+function redLightCastStillEntering() {
+  const cast = new Set(listRedLightPlayers());
+  if (player?.scriptMove && !player.scriptMove._rlElim) return true;
+  for (const sm of npcScriptMoves) {
+    if (sm?.obj && cast.has(sm.obj)) return true;
+  }
+  // formationMove without a live script = stale flag (was blocking countdown)
+  for (const o of cast) {
+    if (!o.userData?.formationMove) continue;
+    const live =
+      o === player?.mesh
+        ? !!player?.scriptMove
+        : npcScriptMoves.some((sm) => sm.obj === o);
+    if (live) return true;
+    o.userData.formationMove = false;
+  }
+  return false;
+}
+
+/** Lined up on alt slots (or no lane data) — ready for countdown. */
+function redLightCastSettledOnLine() {
+  const actors = listRedLightPlayers().filter((o) => !isRedLightDq(o));
+  if (!actors.length) return false;
+  for (const o of actors) {
+    const tx = o.userData?.redLightLaneX;
+    const tz = o.userData?.redLightLaneZ;
+    if (!Number.isFinite(tx) || !Number.isFinite(tz)) continue;
+    if (Math.hypot(o.position.x - tx, o.position.z - tz) > 42) return false;
+  }
+  return true;
+}
+
+function armRedLightGameAfterEntrance() {
+  if (!isRedLightScene()) return;
+  stopRedLightGame({ clearDq: true });
+  redLightGame.pendingStart = true;
+  redLightGame.pendingSince = performance.now() / 1000;
+  redLightGame.settleAcc = 0;
+  statusEl.textContent = "Red light — dizilim bitince sayım başlar";
+}
+
+function startRedLightGame() {
+  if (!isRedLightScene()) return;
+  const dog = findRedLightCounterDog();
+  if (!dog) {
+    statusEl.textContent = "Red light — dog_3 (sayan) yok";
+    redLightGame.pendingStart = false;
+    return;
+  }
+  // Drop stale entrance flags so countdown isn't blocked
+  clearRedLightEntranceFlags();
+  clearRedLightDqFlags();
+  redLightGame.active = true;
+  redLightGame.pendingStart = false;
+  redLightGame.settleAcc = 0;
+  redLightGame.cornerI = 0;
+  redLightGame.dogKey = labelKeyFor(dog);
+  faceRedLightDog("north").catch(() => {});
+  beginRedLightCountPhase();
+  statusEl.textContent = "Red light — köpek sayıyor (yeşil ışık)";
+}
+
+/** Force dog_3 facing — clear anim so tickAnims won't overwrite the sprite. */
+async function faceRedLightDog(dir) {
+  const dog = findRedLightCounterDog();
+  if (!dog?.userData) return false;
+  dog.userData.anim = null;
+  dog.userData.animName = null;
+  dog.userData.dir = dir;
+
+  if (!dog.userData.rotTextures?.[dir]) {
+    const dirs = dog.userData.dirs?.length ? dog.userData.dirs : DIRS;
+    try {
+      const map = await loadRotationTextures(dog.userData.path, dirs);
+      dog.userData.rotTextures = {
+        ...(dog.userData.rotTextures || {}),
+        ...map,
+      };
+      const keys = Object.keys(dog.userData.rotTextures);
+      if (keys.length) dog.userData.dirs = keys;
+    } catch {
+      /* */
+    }
+  }
+
+  const tex = dog.userData.rotTextures?.[dir];
+  if (tex) {
+    setMap(dog, tex);
+  } else {
+    await setDirection(dog, dir, { recordUndo: false });
+  }
+
+  // Idle in this facing so later anim ticks keep the correct direction
+  try {
+    await attachIdle(dog, dog.userData.path, dir, { allowSouthFallback: true });
+  } catch {
+    /* rotation sprite is enough */
+  }
+  return true;
+}
+
+function beginRedLightCountPhase() {
+  faceRedLightDog("north").catch(() => {});
+  redLightGame.phase = "counting";
+  // Random 2–5 so players can't memorize the turn timing
+  redLightGame.countNum = randomRedLightCount();
+  redLightGame.phaseT = 0;
+  redLightDogBubble(
+    String(redLightGame.countNum),
+    RED_LIGHT_COUNT_BEAT * 1000 + 200,
+  );
+}
+
+function beginRedLightWatchPhase() {
+  faceRedLightDog("south").catch(() => {});
+  redLightGame.phase = "watching";
+  redLightGame.phaseT = 0;
+  redLightDogBubble("!", RED_LIGHT_WATCH_SEC * 1000);
+  statusEl.textContent = "Red light — köpek baktı! (3 sn)";
+  catchRedLightMovers();
+}
+
+function redLightDogBubble(text, holdMs = 1200) {
+  const dog = findRedLightCounterDog();
+  if (!dog) return;
+  const key = labelKeyFor(dog);
+  if (!key) return;
+  redLightGame.dogKey = key;
+  const entry = ensureWorldLabel(key, " ", dog.userData?.path);
+  entry.root.classList.add("rl-dog-label");
+  entry.nameEl.textContent = "";
+  entry.nameEl.classList.add("hidden");
+  entry.obj = dog;
+  entry.bubbleEl.classList.add("rl-countdown");
+  entry.bubbleEl.textContent = String(text);
+  entry.bubbleEl.classList.remove("hidden");
+  entry.hideAt = performance.now() + holdMs;
+  entry.root.classList.remove("hidden");
+}
+
+/** ALT edge corners of walkZone — DQ holding spots. */
+function redLightDqCorner() {
+  if (!streetWalkActive()) {
+    const side = redLightGame.cornerI % 2 === 0 ? -1 : 1;
+    redLightGame.cornerI += 1;
+    return { x: side * 200, z: 360 };
+  }
+  const pts = ensureStreetWalkZone().pts;
+  let altI = 0;
+  let altMid = -Infinity;
+  for (let i = 0; i < pts.length; i++) {
+    const a = pts[i];
+    const b = pts[(i + 1) % pts.length];
+    const midZ = (a[1] + b[1]) / 2;
+    if (midZ > altMid) {
+      altMid = midZ;
+      altI = i;
+    }
+  }
+  const a = pts[altI];
+  const b = pts[(altI + 1) % pts.length];
+  const inset = 22;
+  const ends = [
+    {
+      x: a[0] + (b[0] - a[0]) * 0.06,
+      z: a[1] + (b[1] - a[1]) * 0.06 - inset,
+    },
+    {
+      x: a[0] + (b[0] - a[0]) * 0.94,
+      z: a[1] + (b[1] - a[1]) * 0.94 - inset,
+    },
+  ];
+  const c = ends[redLightGame.cornerI % 2];
+  redLightGame.cornerI += 1;
+  return c;
+}
+
+function isRedLightActorMoving(obj) {
+  if (!obj || isRedLightDq(obj) || isRedLightFinished(obj)) return false;
+  // DQ run-out / entrance lineup don't count as "caught walking"
+  if (obj.userData?.redLightEliminating) return false;
+  if (obj.userData?.formationMove && !redLightGame.active) return false;
+  if (player?.mesh && obj === player.mesh) {
+    if (player.scriptMove && !player.scriptMove._rlElim) return true;
+    if (player.keys?.size) {
+      const { dx, dz } = player.inputVector?.() || { dx: 0, dz: 0 };
+      if (dx || dz) return true;
+    }
+    if (Math.hypot(player.vx || 0, player.vz || 0) > RED_LIGHT_MOVE_EPS) return true;
+    return false;
+  }
+  if (obj.userData?.formationMove) return true;
+  for (const sm of npcScriptMoves) {
+    if (sm.obj !== obj) continue;
+    if ((sm.wait || 0) > 0) continue;
+    if (sm.left > 1) return true;
+  }
+  if (Math.hypot(obj.userData?._moveDx || 0, obj.userData?._moveDz || 0) > RED_LIGHT_MOVE_EPS) {
+    return true;
+  }
+  return false;
+}
+
+function catchRedLightMovers() {
+  if (!redLightGame.active || redLightGame.phase !== "watching") return;
+  for (const obj of listRedLightPlayers()) {
+    if (isRedLightDq(obj) || isRedLightFinished(obj)) continue;
+    if (isRedLightActorMoving(obj)) disqualifyRedLightActor(obj);
+  }
+}
+
+function exitRedLightActorFromMatch(obj) {
+  const isPlayer = !!(player?.mesh && obj === player.mesh);
+  const key = labelKeyFor(obj);
+  if (key) removeWorldLabel(key);
+  if (isPlayer) {
+    player.keys?.clear();
+    player.scriptMove = null;
+    player.stopActions?.();
+    if (player.mesh) {
+      player.mesh.visible = false;
+      player.mesh.userData.redLightEliminating = false;
+      player.mesh.userData.redLightDq = true;
+      player.mesh.userData.formationSlot = null;
+    }
+  } else {
+    clearNpcScriptMoves(obj);
+    detachPlacedObject(obj);
+    disposePlacedObject(obj);
+  }
+  checkRedLightGameOver();
+}
+
+function disqualifyRedLightActor(obj) {
+  if (!obj?.userData || obj.userData.redLightDq || obj.userData.redLightFinished) {
+    return;
+  }
+  obj.userData.redLightDq = true;
+  obj.userData.redLightEliminating = true;
+  obj.userData.formationSlot = null;
+
+  const isPlayer = !!(player?.mesh && obj === player.mesh);
+  if (isPlayer) {
+    player.keys?.clear();
+    player.scriptMove = null;
+    player.stopActions?.();
+  } else {
+    clearNpcScriptMoves(obj);
+  }
+
+  const exit = redLightExitGate();
+  const faceDir =
+    dirFromVector(exit.x - obj.position.x, exit.z - obj.position.z) ||
+    "north-east";
+  const name = isPlayer
+    ? PLAYER_CHAT_NAME
+    : shortCharacterName(obj.userData?.label, obj.userData?.path);
+  statusEl.textContent = `${name} diskalifiye — girişten çıkıyor`;
+  speakAs(obj, "Yakalandın", { danger: true, holdMs: 3500 });
+
+  scriptActorTo(obj, exit.x, exit.z, {
+    run: true,
+    faceDir,
+    idleOnArrive: false,
+    snap: true,
+    onDone: () => exitRedLightActorFromMatch(obj),
+  });
+  if (isPlayer && player.scriptMove) player.scriptMove._rlElim = true;
+}
+
+/** Üst (north / low-Z) walkZone edge — finish line. */
+function redLightFinishEdge() {
+  if (!streetWalkActive()) {
+    return { z: -280, x0: -160, x1: 160 };
+  }
+  const pts = ensureStreetWalkZone().pts;
+  let ustI = 0;
+  let ustMid = Infinity;
+  for (let i = 0; i < pts.length; i++) {
+    const a = pts[i];
+    const b = pts[(i + 1) % pts.length];
+    const midZ = (a[1] + b[1]) / 2;
+    if (midZ < ustMid) {
+      ustMid = midZ;
+      ustI = i;
+    }
+  }
+  const a = pts[ustI];
+  const b = pts[(ustI + 1) % pts.length];
+  return {
+    z: (a[1] + b[1]) / 2,
+    x0: Math.min(a[0], b[0]),
+    x1: Math.max(a[0], b[0]),
+    ax: a[0],
+    az: a[1],
+    bx: b[0],
+    bz: b[1],
+  };
+}
+
+function redLightTouchesFinish(obj) {
+  if (!obj) return false;
+  // Feet = same point walkZone containment uses (mesh sits south of feet)
+  const x = obj.position.x;
+  const z = obj.position.z + FEET_NUDGE_Z;
+  const r =
+    obj === player?.mesh ? player?.radius || 22 : NPC_WALK_RADIUS || 18;
+
+  if (!streetWalkActive()) {
+    return z <= -250;
+  }
+  const pts = ensureStreetWalkZone().pts;
+  if (!pts?.length) return false;
+  const edge = redLightFinishEdge();
+  // Northern band only (don't trigger on alt / side walls)
+  const band = Math.max(56, r * 2.8);
+  if (z > edge.z + band) return false;
+  if (x < edge.x0 - 28 || x > edge.x1 + 28) return false;
+  // Pressed against walkZone rim (containment stops at ~r*0.35)
+  const d = distToPolyEdge(x, z, pts);
+  return d <= r * 0.55 + 12;
+}
+
+function faceRedLightActorSouth(obj, { settle = true } = {}) {
+  const isPlayer = !!(player?.mesh && obj === player.mesh);
+  if (isPlayer) {
+    player.facing = "south";
+    player.keys?.clear();
+    if (settle) {
+      player.scriptMove = null;
+      player.anim = "idle";
+      player.applyFrame?.();
+    } else if (player.facing !== "south") {
+      player.applyFrame?.();
+    }
+  } else {
+    if (settle) clearNpcScriptMoves(obj);
+    if (obj.userData.dir !== "south") {
+      obj.userData.dir = "south";
+      applyFacing(obj, "south");
+      if (settle) {
+        attachIdle(obj, obj.userData.path, "south", {
+          allowSouthFallback: true,
+        }).catch(() => {});
+      }
+    }
+  }
+}
+
+/** Hold pose on üst edge, same X as alt lineup lane. */
+function redLightFinishHoldPos(obj) {
+  const laneX = Number.isFinite(obj.userData?.redLightLaneX)
+    ? obj.userData.redLightLaneX
+    : Number.isFinite(obj.userData?.spawnX)
+      ? obj.userData.spawnX
+      : obj.position.x;
+  const r =
+    obj === player?.mesh ? player?.radius || 22 : NPC_WALK_RADIUS || 18;
+  const edge = redLightFinishEdge();
+  // Feet just inside üst edge; mesh = feet - FEET_NUDGE_Z
+  const feetZ = edge.z + Math.max(10, r * 0.45);
+  let x = laneX;
+  let z = feetZ - FEET_NUDGE_Z;
+  const clamped = projectIntoWalkZone(x, feetZ, r);
+  x = clamped.x;
+  z = clamped.z - FEET_NUDGE_Z;
+  return { x, z };
+}
+
+/** Reached üst collision — wait facing south until everyone arrives. */
+function markRedLightFinished(obj) {
+  if (!obj?.userData || obj.userData.redLightFinished || obj.userData.redLightDq) {
+    return;
+  }
+  const isPlayer = !!(player?.mesh && obj === player.mesh);
+  obj.userData.redLightFinished = true;
+  obj.userData.formationMove = false;
+
+  // Stop any walk / chat move — locked at finish
+  if (isPlayer) {
+    player.keys?.clear();
+    player.scriptMove = null;
+    player.stopActions?.();
+  } else {
+    clearNpcScriptMoves(obj);
+  }
+
+  // Snap to alt-lane X on the üst edge
+  const hold = redLightFinishHoldPos(obj);
+  if (isPlayer) {
+    player.mesh.position.set(hold.x, 0, hold.z);
+    player.syncRing?.(hold.x, hold.z);
+    if (player.syncDepth) player.syncDepth(player.mesh);
+  } else {
+    obj.position.set(hold.x, 0, hold.z);
+    syncDepth(obj);
+  }
+
+  faceRedLightActorSouth(obj, { settle: true });
+  // Always force south idle even if already marked south
+  if (!isPlayer) {
+    obj.userData.dir = "south";
+    applyFacing(obj, "south");
+    attachIdle(obj, obj.userData.path, "south", {
+      allowSouthFallback: true,
+    }).catch(() => {});
+  }
+
+  obj.userData.formationSlot = { x: hold.x, z: hold.z };
+  speakAs(obj, "Vardın", { success: true, holdMs: 4000 });
+
+  const name = isPlayer
+    ? PLAYER_CHAT_NAME
+    : shortCharacterName(obj.userData?.label, obj.userData?.path);
+  const alive = listRedLightAlive();
+  const done = alive.filter((o) => isRedLightFinished(o)).length;
+  statusEl.textContent = `${name} üstte — ${done}/${alive.length} (aşağı bakıyor, kilitli)`;
+}
+
+function checkRedLightWinners() {
+  if (!redLightGame.active) return;
+
+  for (const obj of listRedLightAlive()) {
+    if (isRedLightFinished(obj)) continue;
+    if (redLightTouchesFinish(obj)) markRedLightFinished(obj);
+  }
+
+  const alive = listRedLightAlive();
+  if (!alive.length) return;
+
+  if (alive.every((o) => isRedLightFinished(o))) {
+    statusEl.textContent = "Tüm oyuncular üst collision'a değdi — kazandınız!";
+    endRedLightGame({ won: true });
+  }
+}
+
+function checkRedLightGameOver() {
+  if (!redLightGame.active) return;
+  const alive = listRedLightAlive();
+  if (!alive.length) {
+    statusEl.textContent = "Herkes diskalifiye — oyun bitti";
+    endRedLightGame({ won: false });
+    return;
+  }
+  if (alive.every((o) => isRedLightFinished(o))) {
+    statusEl.textContent = "Tüm oyuncular üst collision'a değdi — kazandınız!";
+    endRedLightGame({ won: true });
+  }
+}
+
+function endRedLightGame({ won = false } = {}) {
+  faceRedLightDog("south").catch(() => {});
+  stopRedLightGame({ clearDq: true });
+  redLightDogBubble(won ? "✓" : "OK", 1600);
+}
+
+function tickRedLightGame(dt) {
+  if (!isRedLightScene()) {
+    if (redLightGame.active || redLightGame.pendingStart) stopRedLightGame();
+    return;
+  }
+
+  if (redLightGame.pendingStart) {
+    const now = performance.now() / 1000;
+    const waited =
+      redLightGame.pendingSince > 0 ? now - redLightGame.pendingSince : 0;
+    const moving = redLightCastStillEntering();
+    const onLine = !moving && redLightCastSettledOnLine();
+    if (onLine) {
+      redLightGame.settleAcc += dt;
+    } else {
+      redLightGame.settleAcc = 0;
+    }
+    // Settled on lineup, or force-start if a flag got stuck
+    if (
+      redLightGame.settleAcc >= RED_LIGHT_SETTLE_HOLD ||
+      (waited >= RED_LIGHT_ENTRANCE_TIMEOUT && !moving) ||
+      waited >= RED_LIGHT_ENTRANCE_TIMEOUT + 8
+    ) {
+      startRedLightGame();
+    }
+    return;
+  }
+
+  if (!redLightGame.active) return;
+
+  checkRedLightWinners();
+  if (!redLightGame.active) return;
+
+  if (redLightGame.phase === "counting") {
+    redLightGame.phaseT += dt;
+    if (redLightGame.phaseT >= RED_LIGHT_COUNT_BEAT) {
+      redLightGame.phaseT = 0;
+      redLightGame.countNum -= 1;
+      if (redLightGame.countNum >= 1) {
+        redLightDogBubble(
+          String(redLightGame.countNum),
+          RED_LIGHT_COUNT_BEAT * 1000 + 200,
+        );
+      } else {
+        beginRedLightWatchPhase();
+      }
+    }
+    return;
+  }
+
+  if (redLightGame.phase === "watching") {
+    catchRedLightMovers();
+    redLightGame.phaseT += dt;
+    if (redLightGame.phaseT >= RED_LIGHT_WATCH_SEC) {
+      if (!redLightGame.active) return;
+      beginRedLightCountPhase();
+      statusEl.textContent = "Red light — köpek sayıyor (yeşil ışık)";
+    }
+  }
 }
 
 function nightClubRoomObj() {
@@ -4882,6 +6034,7 @@ function scriptActorTo(
     snap = true,
     idleOnArrive = true,
     wait = 0,
+    moveGen = null,
   } = {},
 ) {
   const isPlayer = !!(player?.mesh && obj === player.mesh);
@@ -4889,6 +6042,7 @@ function scriptActorTo(
   const dz = tz - obj.position.z;
   const dist = Math.hypot(dx, dz);
   const walkDir = dirFromVector(dx, dz) || faceDir || "south";
+  const gen = moveGen;
 
   obj.userData.formationMove = true;
   obj.userData.formationSlot = null;
@@ -4906,9 +6060,19 @@ function scriptActorTo(
   };
 
   const finishFace = () => {
+    if (gen != null && gen !== redLightGame.entranceGen) return;
     snapToTarget();
     obj.userData.formationMove = false;
-    obj.userData.formationSlot = { x: tx, z: tz };
+    // Truth-dare seats pin; red_light lineup free — except DQ / finish holds
+    if (
+      isRedLightScene() &&
+      !obj.userData?.redLightDq &&
+      !obj.userData?.redLightFinished
+    ) {
+      obj.userData.formationSlot = null;
+    } else {
+      obj.userData.formationSlot = { x: tx, z: tz };
+    }
     if (faceDir) {
       if (isPlayer) {
         player.facing = faceDir;
@@ -4931,13 +6095,22 @@ function scriptActorTo(
     return;
   }
 
+  const rl = isRedLightScene();
+  // red_light: run only on cast entrance (full); walk at quarter speed
+  const wantRun = !!run;
+  const moveSpd = wantRun
+    ? TRUTH_DARE_RUN_SPEED
+    : TRUTH_DARE_WALK_SPEED * (rl ? 0.25 : 1);
+
   if (isPlayer) {
     if (occupiedVehicle) exitVehicle();
     if (player.skating && occupiedSkateboard) exitSkateboard();
     player.stopActions?.();
     const startMain = () => {
-      player.startScriptMove(dx, dz, dist, run ? TRUTH_DARE_RUN_SPEED : TRUTH_DARE_WALK_SPEED, {
-        anim: run ? "run" : "walk",
+      if (gen != null && gen !== redLightGame.entranceGen) return;
+      player.startScriptMove(dx, dz, dist, moveSpd, {
+        anim: wantRun ? "run" : "walk",
+        forceRun: wantRun && rl,
         onDone: finishFace,
       });
     };
@@ -4952,22 +6125,14 @@ function scriptActorTo(
   clearNpcScriptMoves(obj);
   obj.userData.dir = walkDir;
   applyFacing(obj, walkDir);
-  const gaitAttach = run
+  const gaitAttach = wantRun
     ? attachRun(obj, obj.userData.path, walkDir, { allowSouthFallback: true })
     : attachWalk(obj, obj.userData.path, walkDir, { allowSouthFallback: true });
   gaitAttach.catch(() => {});
-  enqueueNpcWalk(
-    obj,
-    dx,
-    dz,
-    dist,
-    run ? TRUTH_DARE_RUN_SPEED : TRUTH_DARE_WALK_SPEED,
-    wait,
-    {
-      gait: run ? "run" : "walk",
-      onDone: finishFace,
-    },
-  );
+  enqueueNpcWalk(obj, dx, dz, dist, moveSpd, wait, {
+    gait: wantRun ? "run" : "walk",
+    onDone: finishFace,
+  });
 }
 
 async function seatActorAfterArrive(obj, slot) {
@@ -5418,7 +6583,7 @@ function nightClubColTarget() {
 /** Outline + vertex handles for night_club object col. */
 function updateColGizmo(obj) {
   if (!obj || !hasEditableCollision(obj.userData?.path)) {
-    if (isStreetLikeScene()) updateStreetWalkGizmo();
+    if (isWalkZoneScene()) updateStreetWalkGizmo();
     else if (isNightClubScene()) updateNightClubColGizmo();
     else disposeColGizmo();
     return;
@@ -5466,7 +6631,7 @@ function syncNightClubColUi() {
 }
 
 function updateStreetWalkGizmo() {
-  if (!isStreetLikeScene()) {
+  if (!isWalkZoneScene()) {
     if (colGizmo?.userData?.streetWalk) disposeColGizmo();
     return;
   }
@@ -5487,12 +6652,13 @@ function updateStreetWalkGizmo() {
 
 function syncStreetWalkUi() {
   const panel = document.getElementById("street-walk");
-  if (panel) panel.classList.toggle("hidden", !isStreetLikeScene());
+  if (panel) panel.classList.toggle("hidden", !isWalkZoneScene());
   const on = document.getElementById("street-walk-on");
   if (on) on.checked = !!streetWalkEditOpen;
-  if (isStreetLikeScene()) updateStreetWalkGizmo();
+  if (isWalkZoneScene()) updateStreetWalkGizmo();
   else if (colGizmo?.userData?.streetWalk) disposeColGizmo();
   syncTruthDareCrowdUi();
+  syncRedLightCastUi();
   syncNightClubColUi();
 }
 
@@ -5578,7 +6744,8 @@ function selectObject(obj) {
   attachSelectionOutline(obj);
   if (!obj) {
     inspector.classList.add("hidden");
-    if (isStreetLikeScene()) updateStreetWalkGizmo();
+    if (isWalkZoneScene()) updateStreetWalkGizmo();
+    else if (isNightClubScene()) updateNightClubColGizmo();
     else disposeColGizmo();
     return;
   }
@@ -5695,7 +6862,7 @@ function refreshInspector() {
     const col = ensureColData(selected);
     if (inspColOn) inspColOn.checked = !!col.enabled;
     updateColGizmo(selected);
-  } else if (isStreetLikeScene()) {
+  } else if (isWalkZoneScene()) {
     updateStreetWalkGizmo();
   } else if (isNightClubScene()) {
     updateNightClubColGizmo();
@@ -5878,7 +7045,7 @@ document.getElementById("night-club-col")?.addEventListener("click", (e) => {
 });
 
 document.getElementById("street-walk-on")?.addEventListener("change", (e) => {
-  if (!isStreetLikeScene()) return;
+  if (!isWalkZoneScene()) return;
   streetWalkEditOpen = !!e.target.checked;
   const zone = ensureStreetWalkZone();
   // Editing does not toggle collision — keep walkZone.enabled as saved
@@ -5889,12 +7056,12 @@ document.getElementById("street-walk-on")?.addEventListener("change", (e) => {
   }
   updateStreetWalkGizmo();
   statusEl.textContent = streetWalkEditOpen
-    ? "Alan düzenleme açık — köşe/sarı nokta sürükle · collision zaten aktif"
+    ? "Alan düzenleme açık — köşe/sarı nokta sürükle · top+karakter collision aktif"
     : "Alan gizlendi — collision çalışmaya devam eder";
 });
 
 document.getElementById("street-walk-fit")?.addEventListener("click", () => {
-  if (!isStreetLikeScene()) return;
+  if (!isWalkZoneScene()) return;
   streetWalkEditOpen = true;
   const on = document.getElementById("street-walk-on");
   if (on) on.checked = true;
@@ -5903,7 +7070,7 @@ document.getElementById("street-walk-fit")?.addEventListener("click", () => {
 });
 
 document.getElementById("street-walk-reset")?.addEventListener("click", () => {
-  if (!isStreetLikeScene()) return;
+  if (!isWalkZoneScene()) return;
   streetWalkEditOpen = true;
   const on = document.getElementById("street-walk-on");
   if (on) on.checked = true;
@@ -5915,7 +7082,7 @@ document.getElementById("street-walk-reset")?.addEventListener("click", () => {
 /** Shift+arrows: append a same-scale road tile on that edge of the selection. */
 async function extendSelectedRoad(dx, dz) {
   const src = selected;
-  if (!src?.userData?.tileable || !src.userData.editable) return false;
+  if (!isTileableObj(src) || !src.userData.editable) return false;
   const d = src.userData;
   const stepX = (d.w || 64) * (d.scale || 1);
   const stepZ = (d.h || 64) * (d.scale || 1);
@@ -6025,7 +7192,7 @@ function onPointerDown(event) {
       statusEl.textContent = "Kenara nokta eklendi — sürükle";
       return;
     }
-  } else if (gp0 && isStreetLikeScene() && colGizmo?.userData?.streetWalk) {
+  } else if (gp0 && isWalkZoneScene() && colGizmo?.userData?.streetWalk) {
     const zone = ensureStreetWalkZone();
     const corner = hitPolyCorner(gp0.x, gp0.z, zone.pts);
     if (corner >= 0) {
@@ -6090,18 +7257,44 @@ function onPointerDown(event) {
     }
   }
 
+  const gpPick = groundHit();
+  const nearActor = gpPick ? pickActorNearGround(gpPick.x, gpPick.z) : null;
+
   raycaster.setFromCamera(pointer, camera);
   raycaster.camera = camera;
   const hits = opaqueHits(raycaster.intersectObjects(pickables, false));
-  if (!hits.length) {
+  // Pets/chars/balls near feet beat court/ground under the same click
+  const obj = nearActor || hits[0]?.object || null;
+  if (!obj) {
     if (placing) return; // keep palette-drag → canvas drop flow
     selectObject(null);
     return;
   }
-  const obj = hits[0].object;
   if (!obj.userData.editable || obj.userData.occupied) {
     if (placing) return;
     selectObject(null);
+    return;
+  }
+  // Entrance / scripted run — clicking used to cancel the walk and leave them stuck
+  const entering =
+    !!obj.userData?.formationMove ||
+    (obj === player?.mesh && !!player?.scriptMove);
+  if (entering) {
+    if (placing) endPaletteDrag();
+    selectObject(obj);
+    statusEl.textContent = "Koşu bitince sürükleyebilirsin";
+    return;
+  }
+  // Finish / DQ lock — stay put
+  if (
+    redLightGame.active &&
+    (obj.userData?.redLightFinished || obj.userData?.redLightDq)
+  ) {
+    if (placing) endPaletteDrag();
+    selectObject(obj);
+    statusEl.textContent = obj.userData.redLightFinished
+      ? "Üstte bekliyor — hareket yok"
+      : "Diskalifiye — hareket yok";
     return;
   }
   // Moving an existing piece cancels pending palette place
@@ -6110,7 +7303,7 @@ function onPointerDown(event) {
   dragFrom = { x: obj.position.x, z: obj.position.z };
   selectObject(obj);
   controls.enabled = false;
-  const gp = groundHit();
+  const gp = gpPick || groundHit();
   if (gp) dragOffset.set(obj.position.x - gp.x, 0, obj.position.z - gp.z);
   else dragOffset.set(0, 0, 0);
   renderer.domElement.setPointerCapture(event.pointerId);
@@ -6147,7 +7340,7 @@ function onPointerMove(event) {
   // Free placement (like buildings). Hold Shift to snap roads to tile grid.
   let nx = gp.x + dragOffset.x;
   let nz = gp.z + dragOffset.z;
-  if (dragging.userData?.tileable && event.shiftKey) {
+  if (isTileableObj(dragging) && event.shiftKey) {
     const stepX = (dragging.userData.w || 64) * (dragging.userData.scale || 1);
     const stepZ = (dragging.userData.h || 64) * (dragging.userData.scale || 1);
     nx = Math.round(nx / stepX) * stepX;
@@ -6219,18 +7412,31 @@ async function onPointerUp(event) {
   // Finish move first — never spawn a copy when relocating a placed object
   if (dragging) {
     // Optional snap only if Shift held on release (default: free like buildings)
-    if (dragging.userData?.tileable && event.shiftKey) {
+    if (isTileableObj(dragging) && event.shiftKey) {
       const stepX = (dragging.userData.w || 64) * (dragging.userData.scale || 1);
       const stepZ = (dragging.userData.h || 64) * (dragging.userData.scale || 1);
       dragging.position.x = Math.round(dragging.position.x / stepX) * stepX;
       dragging.position.z = Math.round(dragging.position.z / stepZ) * stepZ;
       syncDepth(dragging);
     }
-    // Update character home when relocated by hand
+    // Update character home when relocated by hand (never cancel an active entrance)
     if (dragging.userData?.kind === "character") {
-      dragging.userData.spawnX = dragging.position.x;
-      dragging.userData.spawnZ = dragging.position.z;
-      clearNpcScriptMoves(dragging);
+      if (dragging.userData.formationMove) {
+        // Resume to saved lineup slot if drag somehow started mid-run
+        const tx = dragging.userData.spawnX;
+        const tz = dragging.userData.spawnZ;
+        if (Number.isFinite(tx) && Number.isFinite(tz)) {
+          scriptActorTo(dragging, tx, tz, {
+            run: true, // resume cast entrance
+            faceDir: "north",
+            idleOnArrive: true,
+          });
+        }
+      } else {
+        dragging.userData.spawnX = dragging.position.x;
+        dragging.userData.spawnZ = dragging.position.z;
+        clearNpcScriptMoves(dragging);
+      }
     }
     if (selected === dragging) {
       inspX.value = Math.round(dragging.position.x);
@@ -6335,8 +7541,8 @@ window.addEventListener("keydown", (e) => {
   if (!selected || !selected.userData.editable) return;
   if (occupiedVehicle || player?.skating) return;
 
-  // Shift+←/→/↑/↓: extend tileable road from selected edge (keeps Boyut + yön)
-  if (e.shiftKey && selected.userData.tileable && !e.repeat) {
+  // Shift+←/→/↑/↓: extend tileable road/ground from selected edge (keeps Boyut + yön)
+  if (e.shiftKey && isTileableObj(selected) && !e.repeat) {
     let dx = 0;
     let dz = 0;
     if (e.key === "ArrowRight") dx = 1;
@@ -6507,6 +7713,14 @@ async function boot() {
     collides: playerCollides,
     findVault: findVaultForPlayer,
     radius: 22,
+    walkOnly: () => isRedLightScene(),
+    moveScale: () => 1,
+    inputLocked: () =>
+      !!(
+        player?.mesh?.userData?.redLightDq ||
+        player?.mesh?.userData?.redLightEliminating ||
+        (redLightGame.active && player?.mesh?.userData?.redLightFinished)
+      ),
   }).load();
   applyColDebugVisible(colDebugVisible);
   // player not in pickables editor list
@@ -6650,7 +7864,7 @@ function closestPolyEdgeHit(px, pz, pts) {
   return best;
 }
 
-/** Keep balls inside street walkZone — bounce off the boundary. */
+/** Keep balls inside walkZone — bounce off the boundary (street + red_light). */
 function resolveBallVsWalkZone(ball, phy) {
   if (!streetWalkActive()) return;
   const pts = ensureStreetWalkZone().pts;
@@ -6670,6 +7884,43 @@ function resolveBallVsWalkZone(ball, phy) {
     if (vn > 0) {
       phy.vx -= (1 + BALL_BOUNCE) * vn * hit.nx;
       phy.vz -= (1 + BALL_BOUNCE) * vn * hit.nz;
+    }
+  }
+}
+
+/** Safety clamp: Main, cast, pets stay inside walk zone if somehow outside. */
+function clampActorsIntoWalkZone() {
+  if (!streetWalkActive()) return;
+  if (
+    player?.mesh &&
+    player.mesh.visible !== false &&
+    !occupiedVehicle &&
+    dragging !== player.mesh
+  ) {
+    const r = player.radius || 22;
+    const c = projectIntoWalkZone(player.mesh.position.x, player.mesh.position.z, r);
+    if (c.x !== player.mesh.position.x || c.z !== player.mesh.position.z) {
+      player.mesh.position.x = c.x;
+      player.mesh.position.z = c.z;
+      player.syncRing?.(c.x, c.z);
+      if (player.syncDepth) player.syncDepth(player.mesh);
+    }
+  }
+  for (const obj of pickables) {
+    if (obj === player?.mesh) continue;
+    if (obj.visible === false) continue;
+    if (dragging === obj) continue; // free editor move
+    const isChar = obj.userData?.kind === "character";
+    const isPet = !!obj.userData?.companion || isAnimalPath(obj.userData?.path);
+    if (!isChar && !isPet) continue;
+    if (obj.userData?.formationMove) continue;
+    const r = isPet ? PET_COL_RADIUS : NPC_WALK_RADIUS;
+    const c = projectIntoWalkZone(obj.position.x, obj.position.z, r);
+    if (c.x !== obj.position.x || c.z !== obj.position.z) {
+      obj.position.x = c.x;
+      obj.position.z = c.z;
+      syncDepth(obj);
+      if (obj === companion) syncPetColRing();
     }
   }
 }
@@ -6872,8 +8123,22 @@ void main() {`,
   mat.needsUpdate = true;
 }
 
+function isFlatCourtBuilding(path) {
+  return /basketballcourt|tenniscourt|footballfield|soccer|playground/i.test(
+    path || "",
+  );
+}
+
 function tickBuildingOcclusion() {
   if (!player?.mesh) return;
+  // red_light: actors draw on top of court — no facade cutout halo
+  if (isRedLightScene()) {
+    for (const obj of pickables) {
+      const u = obj.material?.userData?.seeThrough;
+      if (u) u.uCutEnabled.value = 0;
+    }
+    return;
+  }
   const focus = occupiedVehicle || player.mesh;
   const px = focus.position.x;
   const pz = focus.position.z;
@@ -6893,6 +8158,12 @@ function tickBuildingOcclusion() {
     const d = obj.userData;
     if (!d || d.layer === "ground") continue;
     if (!/\/buildings\//i.test(d.path || "")) continue;
+    // Courts are floor art, not facades — skip see-through hole
+    if (isFlatCourtBuilding(d.path)) {
+      const uOff = obj.material?.userData?.seeThrough;
+      if (uOff) uOff.uCutEnabled.value = 0;
+      continue;
+    }
     const mat = obj.material;
     if (!mat) continue;
     if (!mat.userData.seeThroughPatched) patchBuildingSeeThrough(mat);
@@ -6923,11 +8194,12 @@ function tick(now) {
   lastTs = now;
   tickAnims(dt);
   tickNpcScriptMove(dt);
+  tickRedLightGame(dt);
   tickCharacterSeparation(dt);
   tickTraffic(dt);
-  // Keep characters / pets above night_club_inside after moves
+  // Keep characters / pets (and red_light balls) above rooms/courts after moves
   for (const obj of pickables) {
-    if (isForegroundActor(obj)) syncDepth(obj);
+    if (isForegroundActor(obj) || isRedLightTopLayer(obj)) syncDepth(obj);
   }
   if (player) {
     if (occupiedVehicle) driveVehicle(dt);
@@ -6935,6 +8207,7 @@ function tick(now) {
     if (player.skating) syncSkateboardUnderPlayer();
     tickCompanions(dt);
     tickBallPhysics(dt);
+    clampActorsIntoWalkZone();
     tickBuildingOcclusion();
     if (!dragging && !placing) {
       if (viewportMode === "9x16") {

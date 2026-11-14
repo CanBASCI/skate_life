@@ -15,7 +15,7 @@ const ANIM_ROOT = "../assets/characters/main/character/96x96";
 
 const SETS = {
   idle: { base: `${ANIM_ROOT}/main/animations/idle`, frames: 4, fps: 3.5, loop: true },
-  walk: { base: `${ANIM_ROOT}/main/animations/walk`, frames: 6, fps: 10, loop: true },
+  walk: { base: `${ANIM_ROOT}/main/animations/walk`, frames: 6, fps: 13, loop: true },
   run: { base: `${ANIM_ROOT}/main/animations/run`, frames: 6, fps: 12, loop: true },
   jump: { base: `${ANIM_ROOT}/main/animations/jump`, frames: 9, fps: 14, loop: false },
   vault: { base: `${ANIM_ROOT}/main/animations/vault`, frames: 9, fps: 14, loop: false },
@@ -147,7 +147,20 @@ export const DANCE_DIR_SCALE = {
 export class Player {
   constructor(
     scene,
-    { x = 0, z = 200, syncDepth, collides = null, findVault = null, radius = 22 } = {},
+    {
+      x = 0,
+      z = 200,
+      syncDepth,
+      collides = null,
+      findVault = null,
+      radius = 22,
+      /** () => true — red_light: walk only (no run/jump/vault) */
+      walkOnly = null,
+      /** () => number — red_light: 0.5 move + walk anim pace */
+      moveScale = null,
+      /** () => true — red_light DQ: ignore WASD / jump until game ends */
+      inputLocked = null,
+    } = {},
   ) {
     this.scene = scene;
     this.syncDepth = syncDepth;
@@ -155,6 +168,9 @@ export class Player {
     this.collides = collides;
     /** () => { landX, landZ, ignore } | null — vaultable obstacle ahead */
     this.findVault = findVault;
+    this.walkOnly = walkOnly;
+    this.moveScale = moveScale;
+    this.inputLocked = inputLocked;
     this.radius = radius;
     this.keys = new Set();
     this.facing = "south";
@@ -355,6 +371,12 @@ export class Player {
     window.removeEventListener("keyup", this._boundKeyUp);
   }
 
+  isInputLocked() {
+    return typeof this.inputLocked === "function"
+      ? !!this.inputLocked()
+      : !!this.inputLocked;
+  }
+
   onKeyDown(e) {
     const tag = e.target?.tagName;
     if (
@@ -364,6 +386,7 @@ export class Player {
     ) {
       return;
     }
+    if (this.isInputLocked()) return;
     if (e.repeat) {
       this.keys.add(e.code);
       return;
@@ -372,17 +395,20 @@ export class Player {
     if (this.driving) return;
     if (e.code === "Space") {
       e.preventDefault();
+      if (this.isWalkOnly()) return; // red_light: no jump/vault
       // skating: jump ollie still ok; vault if near obstacle
       const v = this.findVault?.() || null;
       if (v && !this.skating) this.startVault(v);
       else this.startOneShot("jump");
     } else if ((e.code === "KeyV" || e.code === "KeyF") && !this.skating) {
       e.preventDefault();
+      if (this.isWalkOnly()) return;
       const v = this.findVault?.() || null;
       if (v) this.startVault(v);
       else this.startOneShot("vault");
     } else if (e.code === "KeyH" || e.code === "KeyG") {
       e.preventDefault();
+      if (this.isWalkOnly()) return;
       if (this.skating) return;
       this.toggleDance();
     }
@@ -424,6 +450,7 @@ export class Player {
 
   startDance() {
     if (!this.mesh || this.driving) return false;
+    if (this.isWalkOnly()) return false;
     if (this.busy && this.busy !== "dance") return false;
     this.sitting = false;
     this.scriptMove = null;
@@ -463,6 +490,7 @@ export class Player {
 
   startJump() {
     if (!this.mesh || this.driving) return false;
+    if (this.isWalkOnly()) return false;
     if (this.busy) return false;
     this.sitting = false;
     this.scriptMove = null;
@@ -476,19 +504,32 @@ export class Player {
     const len = Math.hypot(dx, dz);
     if (!len) return false;
     this.sitting = false;
-    const wantRun = opts.anim === "run" && !this.skating;
+    // Drop formation pin so chat /N20 & entrance runs aren't snapped back
+    if (this.mesh.userData) this.mesh.userData.formationSlot = null;
+    const walkOnly = this.isWalkOnly();
+    const scale = this.getMoveScale();
+    // forceRun: red_light entrance only — bypass walkOnly for scripted run-in
+    const forceRun = !!opts.forceRun;
+    const wantRun =
+      (forceRun || !walkOnly) && opts.anim === "run" && !this.skating;
     const defaultSpeed = this.skating
       ? SKATE_SPEED
       : wantRun
         ? RUN_SPEED
         : WALK_SPEED;
+    const baseSpeed = speed || defaultSpeed;
     this.scriptMove = {
       dx: dx / len,
       dz: dz / len,
       left: distance,
-      speed: speed || defaultSpeed,
+      speed:
+        walkOnly && !forceRun
+          ? WALK_SPEED * scale
+          : baseSpeed * (wantRun ? 1 : scale),
       anim: wantRun ? "run" : this.skating ? "skateIdle" : "walk",
+      forceRun,
       onDone: typeof opts.onDone === "function" ? opts.onDone : null,
+      stuck: 0,
     };
     this.busy = null;
     this.vaultMove = null;
@@ -523,6 +564,7 @@ export class Player {
 
   /** Vault over an obstacle: play vault anim + slide to far side. */
   startVault({ landX, landZ, ignore = null } = {}) {
+    if (this.isWalkOnly()) return;
     if (this.busy || !this.mesh) return;
     const cfg = SETS.vault;
     this.busy = "vault";
@@ -564,6 +606,16 @@ export class Player {
     return this.facing;
   }
 
+  isWalkOnly() {
+    return typeof this.walkOnly === "function" ? !!this.walkOnly() : !!this.walkOnly;
+  }
+
+  getMoveScale() {
+    const s =
+      typeof this.moveScale === "function" ? this.moveScale() : this.moveScale;
+    return Number.isFinite(s) && s > 0 ? s : 1;
+  }
+
   applyFrame() {
     const face = this.animFacing();
     const dirTex = this.textures[this.anim]?.[face];
@@ -583,6 +635,26 @@ export class Player {
     this.vz = 0;
     if (this.driving) return;
 
+    if (this.isInputLocked() && !this.scriptMove) {
+      this.keys.clear();
+      this.vx = 0;
+      this.vz = 0;
+      if (!this.busy) {
+        this.anim = this.skating ? "skateIdle" : this.sitting ? "sit" : "idle";
+        this.syncRing();
+        const cfg = SETS[this.anim] || SETS.idle;
+        this.accum += dt;
+        const frameDur = 1 / Math.max(0.5, cfg.fps);
+        while (this.accum >= frameDur) {
+          this.accum -= frameDur;
+          this.frame = (this.frame + 1) % cfg.frames;
+        }
+        this.applyFrame();
+      }
+      if (this.syncDepth) this.syncDepth(this.mesh);
+      return;
+    }
+
     // Chat scripted move (/R3) — overrides WASD until done or /stop
     if (this.scriptMove) {
       const sm = this.scriptMove;
@@ -591,27 +663,32 @@ export class Player {
       const z0 = this.mesh.position.z;
       this.tryMove(sm.dx * step, sm.dz * step);
       const moved = Math.hypot(this.mesh.position.x - x0, this.mesh.position.z - z0);
-      sm.left -= Math.max(moved, step * 0.25);
+      // Burn remaining distance even while sliding; don't abort on one blocked frame
+      sm.left -= Math.max(moved, step * 0.35);
+      if (moved < step * 0.05) sm.stuck = (sm.stuck || 0) + dt;
+      else sm.stuck = 0;
       this.busy = null;
       // Stay on skateIdle while riding — walk anim looked stuck / broke board ride
       this.anim = this.skating
         ? "skateIdle"
-        : sm.anim === "run"
+        : sm.anim === "run" && (sm.forceRun || !this.isWalkOnly())
           ? "run"
           : "walk";
       this.syncRing();
       const cfg = SETS[this.anim] || SETS.walk;
+      // red_light: only walk anim uses moveScale (entrance run stays full)
+      const animFps =
+        this.anim === "walk" ? cfg.fps * this.getMoveScale() : cfg.fps;
       this.accum += dt;
-      const frameDur = 1 / cfg.fps;
+      const frameDur = 1 / Math.max(0.5, animFps);
       while (this.accum >= frameDur) {
         this.accum -= frameDur;
         this.frame = (this.frame + 1) % cfg.frames;
       }
       this.applyFrame();
       if (this.syncDepth) this.syncDepth(this.mesh);
-      // Only cancel for a hard wall when nearly no progress (lenient while skating)
-      const stuckThresh = this.skating ? step * 0.02 : step * 0.05;
-      if (sm.left <= 0.5 || moved < stuckThresh) {
+      const stuckLimit = this.skating ? 0.35 : 1.6;
+      if (sm.left <= 0.5 || (sm.stuck || 0) > stuckLimit) {
         const done = sm.onDone;
         this.scriptMove = null;
         this.anim = this.skating ? "skateIdle" : "idle";
@@ -633,10 +710,13 @@ export class Player {
     const { dx, dz } = this.inputVector();
     const moving = dx !== 0 || dz !== 0;
 
+    const walkOnly = this.isWalkOnly();
+    const pace = this.getMoveScale();
+
     // stamina: only normal foot run (not skate / vehicle)
     this.sprinting = false;
     let canSprint = false;
-    if (!this.skating && !this.driving && !crouch) {
+    if (!walkOnly && !this.skating && !this.driving && !crouch) {
       if (wantRun && moving && this.stamina > 0.5) {
         canSprint = true;
         this.sprinting = true;
@@ -653,6 +733,9 @@ export class Player {
           this.stamina = Math.min(STAMINA_MAX, this.stamina + STAMINA_REGEN * dt);
         }
       }
+    } else if (walkOnly) {
+      this.stamina = STAMINA_MAX;
+      this._staminaRegenWait = 0;
     } else {
       // skating / vehicle: hide drain, keep full for when you hop off
       this.stamina = STAMINA_MAX;
@@ -671,20 +754,24 @@ export class Player {
     }
 
     if (!this.busy) {
-      if (this.skating) this.anim = "skateIdle";
+      if (this.skating && !walkOnly) this.anim = "skateIdle";
       else if (this.sitting) this.anim = "sit";
-      else if (crouch) this.anim = moving ? "crouchWalk" : "crouchIdle";
+      else if (crouch && !walkOnly) this.anim = moving ? "crouchWalk" : "crouchIdle";
       else if (moving) this.anim = canSprint ? "run" : "walk";
       else this.anim = "idle";
     }
 
     let speed = 0;
     if (!this.busy && !this.sitting && moving) {
-      if (this.skating) speed = wantRun ? SKATE_BOOST : SKATE_SPEED;
+      if (walkOnly) speed = WALK_SPEED * pace;
+      else if (this.skating) speed = wantRun ? SKATE_BOOST : SKATE_SPEED;
       else if (crouch) speed = CROUCH_SPEED;
       else if (canSprint) speed = RUN_SPEED;
-      else speed = WALK_SPEED;
-    } else if (this.busy === "jump" || (this.busy === "vault" && !this.vaultMove)) {
+      else speed = WALK_SPEED * pace;
+    } else if (
+      !walkOnly &&
+      (this.busy === "jump" || (this.busy === "vault" && !this.vaultMove))
+    ) {
       // jump / free vault: keep moving in held WASD dir (like Space)
       speed = moving
         ? (this.skating ? SKATE_SPEED * 0.9 : WALK_SPEED * 0.95)
@@ -723,14 +810,15 @@ export class Player {
     this.syncRing();
 
     const cfg = SETS[this.anim];
-    const fps =
+    let fps =
       this.skating && this.anim === "skateIdle"
         ? moving
           ? 12
           : 5
         : cfg.fps;
+    if (this.anim === "walk") fps *= this.getMoveScale();
     this.accum += dt;
-    const frameDur = 1 / fps;
+    const frameDur = 1 / Math.max(0.5, fps);
     while (this.accum >= frameDur) {
       this.accum -= frameDur;
       this.frame += 1;
