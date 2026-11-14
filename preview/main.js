@@ -243,6 +243,7 @@ const sceneModalApply = document.getElementById("scene-modal-apply");
 const truthDareCrowdEl = document.getElementById("truth-dare-crowd");
 const tennisLiveSimEl = document.getElementById("tennis-live-sim");
 const tennisLiveStatsEl = document.getElementById("tennis-live-stats");
+const tennisScoreboardEl = document.getElementById("tennis-scoreboard");
 /** TikTok like/gift sim for tennis 2v2 — likes + gift count per team. */
 const tennisLive = {
   a: { likes: 0, gifts: 0, power: 0 },
@@ -2517,6 +2518,7 @@ function syncWorldLabels() {
   for (const key of [...worldLabelMap.keys()]) {
     if (!live.has(key)) removeWorldLabel(key);
   }
+  syncTennisScoreboard();
 }
 
 chatSendBtn?.addEventListener("click", () => sendChatMessage());
@@ -6015,6 +6017,61 @@ function tickTennisBallRules(ball, phy, wallBounced, groundHit = false) {
   }
 }
 
+function formatTennisScoreboardText() {
+  // Y = yukarı (takım A), A = aşağı (takım B)
+  const y = tennisRally.scoreA || 0;
+  const a = tennisRally.scoreB || 0;
+  return (
+    `<span class="tn-score-side">Y</span>` +
+    `<span class="tn-score-num">${y}</span>` +
+    `<span class="tn-score-sep">-</span>` +
+    `<span class="tn-score-num">${a}</span>` +
+    `<span class="tn-score-side">A</span>` +
+    `<span class="tn-score-meta">ILK ${TENNIS_WIN_SCORE}</span>`
+  );
+}
+
+/** World XZ just south of B fan front row. */
+function tennisScoreboardWorldPos() {
+  const b = tennisZoneBounds("b");
+  const band = tennisFanRowBand();
+  return {
+    x: band.cx,
+    z: b.maxZ + 175 + 130,
+  };
+}
+
+function projectWorldPointScreen(x, y, z) {
+  if (!renderer?.domElement) return null;
+  camera.updateMatrixWorld(true);
+  _promptWorld.set(x, y, z);
+  _promptNdc.copy(_promptWorld).project(camera);
+  if (Math.abs(_promptNdc.x) > 1.45 || Math.abs(_promptNdc.y) > 1.45) return null;
+  const canvasRect = renderer.domElement.getBoundingClientRect();
+  const sx = ((_promptNdc.x + 1) / 2) * canvasRect.width + canvasRect.left;
+  const sy = ((-_promptNdc.y + 1) / 2) * canvasRect.height + canvasRect.top;
+  return { sx, sy };
+}
+
+function syncTennisScoreboard() {
+  const el = tennisScoreboardEl;
+  if (!el) return;
+  const show =
+    isTennisScene() &&
+    (tennisPlayLinedUp || tennisMatchActive || tennisMatchEnding);
+  el.classList.toggle("hidden", !show);
+  if (!show) return;
+  el.innerHTML = formatTennisScoreboardText();
+  const pos = tennisScoreboardWorldPos();
+  const scr = projectWorldPointScreen(pos.x, 8, pos.z);
+  if (!scr) {
+    el.classList.add("hidden");
+    return;
+  }
+  el.style.left = `${scr.sx}px`;
+  el.style.top = `${scr.sy}px`;
+}
+
 function syncTennisLiveSimUi() {
   const panel = tennisLiveSimEl;
   if (!panel) return;
@@ -6025,6 +6082,7 @@ function syncTennisLiveSimUi() {
     btn.classList.toggle("active", show && n === tennisCastCount);
   });
   if (tennisLiveStatsEl) tennisLiveStatsEl.textContent = formatTennisLiveStats();
+  syncTennisScoreboard();
 }
 
 function resetTennisLiveSim() {

@@ -552,6 +552,54 @@ body {
   letter-spacing: 0.02em;
 }
 
+/* World-anchored under B spectator row — arcade / pixel score plaque */
+#tennis-scoreboard {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 45;
+  pointer-events: none;
+  transform: translate(-50%, 0);
+  padding: 10px 12px 8px;
+  border-radius: 0;
+  background: #0e1411;
+  border: 2px solid #243028;
+  color: var(--ink);
+  font-family: "Press Start 2P", monospace;
+  font-size: 11px;
+  font-weight: 400;
+  letter-spacing: 0.04em;
+  line-height: 1.35;
+  white-space: nowrap;
+  image-rendering: pixelated;
+  box-shadow:
+    inset 0 0 0 2px #1a2420,
+    3px 3px 0 #000c;
+}
+#tennis-scoreboard.hidden {
+  display: none;
+}
+#tennis-scoreboard .tn-score-side {
+  color: var(--muted);
+  font-size: 8px;
+}
+#tennis-scoreboard .tn-score-num {
+  color: var(--accent);
+  margin: 0 0.15em;
+}
+#tennis-scoreboard .tn-score-sep {
+  color: #3d5244;
+  margin: 0 0.45em;
+}
+#tennis-scoreboard .tn-score-meta {
+  display: block;
+  margin-top: 6px;
+  font-size: 7px;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  text-align: center;
+}
+
 #truth-dare-crowd button.hidden {
   display: none;
 }
