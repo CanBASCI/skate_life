@@ -113,6 +113,9 @@ const RED_LIGHT_MOVE_EPS = 10;
  *   entranceGen: number,
  *   pendingSince: number,
  *   settleAcc: number,
+ *   entranceExpect: number,
+ *   entranceArrived: number,
+ *   minStartAt: number,
  * }} */
 const redLightGame = {
   active: false,
@@ -125,9 +128,13 @@ const redLightGame = {
   entranceGen: 0,
   pendingSince: 0,
   settleAcc: 0,
+  entranceExpect: 0,
+  entranceArrived: 0,
+  minStartAt: 0,
 };
-const RED_LIGHT_ENTRANCE_TIMEOUT = 18;
-const RED_LIGHT_SETTLE_HOLD = 0.4;
+const RED_LIGHT_SETTLE_HOLD = 0.35;
+const RED_LIGHT_FORCE_START = 6;
+const RED_LIGHT_MIN_LINEUP_SEC = 1.25;
 
 function randomRedLightCount() {
   const lo = RED_LIGHT_COUNT_MIN;
@@ -4905,9 +4912,11 @@ async function setRedLightCastCount(count) {
   clearNpcScriptMoves();
   if (player?.scriptMove) player.scriptMove = null;
   clearRedLightEntranceFlags();
+  clearRedLightDqFlags();
   if (player?.mesh?.userData) {
     player.mesh.userData.formationSlot = null;
     player.mesh.userData.formationMove = false;
+    player.mesh.visible = true;
   }
   for (const o of listRedLightNpcs()) {
     if (o.userData) {
@@ -4915,6 +4924,11 @@ async function setRedLightCastCount(count) {
       o.userData.formationMove = false;
     }
   }
+
+  // Arm immediately so "Yerlerinize" shows while NPCs spawn (first Ctrl+R cast)
+  redLightGame.entranceExpect = n;
+  redLightGame.entranceArrived = 0;
+  armRedLightGameAfterEntrance();
 
   // Trim extra NPCs beyond n-1
   const npcs = listRedLightNpcs();
@@ -4931,6 +4945,7 @@ async function setRedLightCastCount(count) {
     statusEl.textContent = "Katalogda boy/girl karakter yok";
   }
   while (npcs.length < needNpcs && catalog.length) {
+    if (entranceGen !== redLightGame.entranceGen) return; // newer cast started
     const item = catalog[npcs.length % catalog.length];
     const i = npcs.length;
     const sx = gate.x - (i % 5) * 14;
@@ -4950,6 +4965,7 @@ async function setRedLightCastCount(count) {
       break;
     }
   }
+  if (entranceGen !== redLightGame.entranceGen) return;
 
   // Line up order: Main in the middle of the row when possible
   const actors = [];
@@ -4963,15 +4979,18 @@ async function setRedLightCastCount(count) {
     actors.splice(mid, 0, main);
   }
 
-  for (let i = 0; i < Math.min(actors.length, slots.length); i++) {
+  const goCount = Math.min(actors.length, slots.length);
+  redLightGame.entranceExpect = goCount;
+  redLightGame.entranceArrived = 0;
+
+  // Place everyone at gate + set lanes BEFORE scripts (avoids false "on line")
+  for (let i = 0; i < goCount; i++) {
     const { obj, isPlayer } = actors[i];
     const slot = slots[i];
-    // Queue along sağ-üst, then run to ALT slot
     const lane = i % 5;
     const wave = Math.floor(i / 5);
     const sx = gate.x - lane * 14 - wave * 4;
     const sz = gate.z + wave * 12 + (Math.random() - 0.5) * 4;
-    // Lane X = alt dizilim — finish’te aynı X’e oturur
     obj.userData.redLightLaneX = slot.x;
     obj.userData.redLightLaneZ = slot.z;
     if (isPlayer) {
@@ -4989,26 +5008,37 @@ async function setRedLightCastCount(count) {
       applyFacing(obj, "south");
       syncDepth(obj);
     }
+  }
+
+  // Refresh Yerlerinize after spawn (dog definitely in scene by now)
+  showRedLightLineupPrompt();
+
+  for (let i = 0; i < goCount; i++) {
+    const { obj } = actors[i];
+    const slot = slots[i];
     scriptActorTo(obj, slot.x, slot.z, {
-      run: true, // red_light: run only on cast entrance
+      run: true,
       faceDir: slot.dir || "north",
       idleOnArrive: true,
       wait: i * 0.12,
       moveGen: entranceGen,
+      onDone: () => noteRedLightEntranceArrive(entranceGen),
     });
   }
 
   redLightCastCount = n;
   syncRedLightCastUi();
   persistScene();
-  statusEl.textContent = `${n} oyuncu — sağ üstten alt çizgiye koşuyor`;
-  armRedLightGameAfterEntrance();
+  statusEl.textContent = `${n} oyuncu — yerlerinize!`;
 }
 
 function findRedLightCounterDog() {
   return (
-    pickables.find((o) => /smallAnimals\/dog_3/i.test(o.userData?.path || "")) ||
-    null
+    pickables.find(
+      (o) =>
+        /dog_3/i.test(o.userData?.path || "") ||
+        /dog_3/i.test(String(o.userData?.id || "")),
+    ) || null
   );
 }
 
@@ -5065,6 +5095,8 @@ function stopRedLightGame({ clearDq = true } = {}) {
   redLightGame.phaseT = 0;
   redLightGame.settleAcc = 0;
   redLightGame.pendingSince = 0;
+  redLightGame.entranceExpect = 0;
+  redLightGame.entranceArrived = 0;
   if (redLightGame.dogKey) {
     const entry = worldLabelMap.get(redLightGame.dogKey);
     if (entry) {
@@ -5106,44 +5138,155 @@ function redLightCastStillEntering() {
   return false;
 }
 
-/** Lined up on alt slots (or no lane data) — ready for countdown. */
-function redLightCastSettledOnLine() {
+/** How many cast members are close enough to their alt lane. */
+function redLightCastNearLaneCount() {
   const actors = listRedLightPlayers().filter((o) => !isRedLightDq(o));
-  if (!actors.length) return false;
+  let ok = 0;
   for (const o of actors) {
-    const tx = o.userData?.redLightLaneX;
-    const tz = o.userData?.redLightLaneZ;
+    const tx = o.userData?.redLightLaneX ?? o.userData?.spawnX;
+    const tz = o.userData?.redLightLaneZ ?? o.userData?.spawnZ;
     if (!Number.isFinite(tx) || !Number.isFinite(tz)) continue;
-    if (Math.hypot(o.position.x - tx, o.position.z - tz) > 42) return false;
+    if (Math.hypot(o.position.x - tx, o.position.z - tz) <= 72) ok += 1;
   }
-  return true;
+  return { ok, total: actors.length };
+}
+
+function redLightCastReadyOnLine() {
+  const { ok, total } = redLightCastNearLaneCount();
+  const need = Math.max(1, redLightGame.entranceExpect || total);
+  return total >= need && ok >= need;
+}
+
+/** Snap one cast member onto their alt lane and stop any entrance run. */
+function settleRedLightActorOnLane(o) {
+  if (!o?.userData) return;
+  const tx = o.userData.redLightLaneX;
+  const tz = o.userData.redLightLaneZ;
+  if (!Number.isFinite(tx) || !Number.isFinite(tz)) return;
+  const isPlayer = o === player?.mesh;
+  clearNpcScriptMoves(o);
+  if (isPlayer) {
+    player.scriptMove = null;
+    player.keys?.clear();
+    player.mesh.position.set(tx, 0, tz);
+    player.syncRing?.(tx, tz);
+    if (player.syncDepth) player.syncDepth(player.mesh);
+    player.facing = "north";
+    player.anim = "idle";
+    player.applyFrame?.();
+  } else {
+    o.position.set(tx, 0, tz);
+    o.userData.dir = "north";
+    applyFacing(o, "north");
+    syncDepth(o);
+    attachIdle(o, o.userData.path, "north", { allowSouthFallback: true }).catch(
+      () => {},
+    );
+  }
+  o.userData.formationMove = false;
+  o.userData.formationSlot = { x: tx, z: tz };
+}
+
+/** Keep cast on lineup slots while waiting for countdown (soft-sep won't shove them). */
+function pinRedLightCastToLanes() {
+  for (const o of listRedLightPlayers()) {
+    if (!o?.userData) continue;
+    if (o.userData.redLightDq || o.userData.redLightEliminating) continue;
+    const tx = o.userData.redLightLaneX;
+    const tz = o.userData.redLightLaneZ;
+    if (!Number.isFinite(tx) || !Number.isFinite(tz)) continue;
+    const dist = Math.hypot(o.position.x - tx, o.position.z - tz);
+    // Arrived: stop running south past the slot — settle & idle facing north
+    if (dist <= 72) {
+      const stillRunning =
+        !!o.userData.formationMove ||
+        (o === player?.mesh && !!player?.scriptMove) ||
+        npcScriptMoves.some((sm) => sm.obj === o);
+      if (stillRunning || dist > 10) settleRedLightActorOnLane(o);
+      else {
+        o.userData.formationMove = false;
+        o.userData.formationSlot = { x: tx, z: tz };
+      }
+    }
+  }
+}
+
+function noteRedLightEntranceArrive(gen) {
+  if (gen != null && gen !== redLightGame.entranceGen) return;
+  if (!redLightGame.pendingStart) return;
+  redLightGame.entranceArrived += 1;
+  if (
+    redLightGame.entranceExpect > 0 &&
+    redLightGame.entranceArrived >= redLightGame.entranceExpect
+  ) {
+    flushRedLightEntranceAndStart();
+  }
+}
+
+function flushRedLightEntranceAndStart() {
+  if (!redLightGame.pendingStart || redLightGame.active) return;
+  // Invalidate delayed entrance setTimeouts / finishFace (same gen was restarting runs)
+  redLightGame.entranceGen += 1;
+  clearNpcScriptMoves();
+  if (player?.scriptMove) player.scriptMove = null;
+  for (const o of listRedLightPlayers()) {
+    settleRedLightActorOnLane(o);
+  }
+  redLightGame.entranceArrived = Math.max(
+    redLightGame.entranceArrived,
+    redLightGame.entranceExpect,
+  );
+  startRedLightGame();
+}
+
+function showRedLightLineupPrompt() {
+  faceRedLightDog("south").catch(() => {});
+  redLightDogBubble("Yerlerinize", 20000);
 }
 
 function armRedLightGameAfterEntrance() {
   if (!isRedLightScene()) return;
-  stopRedLightGame({ clearDq: true });
+  // Don't wipe entranceExpect / arrived — caller sets those before arming
+  redLightGame.active = false;
+  redLightGame.phase = "idle";
   redLightGame.pendingStart = true;
   redLightGame.pendingSince = performance.now() / 1000;
+  redLightGame.minStartAt =
+    redLightGame.pendingSince + RED_LIGHT_MIN_LINEUP_SEC;
   redLightGame.settleAcc = 0;
-  statusEl.textContent = "Red light — dizilim bitince sayım başlar";
+  showRedLightLineupPrompt();
+  statusEl.textContent = "Red light — yerlerinize!";
 }
 
 function startRedLightGame() {
   if (!isRedLightScene()) return;
+  if (redLightGame.active) return;
   const dog = findRedLightCounterDog();
   if (!dog) {
-    statusEl.textContent = "Red light — dog_3 (sayan) yok";
-    redLightGame.pendingStart = false;
+    // Don't kill pendingStart — dog may still be loading; tick will retry
+    statusEl.textContent = "Red light — sayan köpek bekleniyor…";
+    showRedLightLineupPrompt();
     return;
   }
-  // Drop stale entrance flags so countdown isn't blocked
+  // Drop stale entrance flags / lineup pins so countdown play can move
+  redLightGame.entranceGen += 1; // cancel any late entrance callbacks
   clearRedLightEntranceFlags();
+  clearNpcScriptMoves();
+  if (player?.scriptMove) player.scriptMove = null;
   clearRedLightDqFlags();
+  // Snap to lanes, face north, then free pins so they can walk on green light
+  for (const o of listRedLightPlayers()) {
+    settleRedLightActorOnLane(o);
+    if (o.userData) o.userData.formationSlot = null;
+  }
   redLightGame.active = true;
   redLightGame.pendingStart = false;
   redLightGame.settleAcc = 0;
+  redLightGame.entranceExpect = 0;
+  redLightGame.entranceArrived = 0;
   redLightGame.cornerI = 0;
   redLightGame.dogKey = labelKeyFor(dog);
+  // Turn away + start countdown immediately (don't await anim load — that blocked 1st cast)
   faceRedLightDog("north").catch(() => {});
   beginRedLightCountPhase();
   statusEl.textContent = "Red light — köpek sayıyor (yeşil ışık)";
@@ -5176,15 +5319,17 @@ async function faceRedLightDog(dir) {
   if (tex) {
     setMap(dog, tex);
   } else {
-    await setDirection(dog, dir, { recordUndo: false });
+    try {
+      await setDirection(dog, dir, { recordUndo: false });
+    } catch {
+      /* */
+    }
   }
 
-  // Idle in this facing so later anim ticks keep the correct direction
-  try {
-    await attachIdle(dog, dog.userData.path, dir, { allowSouthFallback: true });
-  } catch {
-    /* rotation sprite is enough */
-  }
+  // Don't await idle — first-load attachIdle was delaying/blocking countdown
+  attachIdle(dog, dog.userData.path, dir, { allowSouthFallback: true }).catch(
+    () => {},
+  );
   return true;
 }
 
@@ -5470,7 +5615,7 @@ function redLightFinishHoldPos(obj) {
   return { x: clamped.x, z: clamped.z - FEET_NUDGE_Z };
 }
 
-/** Arrived at lane hold — face south, bubble, pin. */
+/** Lane hold done — face south + pin (Vardın already shown on first touch). */
 function settleRedLightFinished(obj, hold) {
   if (!obj?.userData || obj.userData.redLightDq) return;
   const isPlayer = !!(player?.mesh && obj === player.mesh);
@@ -5502,7 +5647,6 @@ function settleRedLightFinished(obj, hold) {
   }
 
   obj.userData.formationSlot = { x: pos.x, z: pos.z };
-  speakAs(obj, "Vardın", { success: true, holdMs: 4000 });
 
   const name = isPlayer
     ? PLAYER_CHAT_NAME
@@ -5513,7 +5657,7 @@ function settleRedLightFinished(obj, hold) {
   checkRedLightGameOver();
 }
 
-/** Reached üst collision — run to alt-lane X, then lock facing south. */
+/** Reached üst collision — Vardın immediately, then run to lane X. */
 function markRedLightFinished(obj) {
   if (
     !obj?.userData ||
@@ -5526,6 +5670,17 @@ function markRedLightFinished(obj) {
   const isPlayer = !!(player?.mesh && obj === player.mesh);
   const hold = redLightFinishHoldPos(obj);
   const dist = Math.hypot(obj.position.x - hold.x, obj.position.z - hold.z);
+
+  // Count as arrived + bubble the moment they touch üst collision
+  obj.userData.redLightFinished = true;
+  speakAs(obj, "Vardın", { success: true, holdMs: 4000 });
+
+  const name = isPlayer
+    ? PLAYER_CHAT_NAME
+    : shortCharacterName(obj.userData?.label, obj.userData?.path);
+  const alive = listRedLightAlive();
+  const done = alive.filter((o) => isRedLightFinished(o)).length;
+  statusEl.textContent = `${name} üstte — ${done}/${alive.length}`;
 
   // Already on lane — settle in place
   if (dist <= 16) {
@@ -5544,11 +5699,6 @@ function markRedLightFinished(obj) {
     clearNpcScriptMoves(obj);
   }
 
-  const name = isPlayer
-    ? PLAYER_CHAT_NAME
-    : shortCharacterName(obj.userData?.label, obj.userData?.path);
-  statusEl.textContent = `${name} üst çizgide lane'ine koşuyor…`;
-
   scriptActorTo(obj, hold.x, hold.z, {
     run: true,
     faceDir: "south",
@@ -5556,6 +5706,7 @@ function markRedLightFinished(obj) {
     onDone: () => settleRedLightFinished(obj, hold),
   });
   if (isPlayer && player.scriptMove) player.scriptMove._rlFinish = true;
+  checkRedLightGameOver();
 }
 
 function checkRedLightWinners() {
@@ -5602,23 +5753,36 @@ function tickRedLightGame(dt) {
   }
 
   if (redLightGame.pendingStart) {
+    pinRedLightCastToLanes();
+    // Keep "Yerlerinize" visible while they line up
+    const dog = findRedLightCounterDog();
+    if (dog) {
+      const key = labelKeyFor(dog);
+      const entry = key ? worldLabelMap.get(key) : null;
+      if (!entry || entry.bubbleEl.classList.contains("hidden")) {
+        showRedLightLineupPrompt();
+      } else {
+        entry.hideAt = performance.now() + 5000;
+        entry.bubbleEl.textContent = "Yerlerinize";
+        entry.bubbleEl.classList.add("rl-countdown");
+        entry.bubbleEl.classList.remove("hidden");
+      }
+    }
     const now = performance.now() / 1000;
     const waited =
       redLightGame.pendingSince > 0 ? now - redLightGame.pendingSince : 0;
-    const moving = redLightCastStillEntering();
-    const onLine = !moving && redLightCastSettledOnLine();
-    if (onLine) {
-      redLightGame.settleAcc += dt;
-    } else {
-      redLightGame.settleAcc = 0;
-    }
-    // Settled on lineup, or force-start if a flag got stuck
+    const canStart = now >= (redLightGame.minStartAt || 0);
+    const onLine = redLightCastReadyOnLine();
+    if (canStart && onLine) redLightGame.settleAcc += dt;
+    else if (!onLine) redLightGame.settleAcc = 0;
+
+    // Min lineup time so Yerlerinize is visible; then start when on line / timeout
     if (
-      redLightGame.settleAcc >= RED_LIGHT_SETTLE_HOLD ||
-      (waited >= RED_LIGHT_ENTRANCE_TIMEOUT && !moving) ||
-      waited >= RED_LIGHT_ENTRANCE_TIMEOUT + 8
+      canStart &&
+      (redLightGame.settleAcc >= RED_LIGHT_SETTLE_HOLD ||
+        waited >= RED_LIGHT_FORCE_START)
     ) {
-      startRedLightGame();
+      flushRedLightEntranceAndStart();
     }
     return;
   }
@@ -6123,8 +6287,14 @@ function scriptActorTo(
     if (gen != null && gen !== redLightGame.entranceGen) return;
     snapToTarget();
     obj.userData.formationMove = false;
-    // Truth-dare seats pin; red_light lineup free — except DQ / finish holds
+    // Truth-dare seats pin; red_light: pin on lineup while countdown pending
     if (
+      isRedLightScene() &&
+      redLightGame.pendingStart &&
+      !obj.userData?.redLightDq
+    ) {
+      obj.userData.formationSlot = { x: tx, z: tz };
+    } else if (
       isRedLightScene() &&
       !obj.userData?.redLightDq &&
       !obj.userData?.redLightFinished &&
