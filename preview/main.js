@@ -1678,7 +1678,12 @@ function projectHeadScreen(obj) {
 function speakAs(
   obj,
   text,
-  { danger = false, success = false, holdMs = BUBBLE_DURATION_MS } = {},
+  {
+    danger = false,
+    success = false,
+    react = false,
+    holdMs = BUBBLE_DURATION_MS,
+  } = {},
 ) {
   const msg = String(text || "").trim();
   if (!msg || !obj) return;
@@ -1693,6 +1698,9 @@ function speakAs(
   entry.bubbleEl.textContent = msg;
   entry.bubbleEl.classList.toggle("bubble-danger", !!danger);
   entry.bubbleEl.classList.toggle("bubble-success", !!success && !danger);
+  entry.bubbleEl.classList.toggle("bubble-react", !!react);
+  entry.bubbleEl.classList.toggle("bubble-react-like", !!react && !success);
+  entry.bubbleEl.classList.toggle("bubble-react-gift", !!react && !!success);
   entry.bubbleEl.classList.remove("hidden");
   entry.hideAt = performance.now() + (Number(holdMs) > 0 ? holdMs : BUBBLE_DURATION_MS);
   entry.root.classList.remove("hidden");
@@ -6323,8 +6331,47 @@ function isTennisMainSpectator() {
   );
 }
 
+/** Sideline fans (and Main) supporting a team. */
+function listTennisFans(team = null) {
+  const out = [];
+  for (const o of pickables) {
+    if (o === player?.mesh) continue;
+    if (o.userData?.kind !== "character") continue;
+    if (!o.userData?.tennisFan) continue;
+    if (o.visible === false) continue;
+    if (team && o.userData.tennisSupportTeam !== team) continue;
+    out.push(o);
+  }
+  if (
+    player?.mesh?.userData?.tennisFan &&
+    player.mesh.visible !== false &&
+    (!team || player.mesh.userData.tennisSupportTeam === team)
+  ) {
+    out.push(player.mesh);
+  }
+  return out;
+}
+
+/** A few supporting fans show like ❤ / gift 🎁 bubbles. */
+function showTennisFanReactBubbles(team, kind) {
+  if (team !== "a" && team !== "b") return;
+  const fans = shuffleInPlace([...listTennisFans(team)]);
+  if (!fans.length) return;
+  const isGift = kind === "gift";
+  const n = Math.min(fans.length, isGift ? 5 : 8);
+  const icon = isGift ? "🎁" : "❤️";
+  for (let i = 0; i < n; i++) {
+    speakAs(fans[i], icon, {
+      react: true,
+      success: isGift,
+      holdMs: isGift ? 2200 : 1600,
+    });
+  }
+}
+
 function triggerTennisTeamLike(team) {
   const until = performance.now() + 2800;
+  showTennisFanReactBubbles(team, "like");
   for (const { obj, isPlayer } of listTennisCourtActors(team)) {
     if (isPlayer) {
       obj.userData.tennisRunUntil = until;
@@ -6339,6 +6386,7 @@ function triggerTennisTeamLike(team) {
 
 function triggerTennisTeamGift(team) {
   if (team !== "a" && team !== "b") return;
+  showTennisFanReactBubbles(team, "gift");
   const actors = listTennisCourtActors(team);
   if (!actors.length) return;
   // Team-wide: whoever on this side hits next gets the hard shot (not only closest-at-gift)
@@ -6400,6 +6448,35 @@ async function endTennisMatch(winner) {
   tennisFanDanceGen += 1;
   const danceMs = 5000;
   const face = winner === "a" ? "south" : "north";
+  const loser = winner === "a" ? "b" : "a";
+  // Stop ALL court walk/run first — losers were stuck mid-chase in walk anim
+  clearNpcScriptMoves();
+  for (const { obj, team } of listTennisCourtActors()) {
+    clearNpcScriptMoves(obj);
+    stopCharacterGait(obj);
+    obj.userData.formationSlot = null;
+    obj.userData.tennisRunUntil = 0;
+    obj.userData.formationMove = false;
+    const home = obj.userData?.tennisHome;
+    const idleDir =
+      home?.dir || (team === "b" ? "north" : "south");
+    if (home) {
+      obj.position.set(home.x, 0, home.z);
+      syncDepth(obj);
+    }
+    obj.userData.dir = idleDir;
+    obj.userData.anim = null;
+    obj.userData.animName = null;
+    if (team === loser) {
+      try {
+        await attachIdle(obj, obj.userData.path, idleDir, {
+          allowSouthFallback: true,
+        });
+      } catch {
+        applyFacing(obj, idleDir);
+      }
+    }
+  }
   const winners = listTennisCourtActors(winner);
   for (const { obj, isPlayer } of winners) {
     if (isPlayer) {

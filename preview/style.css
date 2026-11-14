@@ -1044,6 +1044,30 @@ body {
   border-top-color: #1a9f4b;
 }
 
+/* Tennis fan like / gift reaction icons */
+.world-label-bubble.bubble-react {
+  font-size: 16px;
+  line-height: 1;
+  padding: 4px 8px;
+  min-width: 1.4em;
+}
+.world-label-bubble.bubble-react-like {
+  background: #fff0f3;
+  color: #e11d48;
+  box-shadow: 0 3px 12px #e11d4840;
+}
+.world-label-bubble.bubble-react-like::after {
+  border-top-color: #fff0f3;
+}
+.world-label-bubble.bubble-react-gift {
+  background: #fff7e8;
+  color: #c2410c;
+  box-shadow: 0 3px 12px #ea580c40;
+}
+.world-label-bubble.bubble-react-gift::after {
+  border-top-color: #fff7e8;
+}
+
 .world-label-bubble.hidden {
   display: none;
 }
