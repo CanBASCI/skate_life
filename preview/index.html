@@ -41,6 +41,13 @@
             <button type="button" id="street-walk-fit">Görünüme sığdır</button>
             <button type="button" id="street-walk-reset">Sıfırla</button>
           </div>
+          <div id="tennis-team-zones" class="hidden" title="Tenis A/B play collision — sadece /play sırasında geçerli; dışarıda court walkZone">
+            <span class="crowd-label">play col</span>
+            <label class="insp-check"><input id="tennis-zone-a-on" type="checkbox" /> A düzenle</label>
+            <label class="insp-check"><input id="tennis-zone-b-on" type="checkbox" /> B düzenle</label>
+            <button type="button" id="tennis-zone-fit">Görünüme sığdır</button>
+            <button type="button" id="tennis-zone-reset">Sıfırla</button>
+          </div>
           <div id="night-club-col" class="hidden" title="Night club walk alanını göster / gizle — collision aynı kalır">
             <button type="button" data-nccol="show">Club col göster</button>
             <button type="button" data-nccol="hide" class="active">Club col gizle</button>
@@ -77,6 +84,11 @@
             <span class="crowd-label">oyuncu</span>
             <button type="button" data-tncast="2" title="1v1 — 2 random karakter">2</button>
             <button type="button" data-tncast="4" title="2v2 — 4 random karakter">4</button>
+            <div class="tennis-restart-row">
+              <span class="crowd-label">oyunu yeniden başlat</span>
+              <button type="button" data-tnrestart="same" title="Aynı sahadaki oyuncularla maçı baştan">aynı karakterler</button>
+              <button type="button" data-tnrestart="new" title="Yeni random oyuncularla maçı baştan">yeni karakterler</button>
+            </div>
             <span class="crowd-label">live</span>
             <button type="button" data-tnsim="like-a" title="Takım A +1 like">Like A</button>
             <button type="button" data-tnsim="like-b" title="Takım B +1 like">Like B</button>
@@ -126,7 +138,7 @@
         </div>
         <div id="chat-dock">
           <div id="chat-cmds" aria-label="Oyun komutları">
-            <button type="button" data-cmd="/play" title="Red light: dizil ve oyunu başlat">/play</button>
+            <button type="button" data-cmd="/play" title="Red light / tenis: dizil ve başlat">/play</button>
             <button type="button" data-cmd="/R3" title="Sağa 3 birim (red light: 3 sn)">/R3</button>
             <button type="button" data-cmd="/N2" title="Kuzeye 2 birim (red light: 2 sn)">/N2</button>
             <button type="button" data-cmd="/dance" title="Dans">/dance</button>

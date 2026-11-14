@@ -341,6 +341,49 @@ body {
   border-color: var(--accent);
 }
 
+#tennis-team-zones {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+#tennis-team-zones.hidden {
+  display: none;
+}
+
+#tennis-team-zones .insp-check {
+  margin: 0;
+  gap: 6px;
+  color: var(--ink);
+  font-size: 11px;
+}
+
+#tennis-zone-reset,
+#tennis-zone-fit {
+  appearance: none;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 3px 8px;
+  background: #1c2a22;
+  color: var(--accent);
+  font: inherit;
+  font-size: 10px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+#tennis-zone-reset:hover,
+#tennis-zone-fit:hover {
+  border-color: var(--accent);
+}
+
 #night-club-col {
   display: flex;
   flex-wrap: wrap;
@@ -473,6 +516,31 @@ body {
   color: var(--ink);
   background: #1c2a22;
   color: var(--accent);
+}
+
+.tennis-restart-row {
+  flex: 1 1 100%;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  padding-top: 2px;
+  border-top: 1px solid #152018;
+  margin-top: 2px;
+}
+
+#tennis-live-sim button[data-tnrestart] {
+  border: 1px solid #2a3d32;
+  border-radius: 8px;
+  padding: 4px 8px;
+  font-size: 10px;
+  color: var(--ink);
+  background: #121a15;
+}
+
+#tennis-live-sim button[data-tnrestart]:hover {
+  border-color: var(--accent);
+  background: #1c2a22;
 }
 
 #tennis-live-stats {

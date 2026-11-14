@@ -742,7 +742,10 @@ export class Player {
 
     const crouch =
       this.keys.has("KeyC") || this.keys.has("ControlLeft") || this.keys.has("ControlRight");
-    const wantRun = this.keys.has("ShiftLeft") || this.keys.has("ShiftRight");
+    const wantRun =
+      !!this.forceRun ||
+      this.keys.has("ShiftLeft") ||
+      this.keys.has("ShiftRight");
     const { dx, dz } = this.inputVector();
     const moving = dx !== 0 || dz !== 0;
 

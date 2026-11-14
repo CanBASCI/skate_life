@@ -95,6 +95,23 @@ async function restartSession() {
     persistentParty = [];
     partySnapshotEnabled = false;
     tennisCastCount = 0;
+    tennisPlayLinedUp = false;
+    tennisMatchActive = false;
+    tennisMatchOver = false;
+    tennisMatchEnding = false;
+    tennisMatchRoster = null;
+    if (tennisMatchEndTimer) {
+      clearTimeout(tennisMatchEndTimer);
+      tennisMatchEndTimer = null;
+    }
+    if (tennisFanDanceTimer) {
+      clearTimeout(tennisFanDanceTimer);
+      tennisFanDanceTimer = null;
+    }
+    tennisFanDanceGen += 1;
+    tennisRally.scoreA = 0;
+    tennisRally.scoreB = 0;
+    resetTennisRallyState();
     truthDareCrowdCount = 0;
     redLightCastCount = 0;
     truthDareActive = false;
@@ -235,6 +252,44 @@ const TENNIS_LIKE_POWER = 1;
 const TENNIS_GIFT_POWER = 12;
 /** 0 | 2 | 4 — random cast size on tennis court */
 let tennisCastCount = 0;
+/** After /play lineup on tennis court. */
+let tennisPlayLinedUp = false;
+/** True from the moment /play starts until post-match reset (blocks re-/play mid-await). */
+let tennisMatchActive = false;
+/** Match finished (winner dance / reset pending). */
+let tennisMatchOver = false;
+let tennisMatchEnding = false;
+/** @type {ReturnType<typeof setTimeout> | null} */
+let tennisMatchEndTimer = null;
+/** Bumps when scoring fans start/stop dance so stale timeouts don't clobber. */
+let tennisFanDanceGen = 0;
+/** @type {ReturnType<typeof setTimeout> | null} */
+let tennisFanDanceTimer = null;
+/** Last court NPCs + fans for “aynı karakterler” restart. */
+let tennisMatchRoster = null;
+const TENNIS_WIN_SCORE = 10;
+/** NPC AI retarget clock */
+let tennisAiAcc = 0;
+/** Gift/hard-hit aura following the tennis ball. */
+let tennisGiftFx = null;
+/**
+ * Tennis rally rules: ball stays in court walkZone;
+ * 2 bounces in one team zone OR 2 bounces while outside A∪B → point.
+ */
+const tennisRally = {
+  zone: null, // 'a' | 'b' | null (out of team zones)
+  zoneBounces: 0,
+  outBounces: 0,
+  lastHitTeam: null,
+  wasFast: false,
+  scoreA: 0,
+  scoreB: 0,
+  lockUntil: 0,
+  /** Blocks instant back-and-forth volleys at the net */
+  hitLockUntil: 0,
+  /** Gift: next successful hit by this team is hard ('a'|'b'|null) */
+  hardHitTeam: null,
+};
 const redLightCastEl = document.getElementById("red-light-cast");
 const TRUTH_DARE_CROWD_COUNTS = [5, 10, 20, 30, 40, 50];
 const RED_LIGHT_CAST_MAX = 10;
@@ -488,6 +543,8 @@ let catalogItemById = new Map();
 let placing = null; // catalog item while dragging from palette
 /** @type {{ x:number, z:number } | null} */
 let dragFrom = null;
+/** Short tap on court during tennis /play → hit ball */
+let tennisTapPtr = null;
 /** @type {{ undo:()=>void, discard?:()=>void }[]} */
 const undoStack = [];
 const UNDO_MAX = 60;
@@ -2002,16 +2059,49 @@ async function handleChatCommand(raw) {
   }
 
   if (lower === "/play") {
-    if (!isRedLightScene()) {
-      statusEl.textContent = "/play sadece red light sahnesinde";
+    if (isRedLightScene()) {
+      if (redLightGame.active || redLightGame.pendingStart) {
+        statusEl.textContent = "Red light zaten başlıyor / oynanıyor";
+        return;
+      }
+      await startRedLightPlay();
       return;
     }
-    if (redLightGame.active || redLightGame.pendingStart) {
-      statusEl.textContent = "Red light zaten başlıyor / oynanıyor";
+    if (isTennisScene()) {
+      if (tennisMatchActive || tennisPlayLinedUp || tennisMatchEnding) {
+        statusEl.textContent =
+          tennisMatchEnding || tennisMatchOver
+            ? "Maç bitiyor · dans sonrası /play"
+            : `Oyun sürüyor · ${tennisRally.scoreA}-${tennisRally.scoreB} · ilk ${TENNIS_WIN_SCORE} · bitmeden /play yok`;
+        return;
+      }
+      await startTennisPlay();
       return;
     }
-    await startRedLightPlay();
+    statusEl.textContent = "/play · red light veya tenis sahnesinde";
     return;
+  }
+
+  // Tennis match: court cast — no chat commands; fans + Main — only /dance /stop
+  if (
+    isTennisScene() &&
+    (tennisMatchActive || tennisPlayLinedUp || tennisMatchEnding) &&
+    lower.startsWith("/")
+  ) {
+    const isMain = !!(player?.mesh && who === player.mesh);
+    const isFan = !!who.userData?.tennisFan || isMain;
+    const isCourt =
+      !isMain &&
+      (!!who.userData?.tennisTeam ||
+        (!!who.userData?.tennisCast && !who.userData?.tennisFan));
+    if (isCourt) {
+      statusEl.textContent = `${name}: maçtayken komut yok`;
+      return;
+    }
+    if (isFan && lower !== "/dance" && lower !== "/stop") {
+      statusEl.textContent = `${name}: tribün · sadece /dance /stop`;
+      return;
+    }
   }
 
   if (lower === "/dance") {
@@ -2692,10 +2782,110 @@ function streetWalkActive() {
   return isWalkZoneScene() && !!ensureStreetWalkZone().enabled;
 }
 
+function defaultTennisTeamZonePts(team) {
+  // A = üst (low Z) faces south; B = alt (high Z) faces north
+  if (team === "b") {
+    return [
+      [-192.91, 42.63],
+      [198.3, 38.96],
+      [234.31, 377.11],
+      [-229.26, 378.75],
+    ];
+  }
+  return [
+    [-171.49, -274.2],
+    [168.21, -271.4],
+    [200.89, 34.71],
+    [-194.86, 29.3],
+  ];
+}
+
+function ensureTennisTeamZone(team) {
+  const t = team === "b" ? "b" : "a";
+  if (!tennisTeamZones[t]) tennisTeamZones[t] = { enabled: true, pts: [] };
+  const z = tennisTeamZones[t];
+  if (!Array.isArray(z.pts) || z.pts.length < 3) {
+    z.pts = defaultTennisTeamZonePts(t).map((p) => [...p]);
+  }
+  if (z.enabled == null) z.enabled = true;
+  return z;
+}
+
+function parseZonePts(raw) {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((p) => {
+      if (Array.isArray(p) && p.length >= 2) return [Number(p[0]), Number(p[1])];
+      if (p && Number.isFinite(Number(p.x)) && Number.isFinite(Number(p.z))) {
+        return [Number(p.x), Number(p.z)];
+      }
+      return null;
+    })
+    .filter(Boolean);
+}
+
+function applyTennisTeamZones(data) {
+  tennisTeamZones = {
+    a: { enabled: true, pts: defaultTennisTeamZonePts("a") },
+    b: { enabled: true, pts: defaultTennisTeamZonePts("b") },
+  };
+  if (!data || typeof data !== "object") return;
+  for (const t of ["a", "b"]) {
+    const src = data[t];
+    if (!src || typeof src !== "object") continue;
+    const pts = parseZonePts(src.pts);
+    tennisTeamZones[t] = {
+      enabled: src.enabled !== false,
+      pts: pts.length >= 3 ? pts : defaultTennisTeamZonePts(t),
+    };
+  }
+}
+
+function serializeTennisTeamZones() {
+  if (!isTennisScene()) return undefined;
+  const out = {};
+  for (const t of ["a", "b"]) {
+    const z = ensureTennisTeamZone(t);
+    out[t] = {
+      enabled: !!z.enabled,
+      pts: z.pts.map(([x, zz]) => [roundSceneNum(x), roundSceneNum(zz)]),
+    };
+  }
+  return out;
+}
+
+/** During tennis /play — return this actor's A/B poly, else null (use court walkZone). */
+function tennisPlayTeamPts(obj) {
+  if (!isTennisScene() || !tennisPlayLinedUp || !obj) return null;
+  const team =
+    obj === player?.mesh
+      ? player.mesh.userData?.tennisTeam
+      : obj.userData?.tennisTeam;
+  if (team !== "a" && team !== "b") return null;
+  const z = ensureTennisTeamZone(team);
+  if (!z.enabled || !z.pts?.length) return null;
+  return z.pts;
+}
+
+function editablePolyZone() {
+  if (tennisZoneEditTeam) return ensureTennisTeamZone(tennisZoneEditTeam);
+  return ensureStreetWalkZone();
+}
+
 /** Checkbox: show edit gizmo only — does not turn collision on/off. */
 let streetWalkEditOpen = false;
 /** Night club walk poly outline show/hide (collision stays as col.enabled). */
 let nightClubColVisible = false;
+/**
+ * Tennis play-only team polys (A/B). Outside /play the court walkZone applies.
+ * @type {{ a: { enabled: boolean, pts: number[][] }, b: { enabled: boolean, pts: number[][] } }}
+ */
+let tennisTeamZones = {
+  a: { enabled: true, pts: [] },
+  b: { enabled: true, pts: [] },
+};
+/** Which team zone gizmo is open for edit: 'a' | 'b' | null */
+let tennisZoneEditTeam = null;
 
 /** True if most zone corners project off the canvas (can't grab handles). */
 function streetWalkHandlesOffscreen() {
@@ -2832,17 +3022,30 @@ function pointInCol(px, pz, box, inset = 0) {
 }
 
 /**
- * Walkable-zone: destination must stay inside (street / red_light).
+ * Walkable-zone: destination must stay inside (street / red_light / tennis).
+ * Tennis /play: each actor uses their A/B team poly when set.
  * Balls are clamped in physics; night_club uses object col polys.
  */
-function containmentBlocksFor(fromX, fromZ, px, pz, radius) {
+/** Feet stay this far inside walk/team edges — stops corner wedge → stuck snap. */
+function walkZoneEdgeInset(radius = NPC_WALK_RADIUS) {
+  return Math.max(18, (radius || NPC_WALK_RADIUS) * 0.95 + 6);
+}
+
+function containmentBlocksFor(fromX, fromZ, px, pz, radius, forObj = null) {
   const r = Math.max(0, radius || 0);
-  if (streetWalkActive()) {
+  // Sideline fans stand outside A/B (+ walkZone) — don't shove them in
+  if (forObj?.userData?.tennisFan) return false;
+  const teamPts = tennisPlayTeamPts(forObj);
+  const edgePad = walkZoneEdgeInset(r || NPC_WALK_RADIUS);
+  if (teamPts?.length) {
+    if (!pointInPoly(px, pz, teamPts)) return true;
+    if (r > 0 && distToPolyEdge(px, pz, teamPts) < edgePad) return true;
+  } else if (streetWalkActive()) {
     const pts = ensureStreetWalkZone().pts;
     if (pts?.length) {
       // Always require feet to remain inside — no leaving the play area
       if (!pointInPoly(px, pz, pts)) return true;
-      if (r > 0 && distToPolyEdge(px, pz, pts) < r * 0.35) return true;
+      if (r > 0 && distToPolyEdge(px, pz, pts) < edgePad) return true;
     }
   }
   for (const obj of pickables) {
@@ -2856,18 +3059,22 @@ function containmentBlocksFor(fromX, fromZ, px, pz, radius) {
   return false;
 }
 
-/** Pull a world XZ point back inside the active walk zone. */
-function projectIntoWalkZone(x, z, radius = 0) {
-  if (!streetWalkActive()) return { x, z };
-  const pts = ensureStreetWalkZone().pts;
+/** Pull a world XZ point back inside the active walk zone (or actor team zone). */
+function projectIntoWalkZone(x, z, radius = 0, forObj = null) {
+  const teamPts = tennisPlayTeamPts(forObj);
+  const pts = teamPts?.length
+    ? teamPts
+    : streetWalkActive()
+      ? ensureStreetWalkZone().pts
+      : null;
   if (!pts?.length) return { x, z };
-  const inset = Math.max(2, radius * 0.35);
+  const inset = walkZoneEdgeInset(radius || NPC_WALK_RADIUS);
   if (pointInPoly(x, z, pts) && distToPolyEdge(x, z, pts) >= inset) {
     return { x, z };
   }
   const hit = closestPolyEdgeHit(x, z, pts);
   if (!hit) return { x, z };
-  // hit.nx is outward → step inward
+  // hit.nx is outward → step inward (extra pad keeps feet off corners)
   return { x: hit.qx - hit.nx * inset, z: hit.qz - hit.nz * inset };
 }
 
@@ -2875,7 +3082,7 @@ function containmentBlocks(px, pz, radius) {
   if (!player?.mesh) return false;
   const cx = player.mesh.position.x;
   const cz = player.mesh.position.z + FEET_NUDGE_Z;
-  return containmentBlocksFor(cx, cz, px, pz, radius);
+  return containmentBlocksFor(cx, cz, px, pz, radius, player.mesh);
 }
 
 /** Same blockers Main uses — solids, rooms, 9:16 frame, other cast. */
@@ -2897,7 +3104,7 @@ function actorBlocked(obj, px, pz, radius) {
   // red_light: soft-push only (no hard character block)
   return (
     solidBlocked(px, pz, r) ||
-    containmentBlocksFor(fromX, fromZ, px, pz, r) ||
+    containmentBlocksFor(fromX, fromZ, px, pz, r, obj) ||
     viewBoundsBlock(px, pz, r) ||
     (!formation &&
       !charsCanPushEachOther() &&
@@ -2940,8 +3147,8 @@ function viewBoundsBlock(px, pz, radius = 22) {
 }
 
 /** Soft personal space at feet — stops cast stacking on the same pixel. */
-const CHAR_SEP_MIN = 30;
-const CHAR_SEP_PUSH = 70;
+const CHAR_SEP_MIN = 34;
+const CHAR_SEP_PUSH = 78;
 /** red_light / football / tennis: no hard char-block — movers shove via soft-sep. */
 function charsCanPushEachOther(id = activeSceneId) {
   return isRedLightScene(id) || isPlayfieldScene(id);
@@ -2994,7 +3201,7 @@ function trySepMove(obj, dx, dz) {
   const feet = (x, z) => ({ x, z: z + FEET_NUDGE_Z });
   const blocked = (x, z) =>
     solidBlocked(x, z, r) ||
-    containmentBlocksFor(feet(x0, z0).x, feet(x0, z0).z, x, z, r);
+    containmentBlocksFor(feet(x0, z0).x, feet(x0, z0).z, x, z, r, obj);
   if (dx && !blocked(nx, z0 + FEET_NUDGE_Z)) obj.position.x = nx;
   if (dz && !blocked(obj.position.x, nz + FEET_NUDGE_Z)) {
     obj.position.z = nz;
@@ -3026,7 +3233,7 @@ function tickCharacterSeparation(dt) {
     }
   }
   const pushMode = charsCanPushEachOther();
-  const sepMin = pushMode ? 36 : CHAR_SEP_MIN;
+  const sepMin = pushMode ? 44 : CHAR_SEP_MIN;
   const sepPush = pushMode ? CHAR_SEP_PUSH * 2.2 : CHAR_SEP_PUSH;
   const actors = listSeparableCharacters().filter(
     (o) => o !== dragging && !o.userData?.formationSlot && !o.userData?.formationMove,
@@ -4054,13 +4261,17 @@ function applyFacing(obj, dir) {
   const cached = d.rotTextures?.[dir];
   if (cached) {
     d.dir = dir;
+    // Stale walk/idle frames would overwrite this on the next tickAnims
+    if (d.anim && d.anim.dir !== dir) {
+      d.anim = null;
+      d.animName = null;
+    }
     setMap(obj, cached);
     return true;
   }
   if (d.dirs?.includes(dir)) {
-    // kick async load; still mark desired dir
-    d.dir = dir;
-    setDirection(obj, dir);
+    // Do not set d.dir before setDirection — it early-returns when equal
+    setDirection(obj, dir, { recordUndo: false });
     return true;
   }
   return false;
@@ -4117,7 +4328,10 @@ async function setDirection(obj, dir, { recordUndo = true } = {}) {
   const d = obj.userData;
   if (!d.dirs?.includes(dir) && !d.rotTextures?.[dir]) return;
   const prevDir = d.dir;
-  if (prevDir === dir) return;
+  const visualOk =
+    d.anim?.dir === dir ||
+    (!d.anim && d.rotTextures?.[dir] && obj.material?.map === d.rotTextures[dir]);
+  if (prevDir === dir && visualOk) return;
   if (recordUndo && obj.userData?.editable) {
     pushUndo({
       undo() {
@@ -4483,6 +4697,8 @@ function serializeScene() {
   };
   const wz = serializeWalkZone();
   if (wz) out.walkZone = wz;
+  const teamZones = serializeTennisTeamZones();
+  if (teamZones) out.teamZones = teamZones;
   // Street traffic lane Z — sarı east (sol→sağ) / mavi west (sağ→sol)
   if (isStreetLikeScene()) {
     out.trafficLanes = {
@@ -5084,6 +5300,9 @@ async function loadScene(data, { persist = true, carryParty = true } = {}) {
     }
     clearEditableSceneObjects();
     applyWalkZone(isWalkZoneScene() ? data.walkZone : null);
+    if (isTennisScene()) applyTennisTeamZones(data.teamZones);
+    else applyTennisTeamZones(null);
+    tennisZoneEditTeam = null;
     syncStreetWalkUi();
     if (player?.mesh && data.player) {
       player.mesh.position.x = Number(data.player.x) || 0;
@@ -5169,8 +5388,25 @@ async function loadScene(data, { persist = true, carryParty = true } = {}) {
       stopRedLightGame({ clearDq: true });
     }
     if (isTennisScene()) {
+      tennisCastCount = 0;
+      tennisPlayLinedUp = false;
+      tennisMatchActive = false;
+      tennisMatchOver = false;
+      tennisMatchEnding = false;
+      tennisMatchRoster = null;
+      if (tennisMatchEndTimer) {
+        clearTimeout(tennisMatchEndTimer);
+        tennisMatchEndTimer = null;
+      }
+      resetTennisRallyState();
+      clearTennisFans();
       syncTennisLiveSimUi();
       ensureTennisFootballBall().catch(() => {});
+      const ready = listPartyCharacters().length + (player?.mesh ? 1 : 0);
+      statusEl.textContent =
+        ready > 1
+          ? `Tenis · ${ready} kişi hazır · /play ile 1v1 veya 2v2`
+          : `Tenis · /play ile başla`;
     }
   } finally {
     sceneLoading = false;
@@ -5437,7 +5673,265 @@ function syncRedLightCastUi() {
 
 function formatTennisLiveStats() {
   const { a, b } = tennisLive;
-  return `A ${a.likes}·${a.gifts} (${a.power}) · B ${b.likes}·${b.gifts} (${b.power})`;
+  const score =
+    tennisPlayLinedUp || tennisRally.scoreA || tennisRally.scoreB
+      ? ` · skor ${tennisRally.scoreA}-${tennisRally.scoreB} (ilk ${TENNIS_WIN_SCORE})`
+      : "";
+  return `A ${a.likes}·${a.gifts} (${a.power}) · B ${b.likes}·${b.gifts} (${b.power})${score}`;
+}
+
+function resetTennisRallyState() {
+  tennisRally.zone = null;
+  tennisRally.zoneBounces = 0;
+  tennisRally.outBounces = 0;
+  tennisRally.lastHitTeam = null;
+  tennisRally.wasFast = false;
+  tennisRally.lockUntil = 0;
+  tennisRally.hitLockUntil = 0;
+  tennisRally.hardHitTeam = null;
+}
+
+function ballTennisTeamAt(x, z) {
+  for (const t of ["a", "b"]) {
+    const zone = ensureTennisTeamZone(t);
+    if (!zone.enabled || !zone.pts?.length) continue;
+    if (pointInPoly(x, z, zone.pts)) return t;
+  }
+  return null;
+}
+
+/** Scoring team's sideline fans (+ Main if supporting) dance 2s. */
+function celebrateTennisPointFans(scorer) {
+  if (scorer !== "a" && scorer !== "b") return;
+  const gen = ++tennisFanDanceGen;
+  if (tennisFanDanceTimer) {
+    clearTimeout(tennisFanDanceTimer);
+    tennisFanDanceTimer = null;
+  }
+  const face = scorer === "a" ? "south" : "north";
+  const danced = [];
+  for (const o of pickables) {
+    if (o === player?.mesh) continue;
+    if (o.userData?.kind !== "character") continue;
+    if (!o.userData?.tennisFan) continue;
+    if (o.userData?.tennisSupportTeam !== scorer) continue;
+    if (o.visible === false) continue;
+    clearNpcScriptMoves(o);
+    stopCharacterGait(o);
+    o.userData.anim = null;
+    o.userData.animName = null;
+    danced.push(o);
+    attachDance(o, o.userData.path, face, { allowSouthFallback: true }).catch(
+      () => {},
+    );
+  }
+  const mainSupports =
+    !!player?.mesh?.userData?.tennisFan &&
+    player.mesh.userData.tennisSupportTeam === scorer;
+  if (mainSupports) {
+    player.facing = face;
+    player.stopActions?.();
+    player.startDance?.();
+    player.applyFrame?.();
+  }
+  tennisFanDanceTimer = setTimeout(() => {
+    tennisFanDanceTimer = null;
+    if (gen !== tennisFanDanceGen) return;
+    for (const o of danced) {
+      if (!o?.userData?.tennisFan) continue;
+      o.userData.dancing = false;
+      const dir = o.userData.dir || face;
+      attachIdle(o, o.userData.path, dir, { allowSouthFallback: true }).catch(
+        () => {},
+      );
+    }
+    if (mainSupports && player?.busy === "dance") {
+      player.stopDance?.();
+      player.facing = face;
+      player.applyFrame?.();
+    }
+  }, 2000);
+}
+
+function awardTennisPoint(scorer, reason) {
+  if (scorer !== "a" && scorer !== "b") return;
+  if (tennisMatchOver || tennisMatchEnding) return;
+  if (performance.now() < tennisRally.lockUntil) return;
+  if (scorer === "a") tennisRally.scoreA += 1;
+  else tennisRally.scoreB += 1;
+  tennisRally.lockUntil = performance.now() + 1600;
+  statusEl.textContent = `Sayı ${scorer.toUpperCase()}! ${tennisRally.scoreA}-${tennisRally.scoreB} · ${reason}`;
+  syncTennisLiveSimUi();
+  tennisRally.zoneBounces = 0;
+  tennisRally.outBounces = 0;
+  tennisRally.zone = scorer;
+  tennisRally.wasFast = false;
+  tennisRally.lastHitTeam = null;
+  celebrateTennisPointFans(scorer);
+  if (
+    tennisRally.scoreA >= TENNIS_WIN_SCORE ||
+    tennisRally.scoreB >= TENNIS_WIN_SCORE
+  ) {
+    const winner = tennisRally.scoreA >= TENNIS_WIN_SCORE ? "a" : "b";
+    endTennisMatch(winner).catch((err) => console.warn(err));
+    return;
+  }
+  // Point won → everyone to home slots; ball starts at random scorer player
+  resetTennisAfterPoint(scorer).catch((err) => console.warn(err));
+}
+
+/** After a point: snap court cast to first lineup spots; serve from random scorer. */
+async function resetTennisAfterPoint(scorer) {
+  if (!tennisPlayLinedUp || tennisMatchOver || tennisMatchEnding) return;
+  clearNpcScriptMoves();
+  if (player?.scriptMove) player.scriptMove = null;
+  if (player) player.forceRun = false;
+
+  const jobs = [];
+  for (const { obj, team } of listTennisCourtActors()) {
+    const home = obj.userData?.tennisHome;
+    if (!home) continue;
+    if (obj === player?.mesh) continue;
+    clearNpcScriptMoves(obj);
+    stopCharacterGait(obj);
+    obj.position.set(home.x, 0, home.z);
+    obj.userData.formationSlot = null;
+    obj.userData.tennisRunUntil = 0;
+    obj.userData.tennisHardHitPending = false;
+    obj.userData.dancing = false;
+    const dir = home.dir || (team === "b" ? "north" : "south");
+    obj.userData.dir = dir;
+    obj.userData.anim = null;
+    obj.userData.animName = null;
+    jobs.push(
+      attachIdle(obj, obj.userData.path, dir, { allowSouthFallback: true }).catch(
+        () => applyFacing(obj, dir),
+      ),
+    );
+    syncDepth(obj);
+  }
+  await Promise.all(jobs);
+  parkMainAsTennisSpectator();
+
+  const servers = listTennisCourtActors(scorer);
+  const pick =
+    servers.length > 0
+      ? servers[Math.floor(Math.random() * servers.length)]
+      : null;
+  const ball = findTennisBall();
+  if (ball && pick) {
+    const towardNet = scorer === "a" ? 22 : -22;
+    ball.position.x = pick.obj.position.x;
+    ball.position.z = pick.obj.position.z + towardNet;
+    ball.position.y = 0;
+    if (ball.userData.physics) {
+      ball.userData.physics.vx = 0;
+      ball.userData.physics.vz = 0;
+      ball.userData.physics.vy = 0;
+      ball.userData.physics.tennisArc = null;
+    }
+    syncDepth(ball);
+  } else if (ball) {
+    placeTennisBallServeInA(ball);
+  }
+  tennisRally.zone = scorer;
+  tennisRally.zoneBounces = 0;
+  tennisRally.outBounces = 0;
+  tennisRally.lastHitTeam = null;
+  tennisAiAcc = 1;
+  statusEl.textContent = `Servis ${scorer.toUpperCase()} · ${tennisRally.scoreA}-${tennisRally.scoreB} · ilk ${TENNIS_WIN_SCORE}`;
+}
+
+/** Hit resets bounce chain — scorer side remembered for outs. */
+function noteTennisBallHit(team) {
+  if (!tennisPlayLinedUp) return;
+  if (team === "a" || team === "b") tennisRally.lastHitTeam = team;
+  tennisRally.zoneBounces = 0;
+  tennisRally.outBounces = 0;
+  tennisRally.wasFast = true;
+  tennisRally.hitLockUntil = performance.now() + 580;
+}
+
+const TENNIS_GRAVITY = 720;
+const TENNIS_BOUNCE_REST = 0.52;
+/** Max feet→ball distance to allow a hit (was ~100 — too far). */
+const TENNIS_HIT_REACH = 56;
+/** Max ball Y to swing — same for volley and after 1st bounce. */
+const TENNIS_HIT_MAX_Y = 28;
+
+/** Hit window: 0 or 1 bounce → 28; after 2nd → none. */
+function tennisHitMaxYNow() {
+  const b = tennisRally.zoneBounces || 0;
+  if (b <= 1) return TENNIS_HIT_MAX_Y;
+  return 0;
+}
+
+/** Random XZ inside a team poly (rejection in AABB). */
+function randomPointInTeamZone(team) {
+  const z = ensureTennisTeamZone(team);
+  const pts = z.pts;
+  if (!pts?.length) return { x: 0, z: team === "a" ? -120 : 220 };
+  const b = tennisZoneBounds(team);
+  const pad = 28;
+  const minX = b.minX + pad;
+  const maxX = b.maxX - pad;
+  const minZ = b.minZ + pad;
+  const maxZ = b.maxZ - pad;
+  for (let i = 0; i < 48; i++) {
+    const x = minX + Math.random() * Math.max(8, maxX - minX);
+    const zz = minZ + Math.random() * Math.max(8, maxZ - minZ);
+    if (pointInPoly(x, zz, pts)) return { x, z: zz };
+  }
+  let sx = 0;
+  let sz = 0;
+  for (const [x, zz] of pts) {
+    sx += x;
+    sz += zz;
+  }
+  return { x: sx / pts.length, z: sz / pts.length };
+}
+
+/**
+ * Tennis rules while /play:
+ * - Ball arcs in air; 2 ground bounces in one team zone without a hit → point.
+ * - Outside A∪B: 2 wall/edge bounces → point (error by last hitter).
+ */
+function tickTennisBallRules(ball, phy, wallBounced, groundHit = false) {
+  if (!isTennisScene() || !tennisPlayLinedUp) return;
+  if (!ball?.userData?.tennisBall || !phy) return;
+  if (performance.now() < tennisRally.lockUntil) return;
+
+  const x = ball.position.x;
+  const z = ball.position.z;
+  const team = ballTennisTeamAt(x, z);
+
+  if (team !== tennisRally.zone) {
+    tennisRally.zone = team;
+    if (team) tennisRally.outBounces = 0;
+  }
+
+  if (groundHit && team) {
+    tennisRally.zoneBounces += 1;
+    tennisRally.outBounces = 0;
+    statusEl.textContent = `Sekme ${tennisRally.zoneBounces}/2 · takım ${team.toUpperCase()}`;
+    if (tennisRally.zoneBounces >= 2) {
+      const scorer = team === "a" ? "b" : "a";
+      awardTennisPoint(scorer, `2 sekme · ${team.toUpperCase()} sahası`);
+    }
+  } else if (!team && wallBounced) {
+    tennisRally.outBounces += 1;
+    tennisRally.zoneBounces = 0;
+    statusEl.textContent = `Dışarı sekme ${tennisRally.outBounces}/2`;
+    if (tennisRally.outBounces >= 2) {
+      const scorer =
+        tennisRally.lastHitTeam === "a"
+          ? "b"
+          : tennisRally.lastHitTeam === "b"
+            ? "a"
+            : "a";
+      awardTennisPoint(scorer, "2 dışarı sekme");
+    }
+  }
 }
 
 function syncTennisLiveSimUi() {
@@ -5468,6 +5962,10 @@ function simulateTennisLive(kind) {
     statusEl.textContent = "Tenis live sim sıfırlandı";
     return;
   }
+  if (!tennisPlayLinedUp || tennisMatchOver || tennisMatchEnding) {
+    statusEl.textContent = "Like/hediye · önce /play ile maç başlat";
+    return;
+  }
   const team = kind.endsWith("-a") ? "a" : kind.endsWith("-b") ? "b" : null;
   if (!team) return;
   const side = tennisLive[team];
@@ -5475,11 +5973,13 @@ function simulateTennisLive(kind) {
   if (kind.startsWith("like-")) {
     side.likes += 1;
     side.power += TENNIS_LIKE_POWER;
-    statusEl.textContent = `Like → Takım ${label} · güç ${side.power}`;
+    triggerTennisTeamLike(team);
+    statusEl.textContent = `Like → Takım ${label} koşuyor · güç ${side.power}`;
   } else if (kind.startsWith("gift-")) {
     side.gifts += 1;
     side.power += TENNIS_GIFT_POWER;
-    statusEl.textContent = `Hediye → Takım ${label} · güç ${side.power} (+${TENNIS_GIFT_POWER})`;
+    triggerTennisTeamGift(team);
+    statusEl.textContent = `Hediye → Takım ${label} sert vuruş · güç ${side.power}`;
   }
   syncTennisLiveSimUi();
 }
@@ -5495,17 +5995,19 @@ function shuffleInPlace(arr) {
 /** Court mid in walk zone — south side = A, north side = B. */
 function tennisCastSlots(count) {
   const n = count === 2 ? 2 : 4;
+  // A = üst → idle/south (aşağı); B = alt → idle/north (yukarı)
+  // B spawn biraz daha geride (yüksek Z) — nete yapışmasın
   if (n === 2) {
     return [
-      { x: -40, z: 140, dir: "north", team: "a" },
-      { x: 40, z: 300, dir: "south", team: "b" },
+      { x: -40, z: -100, dir: "south", team: "a" },
+      { x: 40, z: 280, dir: "north", team: "b" },
     ];
   }
   return [
-    { x: -90, z: 130, dir: "north", team: "a" },
-    { x: 90, z: 130, dir: "north", team: "a" },
-    { x: -90, z: 310, dir: "south", team: "b" },
-    { x: 90, z: 310, dir: "south", team: "b" },
+    { x: -90, z: -120, dir: "south", team: "a" },
+    { x: 90, z: -120, dir: "south", team: "a" },
+    { x: -90, z: 300, dir: "north", team: "b" },
+    { x: 90, z: 300, dir: "north", team: "b" },
   ];
 }
 
@@ -5526,13 +6028,32 @@ function findFootballBallItem() {
   return null;
 }
 
+/** Serve always starts in team A court so A players chase first. */
+function placeTennisBallServeInA(ball) {
+  if (!ball) return;
+  const pt = randomPointInTeamZone("a");
+  // Prefer center-ish of A (less random for fair open)
+  const b = tennisZoneBounds("a");
+  const x = (b.minX + b.maxX) * 0.5;
+  const z = (b.minZ + b.maxZ) * 0.55;
+  ball.position.x = pointInPoly(x, z, ensureTennisTeamZone("a").pts) ? x : pt.x;
+  ball.position.z = pointInPoly(x, z, ensureTennisTeamZone("a").pts) ? z : pt.z;
+  ball.position.y = 0;
+  if (ball.userData?.physics) {
+    ball.userData.physics.vx = 0;
+    ball.userData.physics.vz = 0;
+    ball.userData.physics.vy = 0;
+    ball.userData.physics.tennisArc = null;
+  }
+  syncDepth(ball);
+}
+
 async function ensureTennisFootballBall() {
   if (!isTennisScene()) return null;
-  const existing = pickables.find(
-    (o) => o.userData?.tennisBall || /\/balls\/football\//i.test(o.userData?.path || ""),
-  );
+  const existing = findTennisBall();
   if (existing) {
     existing.userData.tennisBall = true;
+    existing.userData.ball = true;
     return existing;
   }
   const item = findFootballBallItem();
@@ -5540,7 +6061,8 @@ async function ensureTennisFootballBall() {
     statusEl.textContent = "Futbol topu katalogda yok";
     return null;
   }
-  const obj = await spawnItem(item, 0, 220, {
+  // Net line ~ between A/B zones
+  const obj = await spawnItem(item, 0, 36, {
     dir: "south",
     exactPos: true,
     recordUndo: false,
@@ -5554,61 +6076,1090 @@ async function ensureTennisFootballBall() {
   return obj;
 }
 
+function clearTennisBenchHide() {
+  clearTennisFans();
+}
+
+function clearTennisFans() {
+  for (const o of pickables) {
+    if (o.userData?.kind !== "character") continue;
+    if (!o.userData?.tennisBench && !o.userData?.tennisFan) continue;
+    o.visible = true;
+    o.userData.tennisBench = false;
+    o.userData.tennisFan = false;
+    o.userData.tennisSupportTeam = null;
+    o.userData.formationSlot = null;
+  }
+}
+
+function tennisZoneBounds(team) {
+  const z = ensureTennisTeamZone(team);
+  let minX = Infinity;
+  let maxX = -Infinity;
+  let minZ = Infinity;
+  let maxZ = -Infinity;
+  for (const [x, zz] of z.pts || []) {
+    minX = Math.min(minX, x);
+    maxX = Math.max(maxX, x);
+    minZ = Math.min(minZ, zz);
+    maxZ = Math.max(maxZ, zz);
+  }
+  if (!Number.isFinite(minX)) {
+    return { minX: -180, maxX: 180, minZ: -200, maxZ: 300 };
+  }
+  return { minX, maxX, minZ, maxZ };
+}
+
+/** Sideline fans — visible characters outside A/B team polys (not hidden). */
+async function placeTennisFans(fans) {
+  const aFans = [];
+  const bFans = [];
+  for (let i = 0; i < fans.length; i++) {
+    if (i % 2 === 0) aFans.push(fans[i]);
+    else bFans.push(fans[i]);
+  }
+  await placeTennisFanRow(aFans, "a");
+  await placeTennisFanRow(bFans, "b");
+}
+
+/** Like truth-dare rows: pack fans in short rows; shared L/R band for A and B. */
+const TENNIS_FAN_ROW_SIZE = 8;
+const TENNIS_FAN_COL_GAP_X = 40;
+const TENNIS_FAN_ROW_GAP_Z = 28;
+/** Equal inset from court leftmost/rightmost for both A and B fan rows. */
+const TENNIS_FAN_SIDE_PAD = 48;
+
+/** Shared horizontal band so A/B spectators use the same left/right padding. */
+function tennisFanRowBand() {
+  const a = tennisZoneBounds("a");
+  const b = tennisZoneBounds("b");
+  const rawMin = Math.min(a.minX, b.minX);
+  const rawMax = Math.max(a.maxX, b.maxX);
+  const minX = rawMin + TENNIS_FAN_SIDE_PAD;
+  const maxX = rawMax - TENNIS_FAN_SIDE_PAD;
+  return {
+    minX,
+    maxX,
+    cx: (minX + maxX) / 2,
+    width: Math.max(40, maxX - minX),
+  };
+}
+
+async function placeTennisFanRow(list, team) {
+  if (!list.length) return;
+  const b = tennisZoneBounds(team);
+  const band = tennisFanRowBand();
+  const face = team === "a" ? "south" : "north";
+  // A = above (low Z); B = below (high Z). Back rows step further from court.
+  // Screen-down nudge: A nearer court edge, B further south.
+  const baseZ = team === "a" ? b.minZ + 32 : b.maxZ + 148;
+  const zDir = team === "a" ? -1 : 1;
+  const rowCount = Math.ceil(list.length / TENNIS_FAN_ROW_SIZE);
+  for (let row = 0; row < rowCount; row++) {
+    const start = row * TENNIS_FAN_ROW_SIZE;
+    const n = Math.min(TENNIS_FAN_ROW_SIZE, list.length - start);
+    const rowZ = baseZ + zDir * row * TENNIS_FAN_ROW_GAP_Z;
+    // Spread across the same L/R band (pad 48) so A/B never look unevenly wide/narrow
+    const step = n <= 1 ? 0 : band.width / (n - 1);
+    for (let i = 0; i < n; i++) {
+      const o = list[start + i];
+      const x = n === 1 ? band.cx : band.minX + i * step;
+      clearNpcScriptMoves(o);
+      stopCharacterGait(o);
+      o.visible = true;
+      o.userData.tennisBench = false;
+      o.userData.tennisFan = true;
+      o.userData.tennisSupportTeam = team;
+      o.userData.tennisCast = false;
+      o.userData.tennisTeam = null;
+      o.userData.dancing = false;
+      o.position.set(x, 0, rowZ);
+      o.userData.formationSlot = { x, z: rowZ };
+      o.userData.formationMove = false;
+      o.userData.anim = null;
+      o.userData.animName = null;
+      if (o.userData.dir === face) o.userData.dir = "";
+      try {
+        await setDirection(o, face, { recordUndo: false });
+      } catch {
+        /* */
+      }
+      o.userData.dir = face;
+      if (o.userData.anim?.dir !== face) {
+        await attachIdle(o, o.userData.path, face, {
+          allowSouthFallback: true,
+        }).catch(() => {});
+      }
+      syncDepth(o);
+    }
+  }
+}
+
+function listTennisCourtActors(team = null) {
+  const out = [];
+  // Main is never a court player — spectator only
+  for (const o of pickables) {
+    if (o === player?.mesh) continue;
+    if (o.userData?.kind !== "character") continue;
+    if (!o.userData?.tennisCast || o.userData?.tennisFan) continue;
+    const t = o.userData.tennisTeam;
+    if (t !== "a" && t !== "b") continue;
+    if (team && t !== team) continue;
+    out.push({ obj: o, isPlayer: false, team: t });
+  }
+  return out;
+}
+
+function isTennisMainSpectator() {
+  return (
+    isTennisScene() &&
+    (tennisMatchActive || tennisPlayLinedUp || tennisMatchEnding)
+  );
+}
+
+function triggerTennisTeamLike(team) {
+  const until = performance.now() + 2800;
+  for (const { obj, isPlayer } of listTennisCourtActors(team)) {
+    if (isPlayer) {
+      obj.userData.tennisRunUntil = until;
+      if (player) player.forceRun = true;
+    } else {
+      obj.userData.tennisRunUntil = until;
+      obj.userData.formationSlot = null;
+    }
+  }
+  tennisAiAcc = 1; // retarget ASAP
+}
+
+function triggerTennisTeamGift(team) {
+  if (team !== "a" && team !== "b") return;
+  const actors = listTennisCourtActors(team);
+  if (!actors.length) return;
+  // Team-wide: whoever on this side hits next gets the hard shot (not only closest-at-gift)
+  tennisRally.hardHitTeam = team;
+  const until = performance.now() + 2200;
+  for (const a of actors) {
+    a.obj.userData.tennisHardHitPending = true;
+    a.obj.userData.tennisRunUntil = until;
+    a.obj.userData.formationSlot = null;
+  }
+  tennisAiAcc = 1;
+  // If someone is already in range to return, fire hard immediately
+  const ball = findTennisBall();
+  if (!ball) return;
+  const now = performance.now();
+  let best = null;
+  let bestD = Infinity;
+  for (const a of actors) {
+    if (a.isPlayer || a.obj.visible === false) continue;
+    const d = Math.hypot(
+      ball.position.x - a.obj.position.x,
+      ball.position.z - a.obj.position.z,
+    );
+    if (d < bestD) {
+      bestD = d;
+      best = a;
+    }
+  }
+  if (
+    best &&
+    bestD < TENNIS_HIT_REACH &&
+    (ball.position.y || 0) < tennisHitMaxYNow() &&
+    now >= (tennisRally.hitLockUntil || 0)
+  ) {
+    tennisTapHitBall(best.obj, { hard: true });
+  }
+}
+
+async function endTennisMatch(winner) {
+  if (tennisMatchEnding) return;
+  tennisMatchEnding = true;
+  tennisMatchOver = true;
+  clearTennisGiftHitFx();
+  clearNpcScriptMoves();
+  if (player?.scriptMove) player.scriptMove = null;
+  if (player) player.forceRun = false;
+  const ball = findTennisBall();
+  if (ball?.userData?.physics) {
+    ball.userData.physics.vx = 0;
+    ball.userData.physics.vz = 0;
+    ball.userData.physics.vy = 0;
+    ball.userData.physics.tennisArc = null;
+    ball.position.y = 0;
+  }
+  statusEl.textContent = `Takım ${String(winner).toUpperCase()} kazandı! · dans…`;
+  syncTennisLiveSimUi();
+  // Cancel short point-fan dance — match dance lasts full winner duration
+  if (tennisFanDanceTimer) {
+    clearTimeout(tennisFanDanceTimer);
+    tennisFanDanceTimer = null;
+  }
+  tennisFanDanceGen += 1;
+  const danceMs = 5000;
+  const face = winner === "a" ? "south" : "north";
+  const winners = listTennisCourtActors(winner);
+  for (const { obj, isPlayer } of winners) {
+    if (isPlayer) {
+      player.facing = "south";
+      player.stopActions?.();
+      player.startDance?.();
+      player.applyFrame?.();
+    } else {
+      clearNpcScriptMoves(obj);
+      stopCharacterGait(obj);
+      obj.userData.formationSlot = null;
+      obj.userData.dir = "south";
+      obj.userData.anim = null;
+      obj.userData.animName = null;
+      try {
+        await attachDance(obj, obj.userData.path, "south", {
+          allowSouthFallback: true,
+        });
+      } catch {
+        applyFacing(obj, "south");
+      }
+    }
+  }
+  // Winning team's spectators dance same duration as court players
+  for (const o of pickables) {
+    if (o === player?.mesh) continue;
+    if (o.userData?.kind !== "character") continue;
+    if (!o.userData?.tennisFan) continue;
+    if (o.userData?.tennisSupportTeam !== winner) continue;
+    if (o.visible === false) continue;
+    clearNpcScriptMoves(o);
+    stopCharacterGait(o);
+    o.userData.anim = null;
+    o.userData.animName = null;
+    try {
+      await attachDance(o, o.userData.path, face, {
+        allowSouthFallback: true,
+      });
+    } catch {
+      /* */
+    }
+  }
+  if (
+    player?.mesh?.userData?.tennisFan &&
+    player.mesh.userData.tennisSupportTeam === winner
+  ) {
+    player.facing = face;
+    player.stopActions?.();
+    player.startDance?.();
+    player.applyFrame?.();
+  }
+  if (tennisMatchEndTimer) clearTimeout(tennisMatchEndTimer);
+  tennisMatchEndTimer = setTimeout(() => {
+    tennisMatchEndTimer = null;
+    resetTennisAfterMatch().catch((err) => console.warn(err));
+  }, danceMs);
+}
+
+function clearTennisMatchLocks() {
+  if (tennisMatchEndTimer) {
+    clearTimeout(tennisMatchEndTimer);
+    tennisMatchEndTimer = null;
+  }
+  if (tennisFanDanceTimer) {
+    clearTimeout(tennisFanDanceTimer);
+    tennisFanDanceTimer = null;
+  }
+  tennisFanDanceGen += 1;
+  tennisMatchActive = false;
+  tennisPlayLinedUp = false;
+  tennisMatchOver = false;
+  tennisMatchEnding = false;
+  clearTennisGiftHitFx();
+  clearNpcScriptMoves();
+  if (player?.scriptMove) player.scriptMove = null;
+  if (player) player.forceRun = false;
+}
+
+/** Force rematch from left menu — same roster or reshuffle. */
+async function restartTennisMatch(mode) {
+  if (!isTennisScene()) return;
+  const keepRoster = mode === "same";
+  if (keepRoster && !tennisMatchRoster?.selected?.length && !player?.mesh) {
+    statusEl.textContent = "Önce /play ile bir maç başlat";
+    return;
+  }
+  clearTennisMatchLocks();
+  await startTennisPlay({ force: true, keepRoster });
+}
+
+async function resetTennisAfterMatch() {
+  clearNpcScriptMoves();
+  if (player?.scriptMove) player.scriptMove = null;
+  if (player) {
+    player.forceRun = false;
+    player.stopActions?.();
+  }
+  tennisPlayLinedUp = false;
+  tennisMatchActive = false;
+  tennisMatchOver = false;
+  tennisMatchEnding = false;
+  tennisCastCount = 0;
+  tennisRally.scoreA = 0;
+  tennisRally.scoreB = 0;
+  resetTennisRallyState();
+  resetTennisLiveSim();
+
+  const walk = ensureStreetWalkZone().pts;
+  let minX = -120;
+  let maxX = 120;
+  let minZ = -80;
+  let maxZ = 200;
+  if (walk?.length) {
+    minX = Infinity;
+    maxX = -Infinity;
+    minZ = Infinity;
+    maxZ = -Infinity;
+    for (const [x, zz] of walk) {
+      minX = Math.min(minX, x);
+      maxX = Math.max(maxX, x);
+      minZ = Math.min(minZ, zz);
+      maxZ = Math.max(maxZ, zz);
+    }
+  }
+  const cx = (minX + maxX) / 2;
+  const cz = (minZ + maxZ) / 2;
+
+  if (player?.mesh) {
+    player.mesh.userData.tennisTeam = null;
+    player.mesh.userData.tennisFan = false;
+    player.mesh.userData.tennisSupportTeam = null;
+    player.mesh.userData.tennisHome = null;
+    player.mesh.userData.formationSlot = null;
+    player.mesh.userData.tennisRunUntil = 0;
+    player.mesh.userData.tennisHardHitNext = false;
+    player.mesh.visible = true;
+    player.facing = "south";
+    player.mesh.position.set(cx, 0, cz);
+    player.syncRing?.(cx, cz);
+    player.applyFrame?.();
+  }
+
+  const party = listPartyCharacters();
+  let i = 0;
+  for (const o of party) {
+    clearNpcScriptMoves(o);
+    stopCharacterGait(o);
+    o.visible = true;
+    o.userData.tennisCast = false;
+    o.userData.tennisFan = false;
+    o.userData.tennisBench = false;
+    o.userData.tennisTeam = null;
+    o.userData.tennisSupportTeam = null;
+    o.userData.formationSlot = null;
+    o.userData.formationMove = false;
+    o.userData.dancing = false;
+    o.userData.tennisRunUntil = 0;
+    o.userData.tennisHardHitPending = false;
+    const ang = (i / Math.max(party.length, 1)) * Math.PI * 2;
+    const rad = 40 + (i % 4) * 18;
+    const x = cx + Math.cos(ang) * rad;
+    const z = cz + Math.sin(ang) * rad;
+    const c = projectIntoWalkZone(x, z, NPC_WALK_RADIUS, null);
+    o.position.set(c.x, 0, c.z);
+    o.userData.dir = "south";
+    applyFacing(o, "south");
+    attachIdle(o, o.userData.path, "south", { allowSouthFallback: true }).catch(
+      () => {},
+    );
+    syncDepth(o);
+    i += 1;
+  }
+  await ensureTennisFootballBall();
+  if (partySnapshotEnabled) snapshotPartyFromWorld();
+  syncTennisLiveSimUi();
+  statusEl.textContent = "Maç bitti · herkes sahada · /play ile yeni maç";
+}
+
+/**
+ * Who may chase the ball.
+ * After a hit: defending team waits until the ball leaves the hitter's zone
+ * (no early run while it's still in the hitter's collision).
+ */
+function tennisDefendTeam(ball, _phy) {
+  const at = ballTennisTeamAt(ball.position.x, ball.position.z);
+  const hitter = tennisRally.lastHitTeam;
+  if (hitter === "a" || hitter === "b") {
+    // Still inside hitter court → nobody chases yet
+    if (at === hitter) return null;
+    // Left hitter collision → other team may move
+    if (at === "a" || at === "b") return at;
+    return hitter === "a" ? "b" : "a";
+  }
+  // Serve / no hit yet — only the side the ball is in
+  if (at === "a" || at === "b") return at;
+  return null;
+}
+
+/** Predict where the ball will meet the ground (1st land or next bounce). */
+function tennisBallChasePos(ball, phy, team = null) {
+  let x = ball.position.x;
+  let z = ball.position.z;
+  const arc = phy?.tennisArc;
+  if (arc && arc.T > 0.05) {
+    // Scripted flight → aim at planned landing, not current air XZ
+    x = arc.x1;
+    z = arc.z1;
+  } else {
+    const y = Math.max(0, ball.position.y || 0);
+    const vx = phy?.vx || 0;
+    const vz = phy?.vz || 0;
+    const vy = phy?.vy || 0;
+    const g = TENNIS_GRAVITY;
+    let tLand = 0.18;
+    if (y > 1) {
+      // y + vy*t - 0.5*g*t^2 = 0
+      const disc = vy * vy + 2 * g * y;
+      if (disc > 0) {
+        const t = (vy + Math.sqrt(disc)) / g;
+        if (t > 0.05) tLand = Math.min(2.8, t);
+      }
+    } else if (vy > 40) {
+      // Just bounced up — full hop time ≈ 2*vy/g
+      tLand = Math.min(2.2, (2 * vy) / g);
+    }
+    x = ball.position.x + vx * tLand;
+    z = ball.position.z + vz * tLand;
+  }
+  // Keep chase target inside defending team court
+  if (team === "a" || team === "b") {
+    const pts = ensureTennisTeamZone(team)?.pts;
+    if (pts?.length) {
+      const inset = walkZoneEdgeInset(NPC_WALK_RADIUS);
+      if (!pointInPoly(x, z, pts) || distToPolyEdge(x, z, pts) < inset) {
+        const hit = closestPolyEdgeHit(x, z, pts);
+        if (hit) {
+          x = hit.qx - hit.nx * inset;
+          z = hit.qz - hit.nz * inset;
+        }
+      }
+    }
+  }
+  return { x, z };
+}
+
+function tickTennisNpcAi(dt) {
+  if (!isTennisScene() || !tennisPlayLinedUp) return;
+  if (tennisMatchOver || tennisMatchEnding) return;
+  if (performance.now() < tennisRally.lockUntil) return;
+  if (player) {
+    const until = player.mesh?.userData?.tennisRunUntil || 0;
+    player.forceRun = performance.now() < until;
+  }
+  tennisAiAcc += dt;
+  if (tennisAiAcc < 0.22) return;
+  tennisAiAcc = 0;
+  const ball = findTennisBall();
+  if (!ball?.userData?.physics) return;
+  const phy = ball.userData.physics;
+  const ballTeam = tennisDefendTeam(ball, phy);
+  const now = performance.now();
+  // Ball still in hitter's zone — hold / go home, no opponent rush
+  if (ballTeam !== "a" && ballTeam !== "b") {
+    for (const { obj, team } of listTennisCourtActors()) {
+      if (!obj || obj.visible === false) continue;
+      clearNpcScriptMoves(obj);
+      const home = obj.userData?.tennisHome;
+      if (!home) continue;
+      const faceDir = team === "b" ? "north" : "south";
+      const hd = Math.hypot(obj.position.x - home.x, obj.position.z - home.z);
+      if (hd < 28) continue;
+      scriptActorTo(obj, home.x, home.z, {
+        run: false,
+        faceDir,
+        idleOnArrive: true,
+      });
+    }
+    return;
+  }
+  const mates = listTennisCourtActors(ballTeam).filter(
+    (a) => !a.isPlayer && a.obj.visible !== false,
+  );
+  if (!mates.length) return;
+
+  const chase = tennisBallChasePos(ball, phy, ballTeam);
+  let chaser = mates[0];
+  let bestD = Infinity;
+  for (const a of mates) {
+    const d = Math.hypot(
+      chase.x - a.obj.position.x,
+      chase.z - a.obj.position.z,
+    );
+    if (d < bestD) {
+      bestD = d;
+      chaser = a;
+    }
+  }
+
+  for (const { obj, team } of mates) {
+    // Default walk for A and B; run only after likes (tennisRunUntil)
+    const run = now < (obj.userData.tennisRunUntil || 0);
+    const faceDir = team === "b" ? "north" : "south";
+    obj.userData.formationSlot = null;
+
+    if (obj === chaser.obj) {
+      const ax = obj.position.x;
+      const az = obj.position.z;
+      const dist = Math.hypot(ball.position.x - ax, ball.position.z - az);
+      const ballY = ball.position.y || 0;
+      const at = ballTennisTeamAt(ball.position.x, ball.position.z);
+      // Volley (0 bounce) or after 1st bounce (half height) — not after 2nd
+      const canReturn =
+        at === team &&
+        tennisRally.lastHitTeam !== team &&
+        now >= (tennisRally.hitLockUntil || 0) &&
+        dist < TENNIS_HIT_REACH &&
+        ballY < tennisHitMaxYNow() &&
+        (tennisRally.zoneBounces || 0) < 2;
+      if (canReturn) {
+        const hard =
+          !!obj.userData.tennisHardHitPending ||
+          tennisRally.hardHitTeam === team;
+        if (tennisTapHitBall(obj, { hard })) {
+          obj.userData.tennisHardHitPending = false;
+        }
+        continue;
+      }
+      // Retarget to landing spot; only skip if already close to predicted land
+      const toLand = Math.hypot(chase.x - ax, chase.z - az);
+      const moving = npcScriptMoves.some((sm) => sm.obj === obj);
+      if (moving && !run && toLand < 36) continue;
+      scriptActorTo(obj, chase.x, chase.z, {
+        run,
+        faceDir,
+        idleOnArrive: false,
+        snap: false,
+      });
+      continue;
+    }
+
+    const home = obj.userData?.tennisHome;
+    if (!home) continue;
+    const hd = Math.hypot(obj.position.x - home.x, obj.position.z - home.z);
+    if (hd < 28) continue;
+    if (npcScriptMoves.some((sm) => sm.obj === obj)) continue;
+    scriptActorTo(obj, home.x, home.z, {
+      run: false,
+      faceDir,
+      idleOnArrive: true,
+    });
+  }
+}
+
+async function lineupTennisActors(slots, actors) {
+  const n = Math.min(slots.length, actors.length);
+  const jobs = [];
+  for (let i = 0; i < n; i++) {
+    const { obj, isPlayer } = actors[i];
+    const slot = slots[i];
+    // A = üst → south; B = alt → north (yukarı / fileye bak)
+    const idleDir = slot.dir || (slot.team === "b" ? "north" : "south");
+    // Main must never take a court slot
+    if (isPlayer || obj === player?.mesh) {
+      continue;
+    }
+    jobs.push(
+      (async () => {
+        clearNpcScriptMoves(obj);
+        stopCharacterGait(obj);
+        obj.position.set(slot.x, 0, slot.z);
+        obj.visible = true;
+        obj.userData.tennisCast = true;
+        obj.userData.tennisBench = false;
+        obj.userData.tennisTeam = slot.team;
+        obj.userData.tennisHome = {
+          x: slot.x,
+          z: slot.z,
+          dir: idleDir,
+          team: slot.team,
+        };
+        obj.userData.formationSlot = { x: slot.x, z: slot.z };
+        obj.userData.formationMove = false;
+        obj.userData.dancing = false;
+        // Kill stale west/south idle so tickAnims can't keep side-facing sprites
+        obj.userData.anim = null;
+        obj.userData.animName = null;
+        // Force setDirection past early-return when dir string already matches
+        if (obj.userData.dir === idleDir) obj.userData.dir = "";
+        const hadDirs =
+          obj.userData.dirs?.includes(idleDir) ||
+          !!obj.userData.rotTextures?.[idleDir];
+        if (hadDirs) {
+          await setDirection(obj, idleDir, { recordUndo: false });
+        }
+        obj.userData.dir = idleDir;
+        if (obj.userData.anim?.dir !== idleDir) {
+          const ok = await attachIdle(obj, obj.userData.path, idleDir, {
+            allowSouthFallback: false,
+          });
+          if (!ok) {
+            applyFacing(obj, idleDir);
+          }
+        }
+        obj.userData.dir = idleDir;
+        syncDepth(obj);
+      })(),
+    );
+  }
+  await Promise.all(jobs);
+}
+
+function findTennisBall() {
+  return (
+    pickables.find((o) => o.userData?.tennisBall) ||
+    pickables.find(
+      (o) =>
+        o.userData?.ball && /\/balls\/football\//i.test(o.userData?.path || ""),
+    ) ||
+    null
+  );
+}
+
+/** Tap / click during tennis /play — kick football toward facing or toward ball. */
+function tennisTapHitBall(who, { hard = false } = {}) {
+  if (!isTennisScene() || !tennisPlayLinedUp || !who) return false;
+  if (tennisMatchOver || tennisMatchEnding) return false;
+  if (who.visible === false) return false;
+  // Main is spectator only — never hits
+  if (player?.mesh && who === player.mesh) return false;
+  if (who.userData?.tennisFan) return false;
+  if (performance.now() < (tennisRally.hitLockUntil || 0)) return false;
+  const ball = findTennisBall();
+  if (!ball?.userData?.physics) {
+    statusEl.textContent = "Tenis topu yok";
+    return false;
+  }
+  const isP = !!(player?.mesh && who === player.mesh);
+  const ax = isP ? player.mesh.position.x : who.position.x;
+  const az = (isP ? player.mesh.position.z : who.position.z) + FEET_NUDGE_Z;
+  const dx = ball.position.x - ax;
+  const dz = ball.position.z - az;
+  const dist = Math.hypot(dx, dz);
+  if (dist >= TENNIS_HIT_REACH) {
+    if (!isP) return false;
+    statusEl.textContent = "Topa yaklaş · dokun / tıkla";
+    return false;
+  }
+  if ((tennisRally.zoneBounces || 0) >= 2) return false;
+  if ((ball.position.y || 0) >= tennisHitMaxYNow()) return false;
+  const team = isP
+    ? player.mesh.userData?.tennisTeam
+    : who.userData?.tennisTeam;
+  // Don't re-hit our own ball (stops net ping-pong)
+  if (team && tennisRally.lastHitTeam === team) return false;
+  const ballAt = ballTennisTeamAt(ball.position.x, ball.position.z);
+  if (team && ballAt && ballAt !== team) return false;
+  const wantHard =
+    hard ||
+    !!(isP && who.userData?.tennisHardHitNext) ||
+    !!(who.userData?.tennisHardHitPending) ||
+    (team && tennisRally.hardHitTeam === team);
+  // Consume gift only when this hit actually fires
+  if (isP && who.userData) who.userData.tennisHardHitNext = false;
+  if (who.userData) who.userData.tennisHardHitPending = false;
+  if (wantHard && team && tennisRally.hardHitTeam === team) {
+    tennisRally.hardHitTeam = null;
+    for (const a of listTennisCourtActors(team)) {
+      if (a.obj?.userData) a.obj.userData.tennisHardHitPending = false;
+    }
+  }
+  const opp = team === "a" ? "b" : team === "b" ? "a" : null;
+  const target = opp
+    ? randomPointInTeamZone(opp)
+    : {
+        x: ball.position.x + (FACE_VEC.south?.[0] || 0) * 180,
+        z: ball.position.z + 180,
+      };
+
+  const phy = ball.userData.physics;
+  if (phy.vy == null) phy.vy = 0;
+  const tdx = target.x - ball.position.x;
+  const tdz = target.z - ball.position.z;
+  // Horizontal speed only; peak is air height (independent of travel time)
+  const speedMul = wantHard ? 0.5 * 1.5 : 0.5; // normal −50%; gift +50% vs normal
+  const flight = 0.88 / speedMul;
+  const peak = wantHard ? 100 : 80;
+  phy.vx = tdx / flight;
+  phy.vz = tdz / flight;
+  phy.vy = 0;
+  phy.tennisHopPeak = 0;
+  phy.tennisHopStage = 0;
+  phy.tennisArc = {
+    t: 0,
+    T: flight,
+    x0: ball.position.x,
+    z0: ball.position.z,
+    x1: target.x,
+    z1: target.z,
+    peak,
+  };
+  ball.position.y = 1;
+
+  const facing = isP
+    ? player.facing
+    : who.userData?.dir || (team === "b" ? "north" : "south");
+  if (isP) player.startJump?.();
+  else {
+    attachJump(who, who.userData.path, facing).catch(() => {});
+  }
+  noteTennisBallHit(team || null);
+  if (wantHard) spawnTennisGiftHitFx(ball);
+  statusEl.textContent = wantHard
+    ? `Sert vuruş → ${opp ? opp.toUpperCase() : "?"}`
+    : `Vuruş → ${opp ? opp.toUpperCase() : "?"}`;
+  return true;
+}
+
+function clearTennisGiftHitFx() {
+  if (!tennisGiftFx) return;
+  const g = tennisGiftFx.group;
+  g.parent?.remove(g);
+  g.traverse((n) => {
+    n.geometry?.dispose?.();
+    if (Array.isArray(n.material)) n.material.forEach((m) => m.dispose?.());
+    else n.material?.dispose?.();
+  });
+  tennisGiftFx = null;
+}
+
+/** Expanding gold rings around the ball for gift / sert vuruş. */
+function spawnTennisGiftHitFx(ball) {
+  if (!ball || !scene) return;
+  clearTennisGiftHitFx();
+  const group = new THREE.Group();
+  group.userData.skipPick = true;
+  const mkMat = (color, opacity) =>
+    new THREE.MeshBasicMaterial({
+      color,
+      transparent: true,
+      opacity,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+    });
+  const core = new THREE.Mesh(
+    new THREE.CircleGeometry(14, 28),
+    mkMat(0xffe566, 0.55),
+  );
+  const rim = new THREE.Mesh(
+    new THREE.RingGeometry(16, 26, 40),
+    mkMat(0xffc84a, 0.95),
+  );
+  const rim2 = new THREE.Mesh(
+    new THREE.RingGeometry(28, 36, 40),
+    mkMat(0xff7a2e, 0.75),
+  );
+  for (const m of [core, rim, rim2]) {
+    m.rotation.x = -Math.PI / 2;
+    m.renderOrder = 99996;
+  }
+  group.add(core, rim, rim2);
+  scene.add(group);
+  tennisGiftFx = {
+    group,
+    core,
+    rim,
+    rim2,
+    ball,
+    age: 0,
+    life: 1.4,
+  };
+}
+
+function tickTennisGiftHitFx(dt) {
+  if (!tennisGiftFx) return;
+  const fx = tennisGiftFx;
+  fx.age += dt;
+  const u = Math.min(1, fx.age / fx.life);
+  const ball = fx.ball;
+  if (u >= 1 || !ball?.parent) {
+    clearTennisGiftHitFx();
+    return;
+  }
+  const y = (ball.position.y || 0) * 0.35 + 1.2;
+  fx.group.position.set(ball.position.x, y, ball.position.z);
+  const pulse = 1 + u * 2.4;
+  fx.core.scale.setScalar(0.85 + u * 0.6);
+  fx.rim.scale.setScalar(pulse);
+  fx.rim2.scale.setScalar(pulse * 1.12);
+  const fade = 1 - u;
+  if (fx.core.material) fx.core.material.opacity = 0.55 * fade;
+  if (fx.rim.material) fx.rim.material.opacity = 0.95 * fade;
+  if (fx.rim2.material) fx.rim2.material.opacity = 0.75 * fade * fade;
+}
+
+/** Main is not a court player — sit with A/B fans as spectator. */
+function parkMainAsTennisSpectator() {
+  if (!player?.mesh) return;
+  player.stopActions?.();
+  player.forceRun = false;
+  if (player.scriptMove) player.scriptMove = null;
+  player.keys?.clear?.();
+  const team =
+    player.mesh.userData?.tennisSupportTeam === "a" ||
+    player.mesh.userData?.tennisSupportTeam === "b"
+      ? player.mesh.userData.tennisSupportTeam
+      : Math.random() < 0.5
+        ? "a"
+        : "b";
+  const b = tennisZoneBounds(team);
+  const band = tennisFanRowBand();
+  const z = team === "a" ? b.minZ + 32 : b.maxZ + 148;
+  const x = band.cx;
+  player.mesh.userData.tennisTeam = null;
+  player.mesh.userData.tennisCast = false;
+  player.mesh.userData.tennisFan = true;
+  player.mesh.userData.tennisSupportTeam = team;
+  player.mesh.userData.tennisHome = null;
+  player.mesh.userData.tennisHardHitNext = false;
+  player.mesh.userData.tennisRunUntil = 0;
+  player.mesh.position.set(x, 0, z);
+  player.facing = team === "a" ? "south" : "north";
+  player.mesh.userData.formationSlot = { x, z };
+  player.mesh.userData.formationMove = false;
+  player.mesh.visible = true;
+  player.syncRing?.(x, z);
+  player.applyFrame?.();
+  if (player.syncDepth) player.syncDepth(player.mesh);
+}
+
+/**
+ * /play on tennis: random party NPCs only → 2 (1v1) or 4 (2v2).
+ * Main is spectator (not on court). Rest → A/B sideline fans.
+ * @param {{ force?: boolean, keepRoster?: boolean }} [opts]
+ */
+async function startTennisPlay(opts = {}) {
+  const force = !!opts.force;
+  const keepRoster = !!opts.keepRoster;
+  if (!isTennisScene()) return;
+  if (!force && (tennisMatchActive || tennisPlayLinedUp || tennisMatchEnding)) {
+    statusEl.textContent =
+      tennisMatchEnding || tennisMatchOver
+        ? "Maç bitiyor · dans sonrası /play"
+        : `Oyun sürüyor · ${tennisRally.scoreA}-${tennisRally.scoreB} · ilk ${TENNIS_WIN_SCORE} · bitmeden /play yok`;
+    return;
+  }
+  // Lock immediately so a second /play during await can't reshuffle cast
+  tennisMatchActive = true;
+  tennisMatchOver = false;
+  tennisMatchEnding = false;
+  try {
+    clearNpcScriptMoves();
+    if (player?.scriptMove) player.scriptMove = null;
+    if (player) player.forceRun = false;
+    clearTennisFans();
+
+    const stillInWorld = (o) => !!o && pickables.includes(o);
+    let selected = [];
+    let fans = [];
+    let n = 2;
+
+    if (keepRoster && tennisMatchRoster) {
+      selected = (tennisMatchRoster.selected || []).filter(
+        (o) => stillInWorld(o) && o !== player?.mesh,
+      );
+      fans = (tennisMatchRoster.fans || []).filter(
+        (o) => stillInWorld(o) && o !== player?.mesh,
+      );
+      n = tennisMatchRoster.n === 4 ? 4 : 2;
+      selected = selected.slice(0, n);
+      for (const o of selected) {
+        o.visible = true;
+        o.userData.tennisBench = false;
+        o.userData.tennisFan = false;
+        o.userData.tennisCast = true;
+        o.userData.dancing = false;
+      }
+      for (const o of fans) {
+        clearNpcScriptMoves(o);
+        o.userData.tennisCast = false;
+        o.userData.dancing = false;
+      }
+      // Fill if roster shrank
+      const catalog = shuffleInPlace([...crowdCharacterCatalog()]);
+      while (selected.length < n && catalog.length) {
+        const item = catalog[selected.length % catalog.length];
+        try {
+          const obj = await spawnItem(item, 0, 220, {
+            dir: "south",
+            exactPos: true,
+            recordUndo: false,
+            select: false,
+            playEntrance: false,
+            editable: false,
+            partyMember: false,
+          });
+          if (!obj) break;
+          obj.userData.tennisCast = true;
+          obj.userData.partyMember = true;
+          obj.userData.editable = false;
+          selected.push(obj);
+        } catch (err) {
+          console.warn("tennis play spawn", err);
+          break;
+        }
+      }
+    } else {
+      const pool = listPartyCharacters().filter(
+        (o) => o.visible !== false && o !== player?.mesh,
+      );
+      n = pool.length >= 4 ? 4 : 2;
+      const shuffled = shuffleInPlace([...pool]);
+      selected = shuffled.slice(0, Math.min(n, shuffled.length));
+      const selectedSet = new Set(selected);
+      for (const o of pool) {
+        if (selectedSet.has(o)) {
+          o.visible = true;
+          o.userData.tennisBench = false;
+          o.userData.tennisFan = false;
+          o.userData.tennisCast = true;
+          continue;
+        }
+        clearNpcScriptMoves(o);
+        o.userData.tennisCast = false;
+        fans.push(o);
+      }
+
+      const catalog = shuffleInPlace([...crowdCharacterCatalog()]);
+      while (selected.length < n && catalog.length) {
+        const item = catalog[selected.length % catalog.length];
+        try {
+          const obj = await spawnItem(item, 0, 220, {
+            dir: "south",
+            exactPos: true,
+            recordUndo: false,
+            select: false,
+            playEntrance: false,
+            editable: false,
+            partyMember: false,
+          });
+          if (!obj) break;
+          obj.userData.tennisCast = true;
+          obj.userData.partyMember = true;
+          obj.userData.editable = false;
+          selected.push(obj);
+        } catch (err) {
+          console.warn("tennis play spawn", err);
+          break;
+        }
+      }
+      tennisMatchRoster = {
+        n,
+        selected: [...selected],
+        fans: [...fans],
+      };
+    }
+
+    // Court = random NPCs only (no Main)
+    const slots = tennisCastSlots(selected.length >= 4 ? 4 : 2);
+    n = slots.length;
+    const actors = selected
+      .slice(0, n)
+      .map((obj) => ({ obj, isPlayer: false }));
+    await lineupTennisActors(slots, actors);
+    for (const { obj } of actors) {
+      if (obj?.userData) obj.userData.formationSlot = null;
+    }
+    await placeTennisFans(fans);
+    parkMainAsTennisSpectator();
+
+    const ball = await ensureTennisFootballBall();
+    placeTennisBallServeInA(ball);
+    tennisCastCount = actors.length;
+    tennisPlayLinedUp = true;
+    tennisRally.scoreA = 0;
+    tennisRally.scoreB = 0;
+    resetTennisRallyState();
+    tennisRally.zone = "a";
+    resetTennisLiveSim();
+    tennisAiAcc = 1;
+    if (partySnapshotEnabled) snapshotPartyFromWorld();
+    syncTennisLiveSimUi();
+    const how = keepRoster ? "aynı kadro" : "yeni kadro";
+    statusEl.textContent =
+      n === 2
+        ? `1v1 · ${how} · ${actors.length} oyuncu${fans.length ? ` · ${fans.length} tribün` : ""} · ilk ${TENNIS_WIN_SCORE}`
+        : `2v2 · ${how} · ${actors.length} oyuncu${fans.length ? ` · ${fans.length} tribün` : ""} · ilk ${TENNIS_WIN_SCORE}`;
+  } catch (err) {
+    tennisMatchActive = false;
+    tennisPlayLinedUp = false;
+    console.warn("startTennisPlay", err);
+    statusEl.textContent = err?.message || String(err);
+  }
+}
+
 async function setTennisCastCount(count) {
   const n = count === 2 || count === 4 ? count : 0;
   if (!isTennisScene()) return;
-  statusEl.textContent = n ? `${n} oyuncu hazırlanıyor…` : "Tenis cast temizleniyor…";
-  clearNpcScriptMoves();
-  if (player?.scriptMove) player.scriptMove = null;
-  // Drop street party + old tennis NPCs so total = Main + (n-1)
-  for (const obj of [...listPartyCharacters()]) {
-    clearNpcScriptMoves(obj);
-    detachPlacedObject(obj);
-    disposePlacedObject(obj);
+  if ((tennisMatchActive || tennisPlayLinedUp || tennisMatchEnding) && n) {
+    statusEl.textContent =
+      tennisMatchEnding || tennisMatchOver
+        ? "Maç bitiyor · dans sonrası"
+        : `Oyun sürüyor · ${tennisRally.scoreA}-${tennisRally.scoreB} · bitmeden cast yok`;
+    return;
   }
-  clearTennisCast();
-  tennisCastCount = n;
-  syncTennisLiveSimUi();
-  await ensureTennisFootballBall();
+  // UI 2/4 buttons → same lineup rules as /play (fans on sideline, don't wipe party)
   if (!n) {
+    if (tennisMatchActive || tennisPlayLinedUp || tennisMatchEnding) {
+      statusEl.textContent = "Oyun sürüyor · cast iptal yok";
+      return;
+    }
+    clearNpcScriptMoves();
+    if (player?.scriptMove) player.scriptMove = null;
+    if (player) player.forceRun = false;
+    clearTennisFans();
+    for (const obj of pickables.filter((o) => o.userData?.tennisCast)) {
+      obj.userData.tennisCast = false;
+      obj.userData.tennisTeam = null;
+    }
+    tennisCastCount = 0;
+    tennisPlayLinedUp = false;
+    tennisMatchActive = false;
+    tennisMatchOver = false;
+    tennisMatchEnding = false;
     if (player?.mesh?.userData) {
       player.mesh.userData.tennisTeam = null;
       player.mesh.userData.formationSlot = null;
     }
-    statusEl.textContent = "Tenis cast yok · futbol topu hazır";
-    return;
-  }
-  const slots = tennisCastSlots(n);
-  // Main counts as 1 — spawn only n-1 NPCs (2 → 1v1, 4 → 2v2)
-  const needNpcs = Math.max(0, n - (player?.mesh ? 1 : 0));
-  const catalog = shuffleInPlace([...crowdCharacterCatalog()]);
-  if (needNpcs > 0 && !catalog.length) {
-    statusEl.textContent = "Random cast için boy/girl yok";
-    tennisCastCount = 0;
     syncTennisLiveSimUi();
+    await ensureTennisFootballBall();
+    statusEl.textContent = "Tenis cast yok · futbol topu hazır · /play";
     return;
   }
-
-  // Slot 0 = Main (takım A); remaining slots = NPCs
-  if (player?.mesh && slots[0]) {
-    const slot = slots[0];
-    player.mesh.position.set(slot.x, 0, slot.z);
-    player.facing = slot.dir || "north";
-    player.mesh.userData.tennisTeam = slot.team;
-    player.mesh.userData.formationSlot = { x: slot.x, z: slot.z };
-    player.mesh.userData.formationMove = false;
-    player.syncRing?.(slot.x, slot.z);
-    if (player.syncDepth) player.syncDepth(player.mesh);
+  // Force size via /play-style select with fixed n (random NPCs only — no Main)
+  tennisMatchActive = true;
+  tennisMatchOver = false;
+  tennisMatchEnding = false;
+  clearNpcScriptMoves();
+  if (player?.scriptMove) player.scriptMove = null;
+  if (player) player.forceRun = false;
+  clearTennisFans();
+  const pool = listPartyCharacters().filter((o) => o !== player?.mesh);
+  const shuffled = shuffleInPlace([...pool]);
+  const selected = shuffled.slice(0, Math.min(n, shuffled.length));
+  const selectedSet = new Set(selected);
+  const fans = [];
+  for (const o of shuffled) {
+    if (selectedSet.has(o)) {
+      o.visible = true;
+      o.userData.tennisBench = false;
+      o.userData.tennisFan = false;
+      o.userData.tennisCast = true;
+    } else {
+      clearNpcScriptMoves(o);
+      o.userData.tennisCast = false;
+      fans.push(o);
+    }
   }
-
-  let placed = player?.mesh ? 1 : 0;
-  for (let i = 0; i < needNpcs; i++) {
-    const item = catalog[i % catalog.length];
-    const slot = slots[i + (player?.mesh ? 1 : 0)];
-    if (!slot) break;
+  const catalog = shuffleInPlace([...crowdCharacterCatalog()]);
+  while (selected.length < n && catalog.length) {
+    const item = catalog[selected.length % catalog.length];
     try {
-      const obj = await spawnItem(item, slot.x, slot.z, {
-        dir: slot.dir,
+      const obj = await spawnItem(item, 0, 220, {
+        dir: "south",
         exactPos: true,
         recordUndo: false,
         select: false,
@@ -5616,26 +7167,53 @@ async function setTennisCastCount(count) {
         editable: false,
         partyMember: false,
       });
+      if (!obj) break;
       obj.userData.tennisCast = true;
       obj.userData.partyMember = true;
-      obj.userData.tennisTeam = slot.team;
       obj.userData.editable = false;
-      obj.userData.formationSlot = { x: slot.x, z: slot.z };
-      obj.userData.formationMove = false;
-      placed += 1;
+      selected.push(obj);
     } catch (err) {
       console.warn("tennis cast spawn", err);
+      break;
     }
   }
+  const slots = tennisCastSlots(n);
+  const actors = selected.slice(0, n).map((obj) => ({ obj, isPlayer: false }));
+  await lineupTennisActors(slots, actors);
+  for (const { obj } of actors) {
+    if (obj?.userData) obj.userData.formationSlot = null;
+  }
+  await placeTennisFans(fans);
+  parkMainAsTennisSpectator();
+  const ball = await ensureTennisFootballBall();
+  placeTennisBallServeInA(ball);
+  tennisCastCount = actors.length;
+  tennisPlayLinedUp = true;
+  tennisRally.scoreA = 0;
+  tennisRally.scoreB = 0;
+  resetTennisRallyState();
+  tennisRally.zone = "a";
+  resetTennisLiveSim();
+  tennisAiAcc = 1;
+  tennisMatchRoster = { n, selected: [...selected], fans: [...fans] };
   if (partySnapshotEnabled) snapshotPartyFromWorld();
+  syncTennisLiveSimUi();
   statusEl.textContent =
     n === 2
-      ? `1v1 · Main + ${placed - (player?.mesh ? 1 : 0)} · futbol topu (geçici)`
-      : `2v2 · Main + ${placed - (player?.mesh ? 1 : 0)} · A/B · futbol topu (geçici)`;
-  syncTennisLiveSimUi();
+      ? `1v1 · ${actors.length} oyuncu${fans.length ? ` · ${fans.length} tribün` : ""} · ilk ${TENNIS_WIN_SCORE}`
+      : `2v2 · ${actors.length} oyuncu${fans.length ? ` · ${fans.length} tribün` : ""} · ilk ${TENNIS_WIN_SCORE}`;
 }
 
 tennisLiveSimEl?.addEventListener("click", (e) => {
+  const restartBtn = e.target?.closest?.("button[data-tnrestart]");
+  if (restartBtn) {
+    const mode = restartBtn.getAttribute("data-tnrestart") || "new";
+    restartTennisMatch(mode).catch((err) => {
+      console.warn(err);
+      statusEl.textContent = err.message || String(err);
+    });
+    return;
+  }
   const castBtn = e.target?.closest?.("button[data-tncast]");
   if (castBtn) {
     const n = Number(castBtn.getAttribute("data-tncast"));
@@ -7707,7 +9285,11 @@ function disposeColGizmo() {
   colGizmo = null;
 }
 
-function buildPolyGizmo(corners, enabled, { street = false } = {}) {
+function buildPolyGizmo(
+  corners,
+  enabled,
+  { street = false, tennisTeam = null, color = null } = {},
+) {
   disposeColGizmo();
   const n = corners.length;
   if (n < 3) return;
@@ -7720,11 +9302,20 @@ function buildPolyGizmo(corners, enabled, { street = false } = {}) {
   const midR = street ? 12 : 6;
   const hitR = street ? COL_HANDLE_HIT_R * 1.65 : COL_HANDLE_HIT_R;
   const maxPts = street ? STREET_WALK_MAX_PTS : COL_MAX_PTS;
+  const lineColor =
+    color != null
+      ? color
+      : tennisTeam === "a"
+        ? 0x5ecf8a
+        : tennisTeam === "b"
+          ? 0x6aa8ff
+          : COL_GIZMO_COLOR;
 
   colGizmo = new THREE.Group();
   colGizmo.userData.skipPick = true;
   colGizmo.userData.colGizmo = true;
   colGizmo.userData.streetWalk = !!street;
+  colGizmo.userData.tennisTeam = tennisTeam || null;
   colGizmo.userData.handleHitR = hitR;
   colGizmo.userData.maxPts = maxPts;
 
@@ -7739,7 +9330,7 @@ function buildPolyGizmo(corners, enabled, { street = false } = {}) {
   const line = new THREE.LineSegments(
     lineGeo,
     new THREE.LineBasicMaterial({
-      color: COL_GIZMO_COLOR,
+      color: lineColor,
       depthTest: false,
       transparent: true,
       opacity,
@@ -7769,7 +9360,7 @@ function buildPolyGizmo(corners, enabled, { street = false } = {}) {
     const rim = new THREE.Mesh(
       new THREE.RingGeometry(rimInner, rimOuter, 20),
       new THREE.MeshBasicMaterial({
-        color: COL_GIZMO_COLOR,
+        color: lineColor,
         depthTest: false,
         transparent: true,
         opacity: enabled ? 1 : 0.5,
@@ -7888,15 +9479,21 @@ function syncNightClubColUi() {
 
 function updateStreetWalkGizmo() {
   if (!isWalkZoneScene()) {
-    if (colGizmo?.userData?.streetWalk) disposeColGizmo();
+    if (colGizmo?.userData?.streetWalk && !colGizmo?.userData?.tennisTeam) {
+      disposeColGizmo();
+    }
     return;
   }
+  // Tennis A/B gizmo owns the poly editor while open
+  if (tennisZoneEditTeam) return;
   // Prefer night_club-style object gizmo if that object is selected
   if (selected && hasEditableCollision(selected.userData?.path)) return;
   const z = ensureStreetWalkZone();
   // Gizmo only while editing — collision stays on via walkZone.enabled
   if (!streetWalkEditOpen) {
-    if (colGizmo?.userData?.streetWalk) disposeColGizmo();
+    if (colGizmo?.userData?.streetWalk && !colGizmo?.userData?.tennisTeam) {
+      disposeColGizmo();
+    }
     return;
   }
   buildPolyGizmo(
@@ -7906,13 +9503,40 @@ function updateStreetWalkGizmo() {
   );
 }
 
+function updateTennisTeamZoneGizmo() {
+  if (!isTennisScene() || !tennisZoneEditTeam) {
+    if (colGizmo?.userData?.tennisTeam) disposeColGizmo();
+    return;
+  }
+  if (selected && hasEditableCollision(selected.userData?.path)) return;
+  const z = ensureTennisTeamZone(tennisZoneEditTeam);
+  buildPolyGizmo(z.pts.map(([x, zz]) => [x, zz]), true, {
+    street: true,
+    tennisTeam: tennisZoneEditTeam,
+  });
+}
+
+function syncTennisTeamZoneUi() {
+  const panel = document.getElementById("tennis-team-zones");
+  if (panel) panel.classList.toggle("hidden", !isTennisScene());
+  const aOn = document.getElementById("tennis-zone-a-on");
+  const bOn = document.getElementById("tennis-zone-b-on");
+  if (aOn) aOn.checked = tennisZoneEditTeam === "a";
+  if (bOn) bOn.checked = tennisZoneEditTeam === "b";
+  if (isTennisScene() && tennisZoneEditTeam) updateTennisTeamZoneGizmo();
+  else if (colGizmo?.userData?.tennisTeam) disposeColGizmo();
+}
+
 function syncStreetWalkUi() {
   const panel = document.getElementById("street-walk");
   if (panel) panel.classList.toggle("hidden", !isWalkZoneScene());
   const on = document.getElementById("street-walk-on");
   if (on) on.checked = !!streetWalkEditOpen;
-  if (isWalkZoneScene()) updateStreetWalkGizmo();
-  else if (colGizmo?.userData?.streetWalk) disposeColGizmo();
+  if (isWalkZoneScene() && !tennisZoneEditTeam) updateStreetWalkGizmo();
+  else if (colGizmo?.userData?.streetWalk && !colGizmo?.userData?.tennisTeam) {
+    disposeColGizmo();
+  }
+  syncTennisTeamZoneUi();
   syncTruthDareCrowdUi();
   syncRedLightCastUi();
   syncNightClubColUi();
@@ -8317,6 +9941,10 @@ document.getElementById("night-club-col")?.addEventListener("click", (e) => {
 document.getElementById("street-walk-on")?.addEventListener("change", (e) => {
   if (!isWalkZoneScene()) return;
   streetWalkEditOpen = !!e.target.checked;
+  if (streetWalkEditOpen) {
+    tennisZoneEditTeam = null;
+    syncTennisTeamZoneUi();
+  }
   const zone = ensureStreetWalkZone();
   // Editing does not toggle collision — keep walkZone.enabled as saved
   if (!zone.enabled && zone.pts.length >= 3) zone.enabled = true;
@@ -8332,6 +9960,8 @@ document.getElementById("street-walk-on")?.addEventListener("change", (e) => {
 
 document.getElementById("street-walk-fit")?.addEventListener("click", () => {
   if (!isWalkZoneScene()) return;
+  tennisZoneEditTeam = null;
+  syncTennisTeamZoneUi();
   streetWalkEditOpen = true;
   const on = document.getElementById("street-walk-on");
   if (on) on.checked = true;
@@ -8341,12 +9971,94 @@ document.getElementById("street-walk-fit")?.addEventListener("click", () => {
 
 document.getElementById("street-walk-reset")?.addEventListener("click", () => {
   if (!isWalkZoneScene()) return;
+  tennisZoneEditTeam = null;
+  syncTennisTeamZoneUi();
   streetWalkEditOpen = true;
   const on = document.getElementById("street-walk-on");
   if (on) on.checked = true;
   ensureStreetWalkZone().enabled = true;
   fitStreetWalkToView();
   statusEl.textContent = "Street alan görünüme sıfırlandı";
+});
+
+function setTennisZoneEditTeam(team) {
+  if (!isTennisScene()) return;
+  const next = team === "a" || team === "b" ? team : null;
+  // Toggle off if same team clicked again via checkbox unchecked
+  tennisZoneEditTeam = next;
+  if (tennisZoneEditTeam) {
+    streetWalkEditOpen = false;
+    const sw = document.getElementById("street-walk-on");
+    if (sw) sw.checked = false;
+    if (colGizmo?.userData?.streetWalk && !colGizmo?.userData?.tennisTeam) {
+      disposeColGizmo();
+    }
+  }
+  syncTennisTeamZoneUi();
+  if (tennisZoneEditTeam) updateTennisTeamZoneGizmo();
+  else if (streetWalkEditOpen) updateStreetWalkGizmo();
+  statusEl.textContent = tennisZoneEditTeam
+    ? `Takım ${tennisZoneEditTeam.toUpperCase()} play col — köşe sürükle · sadece /play’de aktif`
+    : "Play col gizli — court walkZone geçerli (/play dışı)";
+}
+
+document.getElementById("tennis-zone-a-on")?.addEventListener("change", (e) => {
+  setTennisZoneEditTeam(e.target.checked ? "a" : null);
+});
+document.getElementById("tennis-zone-b-on")?.addEventListener("change", (e) => {
+  setTennisZoneEditTeam(e.target.checked ? "b" : null);
+});
+
+document.getElementById("tennis-zone-fit")?.addEventListener("click", () => {
+  if (!isTennisScene()) return;
+  const team = tennisZoneEditTeam || "a";
+  tennisZoneEditTeam = team;
+  streetWalkEditOpen = false;
+  const sw = document.getElementById("street-walk-on");
+  if (sw) sw.checked = false;
+  const z = ensureTennisTeamZone(team);
+  z.enabled = true;
+  z.pts = streetWalkPtsFromView(0.18).map((p) => [...p]);
+  // Split view: A = lower half, B = upper half of fitted rect
+  const xs = z.pts.map((p) => p[0]);
+  const zs = z.pts.map((p) => p[1]);
+  const minX = Math.min(...xs);
+  const maxX = Math.max(...xs);
+  const minZ = Math.min(...zs);
+  const maxZ = Math.max(...zs);
+  const midZ = (minZ + maxZ) * 0.5;
+  if (team === "a") {
+    z.pts = [
+      [minX, minZ],
+      [maxX, minZ],
+      [maxX, midZ],
+      [minX, midZ],
+    ];
+  } else {
+    z.pts = [
+      [minX, midZ],
+      [maxX, midZ],
+      [maxX, maxZ],
+      [minX, maxZ],
+    ];
+  }
+  syncTennisTeamZoneUi();
+  updateTennisTeamZoneGizmo();
+  schedulePersistScene();
+  statusEl.textContent = `Takım ${team.toUpperCase()} play alanı görünüme sığdırıldı`;
+});
+
+document.getElementById("tennis-zone-reset")?.addEventListener("click", () => {
+  if (!isTennisScene()) return;
+  const team = tennisZoneEditTeam || "a";
+  tennisZoneEditTeam = team;
+  const z = ensureTennisTeamZone(team);
+  z.enabled = true;
+  z.pts = defaultTennisTeamZonePts(team).map((p) => [...p]);
+  syncTennisTeamZoneUi();
+  updateTennisTeamZoneGizmo();
+  schedulePersistScene();
+  statusEl.textContent = `Takım ${team.toUpperCase()} play alanı sıfırlandı`;
 });
 
 /** Shift+arrows: append a same-scale road tile on that edge of the selection. */
@@ -8398,6 +10110,12 @@ function groundHit() {
 }
 
 function onPointerDown(event) {
+  tennisTapPtr = {
+    x: event.clientX,
+    y: event.clientY,
+    t: performance.now(),
+    id: event.pointerId,
+  };
   if (event.button !== 0) return;
   if (occupiedVehicle) return;
   // If a palette ghost is active but user grabbed a placed object, move that — don't spawn
@@ -8483,7 +10201,12 @@ function onPointerDown(event) {
       return;
     }
   } else if (gp0 && isWalkZoneScene() && colGizmo?.userData?.streetWalk) {
-    const zone = ensureStreetWalkZone();
+    const team = colGizmo.userData.tennisTeam || null;
+    const zone = team ? ensureTennisTeamZone(team) : ensureStreetWalkZone();
+    const refreshGizmo = () => {
+      if (team) updateTennisTeamZoneGizmo();
+      else updateStreetWalkGizmo();
+    };
     const corner = hitPolyCorner(gp0.x, gp0.z, zone.pts);
     if (corner >= 0) {
       if (placing) endPaletteDrag();
@@ -8496,23 +10219,29 @@ function onPointerDown(event) {
         zone.pts.splice(corner, 1);
         pushUndo({
           undo() {
-            sceneWalkZone.pts = from.map((p) => [...p]);
-            updateStreetWalkGizmo();
+            if (team) ensureTennisTeamZone(team).pts = from.map((p) => [...p]);
+            else sceneWalkZone.pts = from.map((p) => [...p]);
+            refreshGizmo();
           },
         });
-        updateStreetWalkGizmo();
+        refreshGizmo();
         schedulePersistScene();
-        statusEl.textContent = "Köşe silindi (Alt+tık)";
+        statusEl.textContent = team
+          ? `Takım ${team.toUpperCase()} köşe silindi (Alt+tık)`
+          : "Köşe silindi (Alt+tık)";
         return;
       }
       colCornerDrag = {
         street: true,
+        tennisTeam: team,
         index: corner,
         from: zone.pts.map((p) => [...p]),
       };
       controls.enabled = false;
       renderer.domElement.setPointerCapture(event.pointerId);
-      statusEl.textContent = `Street alan köşe ${corner + 1} — sürükle`;
+      statusEl.textContent = team
+        ? `Takım ${team.toUpperCase()} köşe ${corner + 1} — sürükle`
+        : `Street alan köşe ${corner + 1} — sürükle`;
       return;
     }
     // Prefer midpoint dots, else click anywhere on the edge line
@@ -8535,14 +10264,17 @@ function onPointerDown(event) {
       zone.pts.splice(edge + 1, 0, insertAt);
       colCornerDrag = {
         street: true,
+        tennisTeam: team,
         index: edge + 1,
         from,
       };
       controls.enabled = false;
       renderer.domElement.setPointerCapture(event.pointerId);
-      updateStreetWalkGizmo();
+      refreshGizmo();
       schedulePersistScene();
-      statusEl.textContent = "Street alan — kenara nokta eklendi (sarı nokta / kenar çizgisi)";
+      statusEl.textContent = team
+        ? `Takım ${team.toUpperCase()} — kenara nokta eklendi`
+        : "Street alan — kenara nokta eklendi (sarı nokta / kenar çizgisi)";
       return;
     }
   }
@@ -8628,9 +10360,11 @@ function onPointerMove(event) {
     const gp = groundHit();
     if (!gp) return;
     if (colCornerDrag.street) {
-      const zone = ensureStreetWalkZone();
+      const team = colCornerDrag.tennisTeam || null;
+      const zone = team ? ensureTennisTeamZone(team) : ensureStreetWalkZone();
       zone.pts[colCornerDrag.index] = [gp.x, gp.z];
-      updateStreetWalkGizmo();
+      if (team) updateTennisTeamZoneGizmo();
+      else updateStreetWalkGizmo();
       return;
     }
     setColWorldPt(colCornerDrag.obj, colCornerDrag.index, gp.x, gp.z);
@@ -8665,6 +10399,28 @@ function onPointerMove(event) {
 }
 
 async function onPointerUp(event) {
+  const tap = tennisTapPtr;
+  tennisTapPtr = null;
+  const dragStart = dragFrom ? { x: dragFrom.x, z: dragFrom.z } : null;
+  const dragObj = dragging;
+
+  const finishTennisTap = () => {
+    if (!tap || event.pointerId !== tap.id) return;
+    if (!isTennisScene() || !tennisPlayLinedUp || !player?.mesh) return;
+    if (tennisZoneEditTeam || streetWalkEditOpen) return;
+    const dt = performance.now() - tap.t;
+    const dist = Math.hypot(event.clientX - tap.x, event.clientY - tap.y);
+    const moved =
+      dragObj &&
+      dragStart &&
+      Math.hypot(dragObj.position.x - dragStart.x, dragObj.position.z - dragStart.z) >
+        12;
+    if (dt < 450 && dist < 36 && !moved) {
+      tennisTapHitBall(player.mesh);
+    }
+  };
+
+  try {
   if (trafficLaneDragDir) {
     const dir = trafficLaneDragDir;
     trafficLaneDragDir = null;
@@ -8681,16 +10437,20 @@ async function onPointerUp(event) {
   }
   if (colCornerDrag) {
     if (colCornerDrag.street) {
+      const team = colCornerDrag.tennisTeam || null;
+      const zone = team ? ensureTennisTeamZone(team) : ensureStreetWalkZone();
       const from = colCornerDrag.from;
-      const to = ensureStreetWalkZone().pts.map((p) => [...p]);
+      const to = zone.pts.map((p) => [...p]);
       const changed =
         from.length !== to.length ||
         from.some((p, i) => p[0] !== to[i]?.[0] || p[1] !== to[i]?.[1]);
       if (changed) {
         pushUndo({
           undo() {
-            sceneWalkZone.pts = from.map((p) => [...p]);
-            updateStreetWalkGizmo();
+            if (team) ensureTennisTeamZone(team).pts = from.map((p) => [...p]);
+            else sceneWalkZone.pts = from.map((p) => [...p]);
+            if (team) updateTennisTeamZoneGizmo();
+            else updateStreetWalkGizmo();
             schedulePersistScene();
           },
         });
@@ -8698,7 +10458,9 @@ async function onPointerUp(event) {
       }
       colCornerDrag = null;
       if (viewportMode !== "9x16") controls.enabled = true;
-      statusEl.textContent = "Street yürüyüş alanı güncellendi";
+      statusEl.textContent = team
+        ? `Takım ${team.toUpperCase()} play alanı güncellendi`
+        : "Street yürüyüş alanı güncellendi";
       try {
         renderer.domElement.releasePointerCapture(event.pointerId);
       } catch {
@@ -8799,6 +10561,9 @@ async function onPointerUp(event) {
         statusEl.textContent = "Yüklenemedi";
       }
     }
+  }
+  } finally {
+    finishTennisTap();
   }
 }
 
@@ -9045,13 +10810,17 @@ async function boot() {
     moveScale: () => 1,
     inputLocked: () =>
       !!(
+        isTennisMainSpectator() ||
         player?.mesh?.userData?.redLightDq ||
         player?.mesh?.userData?.redLightEliminating ||
         (redLightGame.active &&
           (player?.mesh?.userData?.redLightFinished ||
             player?.mesh?.userData?.redLightFinishing))
       ),
-    positionLocked: () => isTruthDarePositionLocked(player?.mesh),
+    positionLocked: () =>
+      !!(
+        isTennisMainSpectator() || isTruthDarePositionLocked(player?.mesh)
+      ),
   }).load();
   applyColDebugVisible(colDebugVisible);
   // player not in pickables editor list
@@ -9096,7 +10865,7 @@ async function boot() {
         await loadScene(localData, { persist: false });
       }
     }
-  } catch (err) {
+      } catch (err) {
     console.warn("scene restore", err);
   }
 
@@ -9203,16 +10972,17 @@ function closestPolyEdgeHit(px, pz, pts) {
   return best;
 }
 
-/** Keep balls inside walkZone — bounce off the boundary (street + red_light). */
+/** Keep balls inside walkZone — bounce off the boundary (street + red_light + tennis court). */
 function resolveBallVsWalkZone(ball, phy) {
-  if (!streetWalkActive()) return;
+  if (!streetWalkActive()) return false;
   const pts = ensureStreetWalkZone().pts;
-  if (!pts?.length) return;
+  if (!pts?.length) return false;
   const r = Math.max(6, phy.r || 10);
   const x = ball.position.x;
   const z = ball.position.z;
   const hit = closestPolyEdgeHit(x, z, pts);
-  if (!hit) return;
+  if (!hit) return false;
+  let bounced = false;
   const inside = pointInPoly(x, z, pts);
   if (!inside || hit.d < r) {
     const inset = r + 1;
@@ -9223,21 +10993,32 @@ function resolveBallVsWalkZone(ball, phy) {
     if (vn > 0) {
       phy.vx -= (1 + BALL_BOUNCE) * vn * hit.nx;
       phy.vz -= (1 + BALL_BOUNCE) * vn * hit.nz;
+      bounced = true;
     }
   }
+  return bounced;
 }
 
 /** Safety clamp: Main, cast, pets stay inside walk zone if somehow outside. */
 function clampActorsIntoWalkZone() {
-  if (!streetWalkActive()) return;
+  if (!streetWalkActive() && !(isTennisScene() && tennisPlayLinedUp)) return;
+  // Main sits on A/B sideline as spectator — never yank into court walkZone
+  const mainIsTennisFan =
+    !!player?.mesh?.userData?.tennisFan || isTennisMainSpectator();
   if (
     player?.mesh &&
     player.mesh.visible !== false &&
     !occupiedVehicle &&
-    dragging !== player.mesh
+    dragging !== player.mesh &&
+    !mainIsTennisFan
   ) {
     const r = player.radius || 22;
-    const c = projectIntoWalkZone(player.mesh.position.x, player.mesh.position.z, r);
+    const c = projectIntoWalkZone(
+      player.mesh.position.x,
+      player.mesh.position.z,
+      r,
+      player.mesh,
+    );
     if (c.x !== player.mesh.position.x || c.z !== player.mesh.position.z) {
       player.mesh.position.x = c.x;
       player.mesh.position.z = c.z;
@@ -9253,8 +11034,9 @@ function clampActorsIntoWalkZone() {
     const isPet = !!obj.userData?.companion || isAnimalPath(obj.userData?.path);
     if (!isChar && !isPet) continue;
     if (obj.userData?.formationMove) continue;
+    if (obj.userData?.tennisFan) continue; // sideline outside court
     const r = isPet ? PET_COL_RADIUS : NPC_WALK_RADIUS;
-    const c = projectIntoWalkZone(obj.position.x, obj.position.z, r);
+    const c = projectIntoWalkZone(obj.position.x, obj.position.z, r, obj);
     if (c.x !== obj.position.x || c.z !== obj.position.z) {
       obj.position.x = c.x;
       obj.position.z = c.z;
@@ -9274,6 +11056,7 @@ function kickBallsFromActors() {
       r: player.radius || 22,
       vx: player.vx || 0,
       vz: player.vz || 0,
+      team: player.mesh.userData?.tennisTeam || null,
     });
   }
   for (const obj of pickables) {
@@ -9288,6 +11071,7 @@ function kickBallsFromActors() {
       r: NPC_WALK_RADIUS,
       vx: dx * 60,
       vz: dz * 60,
+      team: obj.userData?.tennisTeam || null,
     });
     obj.userData._moveDx = 0;
     obj.userData._moveDz = 0;
@@ -9296,6 +11080,14 @@ function kickBallsFromActors() {
     for (const ball of pickables) {
       const phy = ball.userData?.physics;
       if (!ball.userData?.ball || !phy) continue;
+      // Tennis rally uses aimed aerial hits — no foot-shove
+      if (
+        ball.userData?.tennisBall &&
+        isTennisScene() &&
+        (tennisPlayLinedUp || tennisMatchEnding)
+      ) {
+        continue;
+      }
       const dx = ball.position.x - a.x;
       const dz = ball.position.z - a.z;
       const dist = Math.hypot(dx, dz) || 0.0001;
@@ -9320,22 +11112,89 @@ function tickBallPhysics(dt) {
   for (const ball of pickables) {
     const phy = ball.userData?.physics;
     if (!ball.userData?.ball || !phy) continue;
+    const tennisAir =
+      !!ball.userData?.tennisBall &&
+      isTennisScene() &&
+      (tennisPlayLinedUp || tennisMatchEnding);
+    if (phy.vy == null) phy.vy = 0;
+
     let sp = Math.hypot(phy.vx, phy.vz);
     if (sp > BALL_MAX_SPEED) {
       phy.vx = (phy.vx / sp) * BALL_MAX_SPEED;
       phy.vz = (phy.vz / sp) * BALL_MAX_SPEED;
       sp = BALL_MAX_SPEED;
     }
-    ball.position.x += phy.vx * dt;
-    ball.position.z += phy.vz * dt;
-    phy.vx *= damp;
-    phy.vz *= damp;
-    if (Math.abs(phy.vx) < 1 && Math.abs(phy.vz) < 1) {
+
+    let groundHit = false;
+    if (tennisAir && phy.tennisArc) {
+      // Scripted lob: slow/fast travel time independent of peak height
+      const arc = phy.tennisArc;
+      arc.t += dt;
+      const u = Math.min(1, arc.t / Math.max(0.05, arc.T));
+      ball.position.x = arc.x0 + (arc.x1 - arc.x0) * u;
+      ball.position.z = arc.z0 + (arc.z1 - arc.z0) * u;
+      ball.position.y = 4 * arc.peak * u * (1 - u);
+      phy.vx = (arc.x1 - arc.x0) / arc.T;
+      phy.vz = (arc.z1 - arc.z0) / arc.T;
+      if (u >= 1) {
+        phy.tennisArc = null;
+        ball.position.x = arc.x1;
+        ball.position.z = arc.z1;
+        ball.position.y = 0;
+        groundHit = true;
+        // 1st bounce ≈ flight peak (80); 2nd bounce = half (40)
+        const hop1 = Math.max(40, arc.peak || 80);
+        phy.tennisHopPeak = hop1;
+        phy.tennisHopStage = 1;
+        phy.vy = Math.sqrt(2 * TENNIS_GRAVITY * hop1);
+        phy.vx *= 0.45;
+        phy.vz *= 0.45;
+      }
+    } else if (tennisAir) {
+      ball.position.x += phy.vx * dt;
+      ball.position.z += phy.vz * dt;
+      phy.vy -= TENNIS_GRAVITY * dt;
+      ball.position.y = (ball.position.y || 0) + phy.vy * dt;
+      if (ball.position.y <= 0) {
+        ball.position.y = 0;
+        if (phy.vy < -18) {
+          groundHit = true;
+          phy.vx *= 0.82;
+          phy.vz *= 0.82;
+          if (phy.tennisHopStage === 1) {
+            // 2nd bounce = half of 1st hop height (clearly visible)
+            const hop2 = (phy.tennisHopPeak || 24) * 0.5;
+            phy.vy = Math.sqrt(2 * TENNIS_GRAVITY * hop2);
+            phy.tennisHopStage = 2;
+          } else {
+            phy.vy = -phy.vy * TENNIS_BOUNCE_REST;
+            phy.tennisHopStage = 0;
+            if (Math.abs(phy.vy) < 28) phy.vy = 0;
+          }
+        } else {
+          phy.vy = 0;
+          phy.vx *= damp;
+          phy.vz *= damp;
+        }
+      }
+    } else {
+      ball.position.x += phy.vx * dt;
+      ball.position.z += phy.vz * dt;
+      ball.position.y = 0;
+      phy.vy = 0;
+      phy.vx *= damp;
+      phy.vz *= damp;
+    }
+
+    if (Math.abs(phy.vx) < 1 && Math.abs(phy.vz) < 1 && (ball.position.y || 0) < 1) {
       phy.vx = 0;
       phy.vz = 0;
     }
     resolveBallVsSolid(ball, phy);
-    resolveBallVsWalkZone(ball, phy);
+    const wallBounced = !!resolveBallVsWalkZone(ball, phy);
+    if (ball.userData?.tennisBall) {
+      tickTennisBallRules(ball, phy, wallBounced, groundHit);
+    }
     // ball ↔ ball
     for (const other of pickables) {
       if (other === ball || !other.userData?.ball) continue;
@@ -9533,6 +11392,8 @@ function tick(now) {
   lastTs = now;
   tickAnims(dt);
   tickNpcScriptMove(dt);
+  tickTennisNpcAi(dt);
+  tickTennisGiftHitFx(dt);
   tickRedLightGame(dt);
   tickCharacterSeparation(dt);
   tickTraffic(dt);
