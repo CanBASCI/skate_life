@@ -3040,9 +3040,14 @@ function pointInCol(px, pz, box, inset = 0) {
  * Tennis /play: each actor uses their A/B team poly when set.
  * Balls are clamped in physics; night_club uses object col polys.
  */
-/** Feet stay this far inside walk/team edges — stops corner wedge → stuck snap. */
+/** Feet stay this far inside walk/team edges — tennis needs more; red light lineup needs less. */
 function walkZoneEdgeInset(radius = NPC_WALK_RADIUS) {
-  return Math.max(18, (radius || NPC_WALK_RADIUS) * 0.95 + 6);
+  const r = radius || NPC_WALK_RADIUS;
+  // Dense ALT lineup — old tight inset or 10-wide row gets pried apart
+  if (isRedLightScene()) return Math.max(4, r * 0.35);
+  // Tennis courts: keep characters off collision corners
+  if (isTennisScene()) return Math.max(18, r * 0.95 + 6);
+  return Math.max(8, r * 0.5);
 }
 
 function containmentBlocksFor(fromX, fromZ, px, pz, radius, forObj = null) {
@@ -3247,11 +3252,30 @@ function tickCharacterSeparation(dt) {
     }
   }
   const pushMode = charsCanPushEachOther();
-  const sepMin = pushMode ? 44 : CHAR_SEP_MIN;
-  const sepPush = pushMode ? CHAR_SEP_PUSH * 2.2 : CHAR_SEP_PUSH;
-  const actors = listSeparableCharacters().filter(
-    (o) => o !== dragging && !o.userData?.formationSlot && !o.userData?.formationMove,
-  );
+  // Red light: keep dense lineup — tennis push (44) was spreading the ALT row
+  const sepMin = isRedLightScene()
+    ? 28
+    : pushMode
+      ? 44
+      : CHAR_SEP_MIN;
+  const sepPush = isRedLightScene()
+    ? CHAR_SEP_PUSH
+    : pushMode
+      ? CHAR_SEP_PUSH * 2.2
+      : CHAR_SEP_PUSH;
+  const actors = listSeparableCharacters().filter((o) => {
+    if (o === dragging) return false;
+    if (o.userData?.formationSlot || o.userData?.formationMove) return false;
+    // Lineup / waiting on marks — don't pry the ALT row open (tennis sep was)
+    if (
+      isRedLightScene() &&
+      !redLightGame.active &&
+      Number.isFinite(o.userData?.redLightLaneX)
+    ) {
+      return false;
+    }
+    return true;
+  });
   for (let i = 0; i < actors.length; i++) {
     for (let j = i + 1; j < actors.length; j++) {
       const a = actors[i];
