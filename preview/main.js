@@ -289,6 +289,10 @@ const tennisRally = {
   hitLockUntil: 0,
   /** Gift: next successful hit by this team is hard ('a'|'b'|null) */
   hardHitTeam: null,
+  /** After 1st bounce: no swing until this time (ms) — lets 2nd-bounce points happen */
+  postBounceHitAfter: 0,
+  /** True from 2nd bounce / point until serve reset — no more swings */
+  pointDead: false,
 };
 const redLightCastEl = document.getElementById("red-light-cast");
 const TRUTH_DARE_CROWD_COUNTS = [5, 10, 20, 30, 40, 50];
@@ -4787,14 +4791,29 @@ function listPartyCharacters() {
     return !!(
       o.userData?.partyMember ||
       o.userData?.tennisCast ||
-      o.userData?.crowdExtra
+      o.userData?.crowdExtra ||
+      o.userData?.tennisFan
     );
   });
 }
 
+/** Remove every traveling cast member (no leftovers to stack on restore). */
+function clearAllPartyCharacters() {
+  const doomed = [...listPartyCharacters()];
+  for (const obj of doomed) {
+    clearNpcScriptMoves(obj);
+    detachPlacedObject(obj);
+    disposePlacedObject(obj);
+  }
+  return doomed.length;
+}
+
 function snapshotPartyFromWorld() {
   const list = [];
+  const seen = new Set();
   for (const o of listPartyCharacters()) {
+    if (seen.has(o)) continue;
+    seen.add(o);
     const d = o.userData || {};
     list.push({
       path: d.path,
@@ -4808,6 +4827,8 @@ function snapshotPartyFromWorld() {
 
 async function restorePartyIntoScene() {
   if (!persistentParty.length) return 0;
+  // Wipe any survivors so restore never stacks (e.g. 50 → 75)
+  clearAllPartyCharacters();
   const home = streetGatherTarget || player?.mesh?.position || { x: 0, z: 200 };
   const club = isNightClubScene();
   const street = isStreetLikeScene();
@@ -5288,7 +5309,8 @@ async function loadScene(data, { persist = true, carryParty = true } = {}) {
     // Remember cast before wipe — they travel to the next scene
     if (carryParty && partySnapshotEnabled) snapshotPartyFromWorld();
     clearTraffic();
-    clearTennisCast();
+    // Full party wipe (tennisCast / crowdExtra / fans) — avoid 50→75 stack on restore
+    clearAllPartyCharacters();
     clearCrowdExtras();
     if (data.revision != null) sceneRevision = Number(data.revision) || 0;
     if (data.sceneId) activeSceneId = String(data.sceneId);
@@ -5689,6 +5711,8 @@ function resetTennisRallyState() {
   tennisRally.lockUntil = 0;
   tennisRally.hitLockUntil = 0;
   tennisRally.hardHitTeam = null;
+  tennisRally.postBounceHitAfter = 0;
+  tennisRally.pointDead = false;
 }
 
 function ballTennisTeamAt(x, z) {
@@ -5760,13 +5784,15 @@ function awardTennisPoint(scorer, reason) {
   if (scorer === "a") tennisRally.scoreA += 1;
   else tennisRally.scoreB += 1;
   tennisRally.lockUntil = performance.now() + 1600;
-  statusEl.textContent = `Sayı ${scorer.toUpperCase()}! ${tennisRally.scoreA}-${tennisRally.scoreB} · ${reason}`;
-  syncTennisLiveSimUi();
-  tennisRally.zoneBounces = 0;
+  tennisRally.pointDead = true;
+  tennisRally.zoneBounces = 2; // keep illegal for hits until serve reset
   tennisRally.outBounces = 0;
   tennisRally.zone = scorer;
   tennisRally.wasFast = false;
   tennisRally.lastHitTeam = null;
+  freezeTennisBallForPoint();
+  statusEl.textContent = `Sayı ${scorer.toUpperCase()}! ${tennisRally.scoreA}-${tennisRally.scoreB} · ${reason}`;
+  syncTennisLiveSimUi();
   celebrateTennisPointFans(scorer);
   if (
     tennisRally.scoreA >= TENNIS_WIN_SCORE ||
@@ -5820,17 +5846,7 @@ async function resetTennisAfterPoint(scorer) {
       : null;
   const ball = findTennisBall();
   if (ball && pick) {
-    const towardNet = scorer === "a" ? 22 : -22;
-    ball.position.x = pick.obj.position.x;
-    ball.position.z = pick.obj.position.z + towardNet;
-    ball.position.y = 0;
-    if (ball.userData.physics) {
-      ball.userData.physics.vx = 0;
-      ball.userData.physics.vz = 0;
-      ball.userData.physics.vy = 0;
-      ball.userData.physics.tennisArc = null;
-    }
-    syncDepth(ball);
+    placeTennisBallAtServer(ball, scorer);
   } else if (ball) {
     placeTennisBallServeInA(ball);
   }
@@ -5838,6 +5854,8 @@ async function resetTennisAfterPoint(scorer) {
   tennisRally.zoneBounces = 0;
   tennisRally.outBounces = 0;
   tennisRally.lastHitTeam = null;
+  tennisRally.pointDead = false;
+  tennisRally.postBounceHitAfter = 0;
   tennisAiAcc = 1;
   statusEl.textContent = `Servis ${scorer.toUpperCase()} · ${tennisRally.scoreA}-${tennisRally.scoreB} · ilk ${TENNIS_WIN_SCORE}`;
 }
@@ -5848,22 +5866,73 @@ function noteTennisBallHit(team) {
   if (team === "a" || team === "b") tennisRally.lastHitTeam = team;
   tennisRally.zoneBounces = 0;
   tennisRally.outBounces = 0;
+  tennisRally.postBounceHitAfter = 0;
   tennisRally.wasFast = true;
   tennisRally.hitLockUntil = performance.now() + 580;
 }
 
 const TENNIS_GRAVITY = 720;
 const TENNIS_BOUNCE_REST = 0.52;
-/** Max feet→ball distance to allow a hit (was ~100 — too far). */
-const TENNIS_HIT_REACH = 56;
-/** Max ball Y to swing — same for volley and after 1st bounce. */
+/** Max feet→ball distance — volley / before 1st bounce (half of 38). */
+const TENNIS_HIT_REACH = 19;
+/** After 1st bounce — slightly looser so returns aren't rare. */
+const TENNIS_HIT_REACH_AFTER_BOUNCE = 18;
+/** Max ball Y for volley (before 1st bounce). */
 const TENNIS_HIT_MAX_Y = 28;
+/** After 1st bounce must wait this long before a swing is allowed. */
+const TENNIS_BOUNCE_HIT_DELAY_MS = 250;
 
-/** Hit window: 0 or 1 bounce → 28; after 2nd → none. */
+function tennisHitReachNow() {
+  return (tennisRally.zoneBounces || 0) >= 1
+    ? TENNIS_HIT_REACH_AFTER_BOUNCE
+    : TENNIS_HIT_REACH;
+}
+
+/** Hit window height: volley 28; after 1st bounce ~21; else none. */
 function tennisHitMaxYNow() {
   const b = tennisRally.zoneBounces || 0;
-  if (b <= 1) return TENNIS_HIT_MAX_Y;
+  if (b <= 0) return TENNIS_HIT_MAX_Y;
+  if (b === 1) return TENNIS_HIT_MAX_Y * 0.75;
   return 0;
+}
+
+/**
+ * When a return is legal by height/bounce phase.
+ * - Before 1st bounce: volley if Y low enough.
+ * - After 1st bounce: delay + descending + half height — not at ground (2nd bounce).
+ * - After 2nd bounce / pointDead: never.
+ */
+function tennisBallInHitWindow(ball, phy) {
+  if (tennisRally.pointDead) return false;
+  if (performance.now() < (tennisRally.lockUntil || 0)) return false;
+  const b = tennisRally.zoneBounces || 0;
+  if (b >= 2) return false;
+  // 2nd bounce hop already started
+  if ((phy?.tennisHopStage || 0) >= 2) return false;
+  if (b === 1 && performance.now() < (tennisRally.postBounceHitAfter || 0)) {
+    return false;
+  }
+  const y = ball?.position?.y || 0;
+  const maxY = tennisHitMaxYNow();
+  if (y >= maxY) return false;
+  if (b === 0) return true;
+  // Too late — about to count as 2nd bounce; don't scoop off the dirt
+  if (y < 3) return false;
+  const vy = phy?.vy ?? 0;
+  return vy <= 0;
+}
+
+function freezeTennisBallForPoint(ball = findTennisBall()) {
+  if (!ball) return;
+  ball.position.y = 0;
+  const phy = ball.userData?.physics;
+  if (!phy) return;
+  phy.vx = 0;
+  phy.vz = 0;
+  phy.vy = 0;
+  phy.tennisArc = null;
+  phy.tennisHopStage = 0;
+  phy.tennisHopPeak = 0;
 }
 
 /** Random XZ inside a team poly (rejection in AABB). */
@@ -5913,6 +5982,10 @@ function tickTennisBallRules(ball, phy, wallBounced, groundHit = false) {
   if (groundHit && team) {
     tennisRally.zoneBounces += 1;
     tennisRally.outBounces = 0;
+    if (tennisRally.zoneBounces === 1) {
+      tennisRally.postBounceHitAfter =
+        performance.now() + TENNIS_BOUNCE_HIT_DELAY_MS;
+    }
     statusEl.textContent = `Sekme ${tennisRally.zoneBounces}/2 · takım ${team.toUpperCase()}`;
     if (tennisRally.zoneBounces >= 2) {
       const scorer = team === "a" ? "b" : "a";
@@ -6028,24 +6101,56 @@ function findFootballBallItem() {
   return null;
 }
 
-/** Serve always starts in team A court so A players chase first. */
-function placeTennisBallServeInA(ball) {
+/** Feet world XZ for tennis hit/serve distance (matches tennisTapHitBall). */
+function tennisActorFeet(obj) {
+  if (!obj) return { x: 0, z: 0 };
+  if (player?.mesh && obj === player.mesh) {
+    return {
+      x: player.mesh.position.x,
+      z: player.mesh.position.z + FEET_NUDGE_Z,
+    };
+  }
+  return { x: obj.position.x, z: obj.position.z + FEET_NUDGE_Z };
+}
+
+function tennisDistFeetToBall(obj, ball) {
+  const f = tennisActorFeet(obj);
+  return Math.hypot(ball.position.x - f.x, ball.position.z - f.z);
+}
+
+/** Place ball just in front of server feet — inside hit reach. */
+function placeTennisBallAtServer(ball, team = "a") {
   if (!ball) return;
-  const pt = randomPointInTeamZone("a");
-  // Prefer center-ish of A (less random for fair open)
-  const b = tennisZoneBounds("a");
-  const x = (b.minX + b.maxX) * 0.5;
-  const z = (b.minZ + b.maxZ) * 0.55;
-  ball.position.x = pointInPoly(x, z, ensureTennisTeamZone("a").pts) ? x : pt.x;
-  ball.position.z = pointInPoly(x, z, ensureTennisTeamZone("a").pts) ? z : pt.z;
+  const servers = listTennisCourtActors(team);
+  const pick =
+    servers.length > 0
+      ? servers[Math.floor(Math.random() * servers.length)]
+      : null;
+  // From feet toward net; keep << TENNIS_HIT_REACH (mesh±offset used to miss)
+  const towardNet = team === "a" ? 8 : -8;
+  if (pick) {
+    const feet = tennisActorFeet(pick.obj);
+    ball.position.x = feet.x;
+    ball.position.z = feet.z + towardNet;
+  } else {
+    const pt = randomPointInTeamZone(team);
+    ball.position.x = pt.x;
+    ball.position.z = pt.z;
+  }
   ball.position.y = 0;
   if (ball.userData?.physics) {
     ball.userData.physics.vx = 0;
     ball.userData.physics.vz = 0;
     ball.userData.physics.vy = 0;
     ball.userData.physics.tennisArc = null;
+    ball.userData.physics.tennisHopStage = 0;
   }
   syncDepth(ball);
+}
+
+/** Serve always starts with team A so A players can open. */
+function placeTennisBallServeInA(ball) {
+  placeTennisBallAtServer(ball, "a");
 }
 
 async function ensureTennisFootballBall() {
@@ -6152,7 +6257,8 @@ async function placeTennisFanRow(list, team) {
   const face = team === "a" ? "south" : "north";
   // A = above (low Z); B = below (high Z). Back rows step further from court.
   // Screen-down nudge: A nearer court edge, B further south.
-  const baseZ = team === "a" ? b.minZ + 32 : b.maxZ + 148;
+  // B further south (higher Z) so sideline sits lower on screen
+  const baseZ = team === "a" ? b.minZ + 32 : b.maxZ + 175;
   const zDir = team === "a" ? -1 : 1;
   const rowCount = Math.ceil(list.length / TENNIS_FAN_ROW_SIZE);
   for (let row = 0; row < rowCount; row++) {
@@ -6252,10 +6358,7 @@ function triggerTennisTeamGift(team) {
   let bestD = Infinity;
   for (const a of actors) {
     if (a.isPlayer || a.obj.visible === false) continue;
-    const d = Math.hypot(
-      ball.position.x - a.obj.position.x,
-      ball.position.z - a.obj.position.z,
-    );
+    const d = tennisDistFeetToBall(a.obj, ball);
     if (d < bestD) {
       bestD = d;
       best = a;
@@ -6263,8 +6366,8 @@ function triggerTennisTeamGift(team) {
   }
   if (
     best &&
-    bestD < TENNIS_HIT_REACH &&
-    (ball.position.y || 0) < tennisHitMaxYNow() &&
+    bestD < tennisHitReachNow() &&
+    tennisBallInHitWindow(ball, ball.userData?.physics) &&
     now >= (tennisRally.hitLockUntil || 0)
   ) {
     tennisTapHitBall(best.obj, { hard: true });
@@ -6495,31 +6598,84 @@ function tennisDefendTeam(ball, _phy) {
   return null;
 }
 
-/** Predict where the ball will meet the ground (1st land or next bounce). */
+/** Stop walk/run in place and idle (or walk home if far). */
+function tennisParkActor(obj, team) {
+  if (!obj || obj.visible === false) return;
+  const home = obj.userData?.tennisHome;
+  const faceDir =
+    home?.dir || (team === "b" ? "north" : "south");
+  clearNpcScriptMoves(obj);
+  stopCharacterGait(obj);
+  if (home) {
+    const hd = Math.hypot(obj.position.x - home.x, obj.position.z - home.z);
+    if (hd >= 28) {
+      scriptActorTo(obj, home.x, home.z, {
+        run: false,
+        faceDir,
+        idleOnArrive: true,
+      });
+      return;
+    }
+  }
+  const gait = obj.userData?.animName;
+  if (gait === "walk" || gait === "run" || !obj.userData?.anim) {
+    obj.userData.dir = faceDir;
+    attachIdle(obj, obj.userData.path, faceDir, {
+      allowSouthFallback: true,
+    }).catch(() => applyFacing(obj, faceDir));
+  }
+}
+
+/**
+ * Where to run for a return.
+ * - In arc: 1st landing.
+ * - After 1st bounce: stay under the ball (when Y becomes hittable) — NOT the
+ *   2nd-bounce land, or they run ahead and never connect.
+ */
 function tennisBallChasePos(ball, phy, team = null) {
   let x = ball.position.x;
   let z = ball.position.z;
   const arc = phy?.tennisArc;
+  const bounces = tennisRally.zoneBounces || 0;
+  const y = Math.max(0, ball.position.y || 0);
+  const vx = phy?.vx || 0;
+  const vz = phy?.vz || 0;
+  const vy = phy?.vy || 0;
+  const g = TENNIS_GRAVITY;
+
   if (arc && arc.T > 0.05) {
-    // Scripted flight → aim at planned landing, not current air XZ
     x = arc.x1;
     z = arc.z1;
+  } else if (bounces >= 1) {
+    // Track under-ball until swing height — short lead only
+    const hitY = TENNIS_HIT_MAX_Y;
+    let t = 0.1;
+    if (y > hitY) {
+      // y + vy*t - 0.5*g*t^2 = hitY
+      const a = 0.5 * g;
+      const b = -vy;
+      const c = hitY - y;
+      const disc = b * b - 4 * a * c;
+      if (disc >= 0) {
+        const s = Math.sqrt(disc);
+        const cands = [(-b - s) / (2 * a), (-b + s) / (2 * a)].filter(
+          (tt) => tt > 0.04,
+        );
+        if (cands.length) t = Math.min(1.2, Math.min(...cands));
+      }
+    }
+    x = ball.position.x + vx * t;
+    z = ball.position.z + vz * t;
   } else {
-    const y = Math.max(0, ball.position.y || 0);
-    const vx = phy?.vx || 0;
-    const vz = phy?.vz || 0;
-    const vy = phy?.vy || 0;
-    const g = TENNIS_GRAVITY;
+    // Still before 1st bounce — aim at ground contact
     let tLand = 0.18;
     if (y > 1) {
-      // y + vy*t - 0.5*g*t^2 = 0
       const disc = vy * vy + 2 * g * y;
       if (disc > 0) {
         const t = (vy + Math.sqrt(disc)) / g;
         if (t > 0.05) tLand = Math.min(2.8, t);
       }
     } else if (vy > 40) {
-      // Just bounced up — full hop time ≈ 2*vy/g
       tLand = Math.min(2.2, (2 * vy) / g);
     }
     x = ball.position.x + vx * tLand;
@@ -6550,35 +6706,56 @@ function tickTennisNpcAi(dt) {
     const until = player.mesh?.userData?.tennisRunUntil || 0;
     player.forceRun = performance.now() < until;
   }
-  tennisAiAcc += dt;
-  if (tennisAiAcc < 0.22) return;
-  tennisAiAcc = 0;
   const ball = findTennisBall();
   if (!ball?.userData?.physics) return;
   const phy = ball.userData.physics;
   const ballTeam = tennisDefendTeam(ball, phy);
   const now = performance.now();
+
+  // Hit check every frame — post-bounce swing window is short
+  if (ballTeam === "a" || ballTeam === "b") {
+    const hitMates = listTennisCourtActors(ballTeam).filter(
+      (a) => !a.isPlayer && a.obj.visible !== false,
+    );
+    for (const { obj, team } of hitMates) {
+      const dist = tennisDistFeetToBall(obj, ball);
+      const at = ballTennisTeamAt(ball.position.x, ball.position.z);
+      const canReturn =
+        at === team &&
+        tennisRally.lastHitTeam !== team &&
+        now >= (tennisRally.hitLockUntil || 0) &&
+        dist < tennisHitReachNow() &&
+        tennisBallInHitWindow(ball, phy);
+      if (!canReturn) continue;
+      const hard =
+        !!obj.userData.tennisHardHitPending ||
+        tennisRally.hardHitTeam === team;
+      if (tennisTapHitBall(obj, { hard })) {
+        obj.userData.tennisHardHitPending = false;
+        return;
+      }
+    }
+  }
+
+  tennisAiAcc += dt;
+  if (tennisAiAcc < 0.22) return;
+  tennisAiAcc = 0;
+
   // Ball still in hitter's zone — hold / go home, no opponent rush
   if (ballTeam !== "a" && ballTeam !== "b") {
     for (const { obj, team } of listTennisCourtActors()) {
-      if (!obj || obj.visible === false) continue;
-      clearNpcScriptMoves(obj);
-      const home = obj.userData?.tennisHome;
-      if (!home) continue;
-      const faceDir = team === "b" ? "north" : "south";
-      const hd = Math.hypot(obj.position.x - home.x, obj.position.z - home.z);
-      if (hd < 28) continue;
-      scriptActorTo(obj, home.x, home.z, {
-        run: false,
-        faceDir,
-        idleOnArrive: true,
-      });
+      tennisParkActor(obj, team);
     }
     return;
   }
   const mates = listTennisCourtActors(ballTeam).filter(
     (a) => !a.isPlayer && a.obj.visible !== false,
   );
+  // Other team (not chasing) — stop walk-in-place, return home / idle
+  for (const { obj, team } of listTennisCourtActors()) {
+    if (team === ballTeam) continue;
+    tennisParkActor(obj, team);
+  }
   if (!mates.length) return;
 
   const chase = tennisBallChasePos(ball, phy, ballTeam);
@@ -6596,7 +6773,6 @@ function tickTennisNpcAi(dt) {
   }
 
   for (const { obj, team } of mates) {
-    // Default walk for A and B; run only after likes (tennisRunUntil)
     const run = now < (obj.userData.tennisRunUntil || 0);
     const faceDir = team === "b" ? "north" : "south";
     obj.userData.formationSlot = null;
@@ -6604,30 +6780,21 @@ function tickTennisNpcAi(dt) {
     if (obj === chaser.obj) {
       const ax = obj.position.x;
       const az = obj.position.z;
-      const dist = Math.hypot(ball.position.x - ax, ball.position.z - az);
-      const ballY = ball.position.y || 0;
-      const at = ballTennisTeamAt(ball.position.x, ball.position.z);
-      // Volley (0 bounce) or after 1st bounce (half height) — not after 2nd
-      const canReturn =
-        at === team &&
-        tennisRally.lastHitTeam !== team &&
-        now >= (tennisRally.hitLockUntil || 0) &&
-        dist < TENNIS_HIT_REACH &&
-        ballY < tennisHitMaxYNow() &&
-        (tennisRally.zoneBounces || 0) < 2;
-      if (canReturn) {
-        const hard =
-          !!obj.userData.tennisHardHitPending ||
-          tennisRally.hardHitTeam === team;
-        if (tennisTapHitBall(obj, { hard })) {
-          obj.userData.tennisHardHitPending = false;
+      const toLand = Math.hypot(chase.x - ax, chase.z - az);
+      // Arrived under ball — idle while waiting to swing (don't moonwalk)
+      if (toLand < 28) {
+        clearNpcScriptMoves(obj);
+        stopCharacterGait(obj);
+        const gait = obj.userData?.animName;
+        if (gait === "walk" || gait === "run" || !obj.userData?.anim) {
+          attachIdle(obj, obj.userData.path, faceDir, {
+            allowSouthFallback: true,
+          }).catch(() => applyFacing(obj, faceDir));
         }
         continue;
       }
-      // Retarget to landing spot; only skip if already close to predicted land
-      const toLand = Math.hypot(chase.x - ax, chase.z - az);
       const moving = npcScriptMoves.some((sm) => sm.obj === obj);
-      if (moving && !run && toLand < 36) continue;
+      if (moving && !run && toLand < 40) continue;
       scriptActorTo(obj, chase.x, chase.z, {
         run,
         faceDir,
@@ -6637,16 +6804,8 @@ function tickTennisNpcAi(dt) {
       continue;
     }
 
-    const home = obj.userData?.tennisHome;
-    if (!home) continue;
-    const hd = Math.hypot(obj.position.x - home.x, obj.position.z - home.z);
-    if (hd < 28) continue;
-    if (npcScriptMoves.some((sm) => sm.obj === obj)) continue;
-    scriptActorTo(obj, home.x, home.z, {
-      run: false,
-      faceDir,
-      idleOnArrive: true,
-    });
+    // Teammate not chasing — home + idle
+    tennisParkActor(obj, team);
   }
 }
 
@@ -6734,18 +6893,13 @@ function tennisTapHitBall(who, { hard = false } = {}) {
     return false;
   }
   const isP = !!(player?.mesh && who === player.mesh);
-  const ax = isP ? player.mesh.position.x : who.position.x;
-  const az = (isP ? player.mesh.position.z : who.position.z) + FEET_NUDGE_Z;
-  const dx = ball.position.x - ax;
-  const dz = ball.position.z - az;
-  const dist = Math.hypot(dx, dz);
-  if (dist >= TENNIS_HIT_REACH) {
+  const dist = tennisDistFeetToBall(who, ball);
+  if (dist >= tennisHitReachNow()) {
     if (!isP) return false;
     statusEl.textContent = "Topa yaklaş · dokun / tıkla";
     return false;
   }
-  if ((tennisRally.zoneBounces || 0) >= 2) return false;
-  if ((ball.position.y || 0) >= tennisHitMaxYNow()) return false;
+  if (!tennisBallInHitWindow(ball, ball.userData.physics)) return false;
   const team = isP
     ? player.mesh.userData?.tennisTeam
     : who.userData?.tennisTeam;
@@ -6907,7 +7061,7 @@ function parkMainAsTennisSpectator() {
         : "b";
   const b = tennisZoneBounds(team);
   const band = tennisFanRowBand();
-  const z = team === "a" ? b.minZ + 32 : b.maxZ + 148;
+  const z = team === "a" ? b.minZ + 32 : b.maxZ + 175;
   const x = band.cx;
   player.mesh.userData.tennisTeam = null;
   player.mesh.userData.tennisCast = false;
@@ -11392,7 +11546,6 @@ function tick(now) {
   lastTs = now;
   tickAnims(dt);
   tickNpcScriptMove(dt);
-  tickTennisNpcAi(dt);
   tickTennisGiftHitFx(dt);
   tickRedLightGame(dt);
   tickCharacterSeparation(dt);
@@ -11406,7 +11559,9 @@ function tick(now) {
     else player.update(dt);
     if (player.skating) syncSkateboardUnderPlayer();
     tickCompanions(dt);
+    // Ball bounce/score before AI so 2nd bounce can't be scooped after the fact
     tickBallPhysics(dt);
+    tickTennisNpcAi(dt);
     clampActorsIntoWalkZone();
     tickBuildingOcclusion();
     if (!dragging && !placing) {
