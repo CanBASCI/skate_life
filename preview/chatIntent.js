@@ -22,6 +22,9 @@ const SCENE_VOTE_ALIASES = {
   rl: "red_light_green_light",
   redlight: "red_light_green_light",
   kirmiziisik: "red_light_green_light",
+  street: "street",
+  cadde: "street",
+  sokak: "street",
 };
 
 const SCENE_VOTE_CANON = {
@@ -29,6 +32,7 @@ const SCENE_VOTE_CANON = {
   dogrulukmu_cesaretmi: "/dc",
   night_club_inside: "/nc",
   red_light_green_light: "/rl",
+  street: "/cadde",
 };
 
 /** Exact folded token → action slash (no args). */

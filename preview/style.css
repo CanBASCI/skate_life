@@ -336,6 +336,15 @@ body {
   color: #e0c8a0;
 }
 
+#help-ticker-scene {
+  background: #0e1210f2;
+  border-top-color: #355040;
+}
+
+#help-ticker-scene .help-ticker-text {
+  color: #9ed4b8;
+}
+
 .help-ticker-track {
   display: flex;
   width: max-content;

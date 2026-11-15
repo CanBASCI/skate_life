@@ -13,7 +13,10 @@ import {
   connectLiveBridge,
   bridgePost,
 } from "./liveBridge.js";
-import { tryResolveChatIntent } from "./chatIntent.js?v=20251116numFirst";
+import {
+  tryResolveChatIntent,
+  foldCmd,
+} from "./chatIntent.js?v=20251116adminVote";
 
 const REF = 96;
 const BUILDING_SCALE = 1.85;
@@ -260,19 +263,30 @@ const HELP_TICKER_MOVE = [
   "/dur",
 ].join("  ·  ");
 
-/** Join / play — player-facing only (no scene-vote abbreviations). */
+/** Join / play — player-facing only. */
 const HELP_TICKER_GAME = [
   "OYUN",
   "/katil",
   "/ayril",
   "/oyna",
+].join("  ·  ");
+
+/** Scene votes — full names, no /dc /rl /nc. */
+const HELP_TICKER_SCENE = [
+  "SAHNE",
+  "/cadde",
   "/tenis",
+  "/dogrulukcesaret",
+  "/kirmiziisik",
+  "/gecekulubu",
 ].join("  ·  ");
 
 /** Scene-specific tip marquee (top). Missing → tip row hidden. */
 const HELP_TICKER_TIPS = {
+  street:
+    "/katil  ·  /dans /otur /zipla  ·  yürü /ileri 3",
   tennis:
-    "Like / hediye → takıma güç  ·  /oyna maç başlat  ·  tribün /dans /dur",
+    "Like / Hediye → takıma güç  ·  /oyna maç başlat  ·  tribün /dans /dur",
   red_light_green_light:
     "/oyna  ·  /ileri 3 kuyruğa  ·  yeşilde yürür  ·  kırmızıda /dur",
   dogrulukmu_cesaretmi:
@@ -304,14 +318,17 @@ function syncHelpTickerSpeeds() {
   applyHelpTickerSpeed(document.getElementById("help-ticker-tip"));
   applyHelpTickerSpeed(document.getElementById("help-ticker-move"));
   applyHelpTickerSpeed(document.getElementById("help-ticker-game"));
+  applyHelpTickerSpeed(document.getElementById("help-ticker-scene"));
 }
 
 function syncHelpTicker(sceneId = activeSceneId) {
   const tipRow = document.getElementById("help-ticker-tip");
   const moveRow = document.getElementById("help-ticker-move");
   const gameRow = document.getElementById("help-ticker-game");
+  const sceneRow = document.getElementById("help-ticker-scene");
   if (moveRow) fillHelpTickerTexts(moveRow, HELP_TICKER_MOVE);
   if (gameRow) fillHelpTickerTexts(gameRow, HELP_TICKER_GAME);
+  if (sceneRow) fillHelpTickerTexts(sceneRow, HELP_TICKER_SCENE);
   const tip = sceneId ? HELP_TICKER_TIPS[sceneId] : null;
   if (tipRow) {
     if (tip) {
@@ -2652,6 +2669,8 @@ const SCENE_VOTE_CMDS = {
   "/dc": "dogrulukmu_cesaretmi",
   "/nc": "night_club_inside",
   "/rl": "red_light_green_light",
+  "/cadde": "street",
+  "/street": "street",
 };
 /** Live admins: scene vote alone switches (no >50% needed). Handle without @. */
 const LIVE_ADMIN_NAMES = new Set(["burakcanbasc"]);
@@ -2660,10 +2679,10 @@ const sceneVotes = new Map();
 let sceneVoteSwitching = false;
 
 function normalizeLiveHandle(name) {
-  return String(name || "")
-    .trim()
+  // Fold TR letters + strip @/spaces so "Burak Can Basc" / "@BurakCanBasc" match
+  return foldCmd(String(name || ""))
     .replace(/^@+/, "")
-    .toLocaleLowerCase("tr-TR");
+    .replace(/\s+/g, "");
 }
 
 function isLiveAdminUser(user) {
@@ -2702,7 +2721,9 @@ function countVotesForScene(sceneId) {
 async function registerSceneVote(user, sceneId, cmd) {
   const uid = String(user?.id || "").trim();
   const who = liveUsers.get(uid);
-  if (!who?.parent) {
+  const adminForce = isLiveAdminUser(user);
+  // Admin can force scene without /katil; others must be signed in
+  if (!who?.parent && !adminForce) {
     statusEl.textContent = "Sahne oyu · önce /signin";
     return;
   }
@@ -2711,18 +2732,19 @@ async function registerSceneVote(user, sceneId, cmd) {
     return;
   }
   if (activeSceneId === sceneId) {
-    speakAs(who, cmd);
+    if (who?.parent) speakAs(who, cmd);
     statusEl.textContent = `Zaten ${sceneId}`;
     return;
   }
 
-  sceneVotes.set(uid, sceneId);
-  speakAs(who, cmd);
+  if (who?.parent) {
+    sceneVotes.set(uid, sceneId);
+    speakAs(who, cmd);
+  }
 
   const total = liveCharacterCount();
   const forScene = countVotesForScene(sceneId);
   const need = Math.floor(total / 2) + 1;
-  const adminForce = isLiveAdminUser(user);
   statusEl.textContent = adminForce
     ? `Admin ${cmd} · sahne açılıyor…`
     : `Oy ${cmd} · ${forScene}/${total} (>%50 → ${need})`;
@@ -2934,6 +2956,11 @@ function handleLiveEvent(ev) {
 
   const who = liveUsers.get(String(user.id || ""));
   if (!who || !who.parent) {
+    // Admin scene votes work without /katil; other cmds still need a character
+    if (intent?.kind === "vote" && isLiveAdminUser(user)) {
+      applyResolvedChatIntent(intent, null, user);
+      return;
+    }
     if (intent?.kind === "vote" || intent?.kind === "slash") {
       statusEl.textContent = "Önce /katil veya /signin";
     }
@@ -5444,19 +5471,46 @@ function clearAllPartyCharacters() {
 }
 
 function snapshotPartyFromWorld() {
+  // Keep live /katil actors marked as traveling cast (never disposable crowd)
+  for (const [lid, obj] of liveUsers) {
+    if (!obj?.userData || !obj.parent) continue;
+    obj.userData.liveUserId = lid;
+    obj.userData.partyMember = true;
+    obj.userData.crowdExtra = false;
+    obj.userData.editable = false;
+    if (obj.userData.liveUserName) obj.userData.label = obj.userData.liveUserName;
+  }
   const list = [];
   const seen = new Set();
   for (const o of listPartyCharacters()) {
     if (seen.has(o)) continue;
     seen.add(o);
     const d = o.userData || {};
+    const liveId = d.liveUserId || null;
     list.push({
       path: d.path,
       id: d.catalogId || null,
       scale: d.scale ?? 1,
       dir: d.dir || "south",
-      liveUserId: d.liveUserId || null,
+      liveUserId: liveId,
       liveUserName: d.liveUserName || null,
+      // Live players are not crowd NPCs
+      crowdExtra: !liveId && !!d.crowdExtra,
+    });
+  }
+  // Also keep liveUsers that somehow lost party flags
+  for (const [lid, obj] of liveUsers) {
+    if (!obj?.parent || seen.has(obj)) continue;
+    seen.add(obj);
+    const d = obj.userData || {};
+    list.push({
+      path: d.path,
+      id: d.catalogId || null,
+      scale: d.scale ?? 1,
+      dir: d.dir || "south",
+      liveUserId: lid,
+      liveUserName: d.liveUserName || null,
+      crowdExtra: false,
     });
   }
   persistentParty = list;
@@ -5524,8 +5578,13 @@ async function restorePartyIntoScene() {
       obj.userData.spawnX = gather.x;
       obj.userData.spawnZ = gather.z;
       obj.userData.partyMember = true;
-      obj.userData.crowdExtra = true;
       obj.userData.editable = true;
+      obj.userData.redLightBench = false;
+      obj.userData.redLightDq = false;
+      obj.userData.redLightEliminating = false;
+      obj.userData.redLightFinished = false;
+      obj.userData.redLightFinishing = false;
+      obj.visible = true;
       if (entry.liveUserId) {
         const lid = String(entry.liveUserId);
         const lname = String(entry.liveUserName || entry.liveUserId);
@@ -5533,7 +5592,10 @@ async function restorePartyIntoScene() {
         obj.userData.liveUserName = lname;
         obj.userData.label = lname;
         obj.userData.editable = false;
+        obj.userData.crowdExtra = false;
         liveUsers.set(lid, obj);
+      } else {
+        obj.userData.crowdExtra = entry.crowdExtra !== false;
       }
       syncDepth(obj);
       if (club && slot) {
@@ -8661,7 +8723,12 @@ function stopRedLightGame({ clearDq = true } = {}) {
     }
   }
   redLightGame.dogKey = null;
-  if (clearDq) clearRedLightDqFlags();
+  if (clearDq) {
+    clearRedLightDqFlags();
+    // Bring back benched / DQ live players for next round or scene travel
+    clearRedLightBenchHide();
+    if (player?.mesh) player.mesh.visible = true;
+  }
 }
 
 function clearRedLightEntranceFlags() {
@@ -9041,6 +9108,17 @@ function exitRedLightActorFromMatch(obj) {
       player.mesh.userData.redLightDq = true;
       player.mesh.userData.formationSlot = null;
     }
+  } else if (obj?.userData?.liveUserId) {
+    // Keep signed-in players in the traveling party — only leave the match
+    clearNpcScriptMoves(obj);
+    obj.visible = false;
+    obj.userData.redLightBench = true;
+    obj.userData.redLightEliminating = false;
+    obj.userData.redLightDq = true;
+    obj.userData.formationSlot = null;
+    obj.userData.partyMember = true;
+    obj.userData.crowdExtra = false;
+    if (partySnapshotEnabled) snapshotPartyFromWorld();
   } else {
     clearNpcScriptMoves(obj);
     detachPlacedObject(obj);
@@ -9623,7 +9701,9 @@ function crowdCharacterCatalog() {
 }
 
 function clearCrowdExtras() {
-  const doomed = pickables.filter((o) => o.userData?.crowdExtra);
+  const doomed = pickables.filter(
+    (o) => o.userData?.crowdExtra && !o.userData?.liveUserId,
+  );
   for (const obj of doomed) {
     clearNpcScriptMoves(obj);
     detachPlacedObject(obj);
@@ -9757,8 +9837,10 @@ async function setTruthDareCrowdCount(count) {
   clearTruthDareFormationLocks();
   truthDareActive = false;
   truthDareSnapshot = new Map();
-  // Replace whole traveling cast with this crowd size
+  // Replace NPC cast/crowd only — keep live /katil players (+ Main)
   for (const obj of [...listPartyCharacters()]) {
+    if (player?.mesh && obj === player.mesh) continue;
+    if (obj.userData?.liveUserId) continue;
     clearNpcScriptMoves(obj);
     detachPlacedObject(obj);
     disposePlacedObject(obj);
