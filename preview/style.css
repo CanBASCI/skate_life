@@ -300,7 +300,7 @@ body {
 .help-ticker-row {
   position: relative;
   overflow: hidden;
-  height: 40px;
+  height: 34px;
   background: #0a100df2;
   border-top: 1px solid #2a3a32;
 }
@@ -358,8 +358,8 @@ body {
 .help-ticker-text {
   flex: 0 0 auto;
   padding: 0 28px;
-  font-size: 14px;
-  line-height: 40px;
+  font-size: 12px;
+  line-height: 34px;
   letter-spacing: 0.04em;
   white-space: nowrap;
   color: #e8f0ea;
