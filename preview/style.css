@@ -281,6 +281,98 @@ body {
   image-rendering: pixelated;
 }
 
+/* Pixel help marquee — DOM overlay only; does not touch Three.js scene */
+#help-ticker {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 40;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  font-family: "Press Start 2P", monospace;
+  -webkit-font-smoothing: none;
+  -moz-osx-font-smoothing: unset;
+}
+
+.help-ticker-row {
+  position: relative;
+  overflow: hidden;
+  height: 40px;
+  background: #0a100df2;
+  border-top: 1px solid #2a3a32;
+}
+
+.help-ticker-row.hidden {
+  display: none;
+}
+
+#help-ticker-tip {
+  background: #121c18f2;
+  border-top-color: #3d5a45;
+}
+
+#help-ticker-tip .help-ticker-text {
+  color: #b8e0a8;
+}
+
+#help-ticker-move {
+  background: #0c1418f2;
+  border-top-color: #2a4050;
+}
+
+#help-ticker-move .help-ticker-text {
+  color: #a8d4e8;
+}
+
+#help-ticker-game {
+  background: #100e14f2;
+  border-top-color: #3a2a48;
+}
+
+#help-ticker-game .help-ticker-text {
+  color: #e0c8a0;
+}
+
+.help-ticker-track {
+  display: flex;
+  width: max-content;
+  height: 100%;
+  align-items: center;
+  /* duration set in JS from text width → constant px/s */
+  animation: help-marquee 42s linear infinite;
+  will-change: transform;
+}
+
+.help-ticker-text {
+  flex: 0 0 auto;
+  padding: 0 28px;
+  font-size: 14px;
+  line-height: 40px;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  color: #e8f0ea;
+  text-shadow: 1px 1px 0 #000;
+}
+
+@keyframes help-marquee {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .help-ticker-track {
+    animation: none;
+    transform: translateX(0);
+  }
+}
+
 #view-controls {
   flex: 0 0 auto;
   display: flex;

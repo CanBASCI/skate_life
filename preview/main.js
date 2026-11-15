@@ -13,7 +13,7 @@ import {
   connectLiveBridge,
   bridgePost,
 } from "./liveBridge.js";
-import { tryResolveChatIntent } from "./chatIntent.js?v=20251114nl";
+import { tryResolveChatIntent } from "./chatIntent.js?v=20251116numFirst";
 
 const REF = 96;
 const BUILDING_SCALE = 1.85;
@@ -243,6 +243,90 @@ function isTennisScene(id = activeSceneId) {
 function isTruthDareScene(id = activeSceneId) {
   return id === "dogrulukmu_cesaretmi";
 }
+
+/** Bottom pixel marquee — commands (all scenes). */
+/** Character movement / pose — no scene admin. */
+const HELP_TICKER_MOVE = [
+  "HAREKET",
+  "/ileri 3",
+  "/geri 3",
+  "/saga 3",
+  "/sola 3",
+  "/3 ileri",
+  "/zipla",
+  "/otur",
+  "/dans",
+  "/bin",
+  "/dur",
+].join("  ·  ");
+
+/** Join / play — player-facing only (no scene-vote abbreviations). */
+const HELP_TICKER_GAME = [
+  "OYUN",
+  "/katil",
+  "/ayril",
+  "/oyna",
+  "/tenis",
+].join("  ·  ");
+
+/** Scene-specific tip marquee (top). Missing → tip row hidden. */
+const HELP_TICKER_TIPS = {
+  tennis:
+    "Like / hediye → takıma güç  ·  /oyna maç başlat  ·  tribün /dans /dur",
+  red_light_green_light:
+    "/oyna  ·  /ileri 3 kuyruğa  ·  yeşilde yürür  ·  kırmızıda /dur",
+  dogrulukmu_cesaretmi:
+    "Cevap sohbet yaz  ·  /dans /otur /dur",
+  night_club_inside:
+    "/dans  ·  /katil  ·  /otur /dur",
+};
+
+/** Same visual scroll speed for every row (px/s), duration scales with text length. */
+const HELP_TICKER_PX_PER_SEC = 52;
+
+function fillHelpTickerTexts(rowEl, text) {
+  if (!rowEl) return;
+  const spans = rowEl.querySelectorAll(".help-ticker-text");
+  const chunk = `${text}  ·  `;
+  for (const sp of spans) sp.textContent = chunk;
+}
+
+function applyHelpTickerSpeed(rowEl) {
+  if (!rowEl || rowEl.classList.contains("hidden")) return;
+  const track = rowEl.querySelector(".help-ticker-track");
+  if (!track) return;
+  const loopPx = track.scrollWidth / 2;
+  if (!(loopPx > 0)) return;
+  track.style.animationDuration = `${Math.max(8, loopPx / HELP_TICKER_PX_PER_SEC)}s`;
+}
+
+function syncHelpTickerSpeeds() {
+  applyHelpTickerSpeed(document.getElementById("help-ticker-tip"));
+  applyHelpTickerSpeed(document.getElementById("help-ticker-move"));
+  applyHelpTickerSpeed(document.getElementById("help-ticker-game"));
+}
+
+function syncHelpTicker(sceneId = activeSceneId) {
+  const tipRow = document.getElementById("help-ticker-tip");
+  const moveRow = document.getElementById("help-ticker-move");
+  const gameRow = document.getElementById("help-ticker-game");
+  if (moveRow) fillHelpTickerTexts(moveRow, HELP_TICKER_MOVE);
+  if (gameRow) fillHelpTickerTexts(gameRow, HELP_TICKER_GAME);
+  const tip = sceneId ? HELP_TICKER_TIPS[sceneId] : null;
+  if (tipRow) {
+    if (tip) {
+      tipRow.classList.remove("hidden");
+      fillHelpTickerTexts(tipRow, tip);
+    } else {
+      tipRow.classList.add("hidden");
+    }
+  }
+  requestAnimationFrame(() => syncHelpTickerSpeeds());
+}
+
+window.addEventListener("resize", () => {
+  requestAnimationFrame(() => syncHelpTickerSpeeds());
+});
 /** After lineup: stay on seat/row — chat + /dance /jump /sit only. */
 function isTruthDarePositionLocked(obj) {
   if (!truthDareActive || !isTruthDareScene()) return false;
@@ -2272,6 +2356,9 @@ async function handleChatCommand(raw, speakerOverride = null) {
   }
 
   if (lower === "/stop") {
+    if (isRedLightScene() && redLightGame.active) {
+      clearRedLightQueuedMove(who);
+    }
     if (tdLocked) {
       // Cancel dance/sit/jump in place — keep formation slot
       if (isPlayer) {
@@ -2378,6 +2465,47 @@ async function handleChatCommand(raw, speakerOverride = null) {
     const moveLabel = rl
       ? `${name}: ${dirName} ${birim}s`
       : `${name}: ${dirName} × ${birim}`;
+
+    // Red light match: queue until dog turns away (counting / green)
+    if (rl && redLightGame.active) {
+      if (
+        isRedLightDq(who) ||
+        isRedLightFinished(who) ||
+        isRedLightFinishing(who) ||
+        who.userData?.redLightEliminating
+      ) {
+        statusEl.textContent = `${name}: diskalifiye — komut yok`;
+        return;
+      }
+      if (!isRedLightCastActor(who)) {
+        statusEl.textContent = `${name}: cast’te değil`;
+        return;
+      }
+      if (isPlayer && player.driving) {
+        statusEl.textContent = "Araçtayken yürüme komutu yok";
+        return;
+      }
+      if (!isPlayer && who.userData?.driving) {
+        statusEl.textContent = "Red light — sadece yürüme";
+        return;
+      }
+      const ok = queueRedLightMove(who, {
+        dirName,
+        seconds: birim,
+        dx,
+        dz,
+        dist,
+        speed: walkSpd,
+      });
+      if (!ok) {
+        statusEl.textContent = `${name}: komut alınamadı`;
+        return;
+      }
+      speakAs(who, `kuyruk ${birim}s`, { holdMs: 2200 });
+      statusEl.textContent = `${name}: kuyruk · ${dirName} ${birim}s (yeşil bekleniyor)`;
+      return;
+    }
+
     if (isPlayer) {
       if (player.driving) {
         statusEl.textContent = "Araçtayken yürüme komutu yok";
@@ -2419,7 +2547,7 @@ async function handleChatCommand(raw, speakerOverride = null) {
   }
 
   statusEl.textContent =
-    "Komut: /play · dans et · sola 3 · zıpla · dur · /R3 (küfür yasak)";
+    "Komut: /oyna /dans /saga 3 /zipla /dur /katil /dc (küfür yasak)";
 }
 
 function dismissChatKeyboard() {
@@ -2525,9 +2653,23 @@ const SCENE_VOTE_CMDS = {
   "/nc": "night_club_inside",
   "/rl": "red_light_green_light",
 };
+/** Live admins: scene vote alone switches (no >50% needed). Handle without @. */
+const LIVE_ADMIN_NAMES = new Set(["burakcanbasc"]);
 /** @type {Map<string, string>} liveUserId → sceneId */
 const sceneVotes = new Map();
 let sceneVoteSwitching = false;
+
+function normalizeLiveHandle(name) {
+  return String(name || "")
+    .trim()
+    .replace(/^@+/, "")
+    .toLocaleLowerCase("tr-TR");
+}
+
+function isLiveAdminUser(user) {
+  const handle = normalizeLiveHandle(user?.name || user?.handle || "");
+  return !!(handle && LIVE_ADMIN_NAMES.has(handle));
+}
 
 function liveCharacterCount() {
   let n = 0;
@@ -2580,15 +2722,22 @@ async function registerSceneVote(user, sceneId, cmd) {
   const total = liveCharacterCount();
   const forScene = countVotesForScene(sceneId);
   const need = Math.floor(total / 2) + 1;
-  statusEl.textContent = `Oy ${cmd} · ${forScene}/${total} (>%50 → ${need})`;
+  const adminForce = isLiveAdminUser(user);
+  statusEl.textContent = adminForce
+    ? `Admin ${cmd} · sahne açılıyor…`
+    : `Oy ${cmd} · ${forScene}/${total} (>%50 → ${need})`;
 
-  if (total > 0 && forScene > total * 0.5) {
+  if (adminForce || (total > 0 && forScene > total * 0.5)) {
     sceneVoteSwitching = true;
     sceneVotes.clear();
-    statusEl.textContent = `Oy kazandı ${cmd} · sahne açılıyor…`;
+    statusEl.textContent = adminForce
+      ? `Admin · ${cmd} · sahne açılıyor…`
+      : `Oy kazandı ${cmd} · sahne açılıyor…`;
     try {
       await loadNamedScene(sceneId);
-      statusEl.textContent = `Sahne · ${sceneId} (oy)`;
+      statusEl.textContent = adminForce
+        ? `Sahne · ${sceneId} (admin)`
+        : `Sahne · ${sceneId} (oy)`;
     } catch (err) {
       console.warn(err);
       statusEl.textContent = err?.message || String(err);
@@ -2700,7 +2849,11 @@ async function liveSignIn(user) {
     "Geldik",
   ];
   speakAs(obj, greetings[Math.floor(Math.random() * greetings.length)]);
-  statusEl.textContent = `${name} oyuna girdi (/signin)`;
+  const admin = isLiveAdminUser(user);
+  if (admin) obj.userData.liveAdmin = true;
+  statusEl.textContent = admin
+    ? `${name} oyuna girdi (admin)`
+    : `${name} oyuna girdi (/signin)`;
 }
 
 /**
@@ -2782,7 +2935,7 @@ function handleLiveEvent(ev) {
   const who = liveUsers.get(String(user.id || ""));
   if (!who || !who.parent) {
     if (intent?.kind === "vote" || intent?.kind === "slash") {
-      statusEl.textContent = "Önce katıl (katıl / /signin)";
+      statusEl.textContent = "Önce /katil veya /signin";
     }
     return;
   }
@@ -5928,6 +6081,7 @@ async function loadScene(data, { persist = true, carryParty = true } = {}) {
     sceneLoading = false;
     partySnapshotEnabled = true;
     syncStreetBgm();
+    syncHelpTicker(activeSceneId);
   }
 }
 
@@ -8406,6 +8560,73 @@ function clearRedLightDqFlags() {
   }
 }
 
+function clearRedLightQueuedMove(obj) {
+  if (obj?.userData) obj.userData.redLightQueuedMove = null;
+}
+
+function clearAllRedLightMoveQueues() {
+  for (const o of listRedLightPlayers()) clearRedLightQueuedMove(o);
+}
+
+function isRedLightCastActor(obj) {
+  if (!obj) return false;
+  return listRedLightPlayers().includes(obj);
+}
+
+/**
+ * Store walk for next green (counting). Last command wins.
+ * @returns {boolean} true if queued
+ */
+function queueRedLightMove(obj, payload) {
+  if (!obj?.userData) return false;
+  if (!redLightGame.active) return false;
+  if (!isRedLightCastActor(obj)) return false;
+  if (
+    isRedLightDq(obj) ||
+    isRedLightFinished(obj) ||
+    isRedLightFinishing(obj) ||
+    obj.userData.redLightEliminating
+  ) {
+    return false;
+  }
+  obj.userData.redLightQueuedMove = payload;
+  return true;
+}
+
+/** Apply all queued walks when dog turns away and starts counting. */
+function flushRedLightMoveQueues() {
+  if (!redLightGame.active) return;
+  for (const obj of listRedLightPlayers()) {
+    if (
+      isRedLightDq(obj) ||
+      isRedLightFinished(obj) ||
+      isRedLightFinishing(obj) ||
+      obj.userData?.redLightEliminating
+    ) {
+      clearRedLightQueuedMove(obj);
+      continue;
+    }
+    const q = obj.userData?.redLightQueuedMove;
+    if (!q) continue;
+    clearRedLightQueuedMove(obj);
+    const { dirName, dx, dz, dist, speed } = q;
+    const isP = !!(player?.mesh && obj === player.mesh);
+    if (isP) {
+      if (player.driving) continue;
+      player.startScriptMove(dx, dz, dist, speed, { anim: "walk" });
+      continue;
+    }
+    applyFacing(obj, dirName || "north");
+    obj.userData.dancing = false;
+    if (!obj.userData.skating) {
+      attachWalk(obj, obj.userData.path, dirName || "north", {
+        allowSouthFallback: true,
+      }).catch(() => {});
+    }
+    enqueueNpcWalk(obj, dx, dz, dist, speed);
+  }
+}
+
 function isRedLightFinished(obj) {
   return !!obj?.userData?.redLightFinished;
 }
@@ -8430,6 +8651,7 @@ function stopRedLightGame({ clearDq = true } = {}) {
   redLightGame.pendingSince = 0;
   redLightGame.entranceExpect = 0;
   redLightGame.entranceArrived = 0;
+  clearAllRedLightMoveQueues();
   if (redLightGame.dogKey) {
     const entry = worldLabelMap.get(redLightGame.dogKey);
     if (entry) {
@@ -8616,6 +8838,7 @@ function startRedLightGame() {
   clearNpcScriptMoves();
   if (player?.scriptMove) player.scriptMove = null;
   clearRedLightDqFlags();
+  clearAllRedLightMoveQueues();
   // Snap to lanes, face north, then free pins so they can walk on green light
   for (const o of listRedLightPlayers()) {
     settleRedLightActorOnLane(o);
@@ -8681,6 +8904,8 @@ function beginRedLightCountPhase() {
   // Random 2–5 so players can't memorize the turn timing
   redLightGame.countNum = randomRedLightCount();
   redLightGame.phaseT = 0;
+  // Stream-delay fair: everyone who queued starts walking together on green
+  flushRedLightMoveQueues();
   redLightDogBubble(
     String(redLightGame.countNum),
     RED_LIGHT_COUNT_BEAT * 1000 + 200,
@@ -8836,6 +9061,7 @@ function disqualifyRedLightActor(obj) {
   obj.userData.redLightDq = true;
   obj.userData.redLightEliminating = true;
   obj.userData.formationSlot = null;
+  clearRedLightQueuedMove(obj);
 
   const isPlayer = !!(player?.mesh && obj === player.mesh);
   if (isPlayer) {
@@ -9963,6 +10189,7 @@ async function softSwitchStreetVariant(sceneId) {
     syncTrafficForScene();
     syncTruthDareCrowdUi();
     syncStreetBgm();
+    syncHelpTicker(sceneId);
     await startTruthDareFormation();
     persistScene();
     return;
@@ -9975,6 +10202,7 @@ async function softSwitchStreetVariant(sceneId) {
   syncTrafficForScene();
   syncTruthDareCrowdUi();
   syncStreetBgm();
+  syncHelpTicker(sceneId);
   persistScene();
   statusEl.textContent = "street — overlay kalktı (konumlar geri)";
 }
@@ -9988,6 +10216,7 @@ async function loadNamedScene(sceneId) {
   ) {
     if (activeSceneId === sceneId) {
       highlightSceneSlot(sceneId);
+      syncHelpTicker(sceneId);
       statusEl.textContent = `${meta?.label || sceneId} zaten açık`;
       return;
     }
@@ -10008,6 +10237,7 @@ async function loadNamedScene(sceneId) {
   await loadScene(data, { persist: true });
   highlightSceneSlot(sceneId);
   syncTruthDareCrowdUi();
+  syncHelpTicker(sceneId);
   if (sceneId === "dogrulukmu_cesaretmi") {
     await startTruthDareFormation();
   }
@@ -11676,6 +11906,7 @@ async function boot() {
   }
 
   initLiveBridgeUi();
+  syncHelpTicker(activeSceneId);
   statusEl.textContent = "Hazır";
 }
 

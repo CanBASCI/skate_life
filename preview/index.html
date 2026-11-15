@@ -12,7 +12,7 @@
       href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="./style.css?v=20251114obsClean" />
+    <link rel="stylesheet" href="./style.css?v=20251116helpTicker7" />
     <script type="importmap">
       {
         "imports": {
@@ -153,7 +153,28 @@
             </div>
           </div>
         </div>
-        <div id="app"></div>
+        <div id="app">
+          <div id="help-ticker" aria-hidden="true">
+            <div id="help-ticker-tip" class="help-ticker-row hidden">
+              <div class="help-ticker-track">
+                <span class="help-ticker-text"></span>
+                <span class="help-ticker-text" aria-hidden="true"></span>
+              </div>
+            </div>
+            <div id="help-ticker-move" class="help-ticker-row">
+              <div class="help-ticker-track">
+                <span class="help-ticker-text"></span>
+                <span class="help-ticker-text" aria-hidden="true"></span>
+              </div>
+            </div>
+            <div id="help-ticker-game" class="help-ticker-row">
+              <div class="help-ticker-track">
+                <span class="help-ticker-text"></span>
+                <span class="help-ticker-text" aria-hidden="true"></span>
+              </div>
+            </div>
+          </div>
+        </div>
         <div id="inspector" class="hidden">
           <div class="insp-title" id="insp-label" title="Sürükleyerek istediğin yere taşı">—</div>
           <label>X <input id="insp-x" type="number" step="1" /></label>
@@ -185,6 +206,6 @@
     <div id="drag-ghost" class="hidden"></div>
     <div id="world-labels"></div>
     <div id="tennis-scoreboard" class="hidden" aria-live="polite">Y 0 — 0 A</div>
-    <script type="module" src="./main.js?v=20251114nlBan"></script>
+    <script type="module" src="./main.js?v=20251116helpTicker8"></script>
   </body>
 </html>

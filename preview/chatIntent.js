@@ -1,20 +1,80 @@
 /**
- * Chat intent: keep `/` commands; also extract Turkish natural phrases.
+ * Chat intent: commands MUST start with `/`.
+ * Turkish letters folded (ğ→g, ı→i…) so /saga == /sağa.
+ * Plain chat (no leading /) = speech bubble only.
  * Profanity → { kind: "banned" }.
  */
 
 const CROWD_COUNTS = [5, 10, 20, 30, 40, 50];
 
-const SCENE_VOTE_SLASH = {
-  "/tennis": "tennis",
-  "/dc": "dogrulukmu_cesaretmi",
-  "/nc": "night_club_inside",
-  "/rl": "red_light_green_light",
+/** Folded cmd (no slash) → sceneId */
+const SCENE_VOTE_ALIASES = {
+  tennis: "tennis",
+  tenis: "tennis",
+  tenisesahnesi: "tennis",
+  dc: "dogrulukmu_cesaretmi",
+  dogrulukcesaret: "dogrulukmu_cesaretmi",
+  dogrulukmucesaretmi: "dogrulukmu_cesaretmi",
+  nc: "night_club_inside",
+  nightclub: "night_club_inside",
+  kulup: "night_club_inside",
+  gecekulubu: "night_club_inside",
+  rl: "red_light_green_light",
+  redlight: "red_light_green_light",
+  kirmiziisik: "red_light_green_light",
 };
+
+const SCENE_VOTE_CANON = {
+  tennis: "/tennis",
+  dogrulukmu_cesaretmi: "/dc",
+  night_club_inside: "/nc",
+  red_light_green_light: "/rl",
+};
+
+/** Exact folded token → action slash (no args). */
+const SIMPLE_ALIASES = {
+  dance: "/dance",
+  dans: "/dance",
+  danset: "/dance",
+  jump: "/jump",
+  zipla: "/jump",
+  sit: "/sit",
+  otur: "/sit",
+  stop: "/stop",
+  dur: "/stop",
+  durdur: "/stop",
+  dansetme: "/stop",
+  in: "/stop",
+  e: "/e",
+  bin: "/e",
+  kaykayabin: "/e",
+  aracabin: "/e",
+  play: "/play",
+  oyna: "/play",
+  basla: "/play",
+  baslat: "/play",
+  macbaslat: "/play",
+  oyunubaslat: "/play",
+};
+
+const SIGNIN_ALIASES = new Set([
+  "signin",
+  "join",
+  "katil",
+  "oyunakatil",
+  "benial",
+]);
+const SIGNOUT_ALIASES = new Set([
+  "signout",
+  "leave",
+  "ayril",
+  "cikis",
+  "cikisyap",
+  "oyundancik",
+]);
 
 /** Turkish + common EN — matched as whole words after normalize. */
 const BANNED_WORDS = [
-  // TR
   "amk",
   "amq",
   "aq",
@@ -102,17 +162,29 @@ const BANNED_WORDS = [
   "hasiktir",
   "awk",
   "awq",
+  "fuck",
+  "fucking",
+  "fucker",
+  "shit",
+  "bitch",
+  "asshole",
+  "dick",
+  "cunt",
+  "motherfucker",
+  "bastard",
+  "whore",
+  "slut",
 ];
 
-const DIR_WORD_TO_FACE = [
-  [/sol\s*üst|sol\s*ust|kuzey\s*bat[iı]|northwest|north\s*west/i, "north-west"],
-  [/sol\s*alt|güney\s*bat[iı]|guney\s*bat[iı]|southwest|south\s*west/i, "south-west"],
-  [/sağ\s*üst|sag\s*üst|sag\s*ust|sağ\s*ust|kuzey\s*doğu|kuzey\s*dogu|northeast|north\s*east/i, "north-east"],
-  [/sağ\s*alt|sag\s*alt|güney\s*doğu|guney\s*dogu|southeast|south\s*east/i, "south-east"],
-  [/sola|sol\s*tarafa|sol\s*taraf|sola\s*doğru|sola\s*dogru|\bsol\b|left|west/i, "west"],
-  [/sağa|saga|sağ\s*tarafa|sag\s*tarafa|sağa\s*doğru|saga\s*dogru|\bsağ\b|\bsag\b|right|east/i, "east"],
-  [/ileri|yukarı|yukari|kuzeye|\bkuzey\b|yukarıya|yukariya|north|\bup\b/i, "north"],
-  [/geri|aşağı|asagi|güneye|guneye|\bgüney\b|\bguney\b|aşağıya|asagiya|south|\bback\b/i, "south"],
+const DIR_ALIASES = [
+  [["solust", "kuzeybati", "northwest", "nw"], "north-west"],
+  [["solalt", "guneybati", "southwest", "sw"], "south-west"],
+  [["sagust", "kuzeydogu", "northeast", "ne"], "north-east"],
+  [["sagalt", "guneydogu", "southeast", "se"], "south-east"],
+  [["sola", "sol", "left", "west", "w", "l"], "west"],
+  [["saga", "sag", "right", "east", "e", "r"], "east"],
+  [["ileri", "yukari", "kuzey", "north", "n", "up"], "north"],
+  [["geri", "asagi", "guney", "south", "s", "back", "down"], "south"],
 ];
 
 const FACE_TO_SLASH = {
@@ -130,16 +202,27 @@ export function normalizeChatText(s) {
   return String(s || "")
     .toLocaleLowerCase("tr-TR")
     .replace(/[''`´]/g, "")
-    .replace(/[^a-z0-9çğıöşü.\s]/gi, " ")
+    .replace(/[^a-z0-9çğıöşü.\s/]/gi, " ")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+/** Strip Turkish diacritics for command matching. */
+export function foldCmd(s) {
+  return normalizeChatText(s)
+    .replace(/ğ/g, "g")
+    .replace(/ü/g, "u")
+    .replace(/ş/g, "s")
+    .replace(/ı/g, "i")
+    .replace(/ö/g, "o")
+    .replace(/ç/g, "c");
 }
 
 function escapeRe(s) {
   return String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-/** True if text contains a banned word/phrase (word-ish boundaries). */
+/** True if text contains a banned word/phrase. */
 export function containsBannedLanguage(raw) {
   const n = normalizeChatText(raw);
   if (!n) return false;
@@ -148,7 +231,7 @@ export function containsBannedLanguage(raw) {
     const phrase = normalizeChatText(w);
     if (!phrase) continue;
     if (phrase.includes(" ")) {
-      if (n.includes(phrase)) return true;
+      if (n.includes(phrase) || foldCmd(n).includes(foldCmd(phrase))) return true;
       continue;
     }
     const re = new RegExp(
@@ -156,68 +239,102 @@ export function containsBannedLanguage(raw) {
       "i",
     );
     if (re.test(n)) return true;
-    // glued bypass: amk inside longer token already covered; also packed exact short toks
-    if (phrase.length >= 2 && packed.includes(phrase) && phrase.length >= 3) {
-      // only for short slang tokens without vowels sandwich — keep conservative:
-      if (/^(amk|amq|aq|mk|mq|oç|oc|sg|awk|awq)$/i.test(phrase) && packed.includes(phrase)) {
-        return true;
-      }
+    if (
+      /^(amk|amq|aq|awk|awq)$/i.test(phrase) &&
+      packed.includes(phrase)
+    ) {
+      return true;
     }
   }
   return false;
 }
 
-function matchDirFace(chunk) {
-  for (const [re, face] of DIR_WORD_TO_FACE) {
-    if (re.test(chunk)) return face;
+function matchDirFace(token) {
+  const t = foldCmd(token).replace(/\s+/g, "");
+  if (!t) return null;
+  for (const [aliases, face] of DIR_ALIASES) {
+    if (aliases.includes(t)) return face;
   }
   return null;
 }
 
-function findWalkCommand(n) {
-  // sola 3 birim git / sola 3 / 3 sola git / sola biraz / sola git
-  const patterns = [
-    /((?:sol\s*üst|sol\s*ust|sol\s*alt|sağ\s*üst|sag\s*üst|sağ\s*ust|sag\s*ust|sağ\s*alt|sag\s*alt|sola|sağa|saga|sol|sağ|sag|ileri|geri|yukarı|yukari|aşağı|asagi|kuzey|güney|guney|left|right|north|south|west|east)(?:\s*(?:tarafa|taraf|doğru|dogru))?)\s+(\d+(?:\.\d+)?)\s*(?:birim|ad[iı]m|sn|saniye)?\s*(?:git(?:\w*)?|yürü(?:\w*)?|yuru(?:\w*)?)?/,
-    /(\d+(?:\.\d+)?)\s*((?:sol\s*üst|sol\s*ust|sol\s*alt|sağ\s*üst|sag\s*üst|sağ\s*ust|sag\s*ust|sağ\s*alt|sag\s*alt|sola|sağa|saga|sol|sağ|sag|ileri|geri|yukarı|yukari|aşağı|asagi|kuzey|güney|guney|left|right|north|south|west|east)(?:\s*(?:tarafa|taraf|doğru|dogru))?)\s*(?:birim|ad[iı]m)?\s*(?:git(?:\w*)?|yürü(?:\w*)?|yuru(?:\w*)?)?/,
-    /((?:sol\s*üst|sol\s*ust|sol\s*alt|sağ\s*üst|sag\s*üst|sağ\s*ust|sag\s*ust|sağ\s*alt|sag\s*alt|sola|sağa|saga|sol|sağ|sag|ileri|geri|yukarı|yukari|aşağı|asagi|kuzey|güney|guney|left|right|north|south|west|east)(?:\s*(?:tarafa|taraf|doğru|dogru))?)\s+(biraz|azıcık|azicik|bi\s*tık|bi\s*tik)\s*(?:git(?:\w*)?|yürü(?:\w*)?|yuru(?:\w*)?)?/,
-    /((?:sol\s*üst|sol\s*ust|sol\s*alt|sağ\s*üst|sag\s*üst|sağ\s*ust|sag\s*ust|sağ\s*alt|sag\s*alt|sola|sağa|saga|ileri|geri|yukarı|yukari|aşağı|asagi)(?:\s*(?:tarafa|taraf|doğru|dogru))?)\s+(?:git(?:\w*)?|yürü(?:\w*)?|yuru(?:\w*)?)/,
-  ];
-  for (let i = 0; i < patterns.length; i++) {
-    const m = n.match(patterns[i]);
-    if (!m) continue;
-    let dirChunk;
-    let amount = 2;
-    if (i === 1) {
-      amount = Number(m[1]);
-      dirChunk = m[2];
-    } else if (i === 0) {
-      dirChunk = m[1];
-      amount = Number(m[2]);
-    } else if (i === 2) {
-      dirChunk = m[1];
-      amount = 2;
-    } else {
-      dirChunk = m[1];
-      amount = 2;
-    }
-    const face = matchDirFace(dirChunk);
-    if (!face || !Number.isFinite(amount) || amount <= 0) continue;
-    const tok = FACE_TO_SLASH[face];
-    if (!tok) continue;
-    return { kind: "slash", cmd: `/${tok}${amount}` };
-  }
-  return null;
-}
+/**
+ * Parse /saga 3, /saga 3 adim git, /w3, /saga git, /3 saga
+ * Body is folded text WITHOUT leading slash.
+ */
+function parseWalkSlash(body) {
+  const b = foldCmd(body).replace(/\s+/g, " ").trim();
+  if (!b) return null;
 
-/** ASCII \\b breaks on Turkish letters (ı, ğ…) — use explicit edges. */
-function hasPhrase(n, phrase) {
-  const p = normalizeChatText(phrase);
-  if (!p) return false;
-  const re = new RegExp(
-    `(^|[^a-zçğıöşü0-9])${escapeRe(p)}([^a-zçğıöşü0-9]|$)`,
-    "i",
+  // Classic compact: w3, ne2, n-e 2
+  const compact = b.match(
+    /^(n|s|e|w|r|l|ne|nw|se|sw|n-e|n-w|s-e|s-w)\s*(\d+(?:\.\d+)?)$/,
   );
-  return re.test(n);
+  if (compact) {
+    return { kind: "slash", cmd: `/${compact[1]}${compact[2]}` };
+  }
+
+  const dirTok =
+    "sola|saga|sol|sag|ileri|geri|yukari|asagi|kuzey|guney|left|right|north|south|west|east|n|s|e|w|r|l|ne|nw|se|sw|solust|solalt|sagust|sagalt";
+
+  // /saga 3 [adim|birim] [git|yuru]  OR  /ileri3 (glued)
+  let m = b.match(
+    new RegExp(
+      `^(${dirTok})\\s*(\\d+(?:\\.\\d+)?)(?:\\s*(?:birim|adim|sn|saniye))?(?:\\s*(?:git|yuru|yurume))?$`,
+    ),
+  );
+  if (m) {
+    const face = matchDirFace(m[1]);
+    const amount = Number(m[2]);
+    if (face && Number.isFinite(amount) && amount > 0) {
+      return { kind: "slash", cmd: `/${FACE_TO_SLASH[face]}${amount}` };
+    }
+  }
+
+  // /3 saga …  OR  /3ileri (glued)
+  m = b.match(
+    new RegExp(
+      `^(\\d+(?:\\.\\d+)?)\\s*(${dirTok})(?:\\s*(?:birim|adim))?(?:\\s*(?:git|yuru))?$`,
+    ),
+  );
+  if (m) {
+    const amount = Number(m[1]);
+    const face = matchDirFace(m[2]);
+    if (face && Number.isFinite(amount) && amount > 0) {
+      return { kind: "slash", cmd: `/${FACE_TO_SLASH[face]}${amount}` };
+    }
+  }
+
+  // /saga biraz | /saga git | /saga
+  m = b.match(
+    /^(sola|saga|sol|sag|ileri|geri|yukari|asagi|kuzey|guney|left|right|north|south|west|east|solust|solalt|sagust|sagalt)(?:\s+(?:biraz|azicik|git|yuru))?$/,
+  );
+  if (m) {
+    const face = matchDirFace(m[1]);
+    if (face) {
+      return { kind: "slash", cmd: `/${FACE_TO_SLASH[face]}2` };
+    }
+  }
+
+  return null;
+}
+
+function parseCrowdSlash(body) {
+  const b = foldCmd(body).replace(/\s+/g, " ").trim();
+  // /add50char
+  let m = b.match(/^add(\d+)char$/);
+  if (m && CROWD_COUNTS.includes(Number(m[1]))) {
+    return { kind: "slash", cmd: `/add${m[1]}char` };
+  }
+  // /50karakter /kalabalik 50 /ekle 50
+  m =
+    b.match(/^(?:kalabalik|ekle|add)\s*(\d+)$/) ||
+    b.match(/^(\d+)\s*(?:karakter|kisi|char)?$/) ||
+    b.match(/^(\d+)karakter$/);
+  if (m && CROWD_COUNTS.includes(Number(m[1]))) {
+    return { kind: "slash", cmd: `/add${m[1]}char` };
+  }
+  return null;
 }
 
 /**
@@ -231,173 +348,47 @@ export function tryResolveChatIntent(raw) {
     return { kind: "banned" };
   }
 
-  if (text.startsWith("/")) {
-    const lower = text.toLowerCase().trim();
-    if (lower === "/signin" || lower === "/join") return { kind: "signin" };
-    if (lower === "/signout" || lower === "/leave") return { kind: "signout" };
-    if (SCENE_VOTE_SLASH[lower]) {
-      return { kind: "vote", cmd: lower, sceneId: SCENE_VOTE_SLASH[lower] };
-    }
-    return { kind: "slash", cmd: text };
-  }
+  // Commands require leading /
+  if (!text.startsWith("/")) return null;
 
-  const n = normalizeChatText(text);
+  const body = text.slice(1).trim();
+  if (!body) return null;
 
-  // 1) stop / negative dance
-  if (
-    [
-      "dur",
-      "durdur",
-      "in",
-      "dans etme",
-      "dansı bırak",
-      "dansi birak",
-      "dansı durdur",
-      "dansi durdur",
-      "dans yok",
-      "stop",
-    ].some((p) => hasPhrase(n, p))
-  ) {
-    return { kind: "slash", cmd: "/stop" };
-  }
+  const folded = foldCmd(body);
+  const packed = folded.replace(/\s+/g, "");
+  const firstToken = folded.split(/\s+/)[0] || "";
 
-  // 2) dance / jump / sit
-  if (
-    ["dans et", "dans etsin", "dans etsene", "dans edelim", "dance", "dans"].some(
-      (p) => hasPhrase(n, p),
-    )
-  ) {
-    return { kind: "slash", cmd: "/dance" };
-  }
-  if (
-    ["zıpla", "zipla", "zıplasana", "ziplasana", "zıplama", "ziplama", "jump"].some(
-      (p) => hasPhrase(n, p),
-    )
-  ) {
-    return { kind: "slash", cmd: "/jump" };
-  }
-  if (["otur", "otursana", "otursene", "sit"].some((p) => hasPhrase(n, p))) {
-    return { kind: "slash", cmd: "/sit" };
-  }
-
-  // 3) walk
-  const walk = findWalkCommand(n);
-  if (walk) return walk;
-
-  // 4) play
-  if (
-    [
-      "oyna",
-      "başla",
-      "basla",
-      "başlat",
-      "baslat",
-      "maç başlat",
-      "mac baslat",
-      "play",
-      "oyunu başlat",
-      "oyunu baslat",
-    ].some((p) => hasPhrase(n, p))
-  ) {
-    return { kind: "slash", cmd: "/play" };
-  }
-
-  // 5) mount
-  if (
-    ["bin", "kaykaya bin", "araca bin", "bin bakalım", "bin bakalim"].some((p) =>
-      hasPhrase(n, p),
-    )
-  ) {
-    return { kind: "slash", cmd: "/e" };
-  }
-
-  // 6) crowd
-  {
-    const m =
-      n.match(
-        /(?:^|[^a-zçğıöşü0-9])(?:kalabalık|kalabalik|add|ekle)\s*(\d+)(?:[^a-zçğıöşü0-9]|$)/,
-      ) ||
-      n.match(
-        /(?:^|[^a-zçğıöşü0-9])(\d+)\s*(?:karakter|kişi|kisi|char)?\s*(?:ekle|ekleyin|olsun)(?:[^a-zçğıöşü0-9]|$)/,
-      ) ||
-      n.match(/(?:^|[^a-zçğıöşü0-9])(\d+)\s*karakter(?:[^a-zçğıöşü0-9]|$)/);
-    if (m) {
-      const count = Number(m[1]);
-      if (CROWD_COUNTS.includes(count)) {
-        return { kind: "slash", cmd: `/add${count}char` };
-      }
-    }
-  }
-
-  // 7) scene votes
-  if (
-    ["tenis", "tenise geç", "tenise gec", "tenis sahnesi", "tennis"].some((p) =>
-      hasPhrase(n, p),
-    )
-  ) {
-    return { kind: "vote", cmd: "/tennis", sceneId: "tennis" };
-  }
-  if (
-    ["doğruluk", "dogruluk", "doğruluk mu", "dogruluk mu", "cesaret", "dc"].some(
-      (p) => hasPhrase(n, p),
-    )
-  ) {
-    return { kind: "vote", cmd: "/dc", sceneId: "dogrulukmu_cesaretmi" };
-  }
-  if (
-    [
-      "night club",
-      "nightclub",
-      "kulüp",
-      "kulup",
-      "gece kulübü",
-      "gece kulubu",
-      "nc",
-    ].some((p) => hasPhrase(n, p))
-  ) {
-    return { kind: "vote", cmd: "/nc", sceneId: "night_club_inside" };
-  }
-  if (
-    [
-      "red light",
-      "kırmızı ışık",
-      "kirmizi isik",
-      "kırmızı isik",
-      "rl",
-    ].some((p) => hasPhrase(n, p))
-  ) {
-    return { kind: "vote", cmd: "/rl", sceneId: "red_light_green_light" };
-  }
-
-  // 8) join / leave — avoid bare "gir/çık" alone (too common in chat)
-  if (
-    [
-      "oyuna katıl",
-      "oyuna katil",
-      "katıl",
-      "katil",
-      "beni al",
-      "beni de al",
-      "join",
-      "signin",
-    ].some((p) => hasPhrase(n, p))
-  ) {
+  if (SIGNIN_ALIASES.has(packed) || SIGNIN_ALIASES.has(firstToken)) {
     return { kind: "signin" };
   }
-  if (
-    [
-      "oyundan çık",
-      "oyundan cik",
-      "ayrıl",
-      "ayril",
-      "çıkış yap",
-      "cikis yap",
-      "leave",
-      "signout",
-    ].some((p) => hasPhrase(n, p))
-  ) {
+  if (SIGNOUT_ALIASES.has(packed) || SIGNOUT_ALIASES.has(firstToken)) {
     return { kind: "signout" };
   }
 
-  return null;
+  if (SCENE_VOTE_ALIASES[packed] || SCENE_VOTE_ALIASES[firstToken]) {
+    const sceneId = SCENE_VOTE_ALIASES[packed] || SCENE_VOTE_ALIASES[firstToken];
+    return {
+      kind: "vote",
+      cmd: SCENE_VOTE_CANON[sceneId] || `/${firstToken}`,
+      sceneId,
+    };
+  }
+
+  const crowd = parseCrowdSlash(body);
+  if (crowd) return crowd;
+
+  // Walk before simple aliases so /e3 isn't eaten by /e (bin)
+  const walk = parseWalkSlash(body);
+  if (walk) return walk;
+
+  if (SIMPLE_ALIASES[packed]) {
+    return { kind: "slash", cmd: SIMPLE_ALIASES[packed] };
+  }
+  // Single-token only (avoid "/e 3" → mount)
+  if (!/\s/.test(folded) && SIMPLE_ALIASES[firstToken]) {
+    return { kind: "slash", cmd: SIMPLE_ALIASES[firstToken] };
+  }
+
+  // Pass through classic /play /dance /W3 /add50char as-is
+  return { kind: "slash", cmd: `/${body}` };
 }
