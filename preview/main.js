@@ -283,12 +283,11 @@ const HELP_TICKER_SCENE = [
 
 /** Scene-specific tip marquee (top). Missing → tip row hidden. */
 const HELP_TICKER_TIPS = {
-  street:
-    "/katil  ·  /dans /otur /zipla  ·  yürü /ileri 3",
+  // street: no tip row — only HAREKET / OYUN / SAHNE
   tennis:
-    "Like / Hediye → takıma güç  ·  /oyna maç başlat  ·  tribün /dans /dur",
+    "Like / Hediye → takıma güç  ·  /oyna → maç başlar  ·  tribün: /dans /dur",
   red_light_green_light:
-    "/oyna  ·  /ileri 3 kuyruğa  ·  yeşilde yürür  ·  kırmızıda /dur",
+    "/oyna → başla  ·  /ileri 3 → kuyruk  ·  yeşilde yürür  ·  kırmızıda /dur",
   dogrulukmu_cesaretmi:
     "Cevap sohbet yaz  ·  /dans /otur /dur",
   night_club_inside:
