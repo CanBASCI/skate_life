@@ -1302,6 +1302,39 @@ body {
   display: none;
 }
 
+.insp-col-slots {
+  display: flex;
+  gap: 4px;
+  width: 100%;
+}
+
+.insp-col-slots.hidden,
+#insp-col-inview.hidden {
+  display: none !important;
+}
+
+.insp-col-slots button {
+  appearance: none;
+  flex: 1;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 4px 6px;
+  background: #121a16;
+  color: var(--muted);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.insp-col-slots button.active {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.insp-col-slots button.col-on:not(.active) {
+  color: #9ed4b8;
+}
+
 .insp-check {
   font-weight: 650;
   color: var(--accent) !important;

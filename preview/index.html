@@ -12,7 +12,7 @@
       href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="./style.css?v=20251116helpTicker11" />
+    <link rel="stylesheet" href="./style.css?v=20251116colScope" />
     <script type="importmap">
       {
         "imports": {
@@ -23,7 +23,7 @@
     </script>
   </head>
   <body>
-    <div id="layout" class="ui-chrome-hidden">
+    <div id="layout">
       <aside id="palette-left" class="palette">
         <div id="ui-top-bar">
           <button type="button" id="ui-toggle" title="Menüleri gizle" aria-pressed="false">Gizle</button>
@@ -81,10 +81,11 @@
             <button type="button" id="scene-clear">Sahne sil</button>
           </div>
           <div id="scene-slots" title="Kayıtlı sahneler"></div>
-          <div id="truth-dare-crowd" class="hidden" title="Street / night club kalabalık">
+          <div id="truth-dare-crowd" class="hidden" title="Street / night club / garage kalabalık">
             <span class="crowd-label">kalabalık</span>
             <button type="button" data-crowd="5">5</button>
             <button type="button" data-crowd="10">10</button>
+            <button type="button" data-crowd="15">15</button>
             <button type="button" data-crowd="20">20</button>
             <button type="button" data-crowd="30">30</button>
             <button type="button" data-crowd="40">40</button>
@@ -189,8 +190,14 @@
           <div class="dirs" id="insp-dirs" title="Yön"></div>
           <button type="button" id="insp-dance" class="insp-dance hidden" title="Dans animasyonu">Dans: Kapalı</button>
           <div id="insp-col" class="insp-col hidden" title="İçinde yürünebilir alan — köşeleri sürükleyerek ayarla">
+            <div id="insp-col-slots" class="insp-col-slots" title="3 ayrı collision alanı">
+              <button type="button" data-col-slot="0" class="active">Col 1</button>
+              <button type="button" data-col-slot="1">Col 2</button>
+              <button type="button" data-col-slot="2">Col 3</button>
+            </div>
             <label class="insp-check"><input id="insp-col-on" type="checkbox" /> İç alan</label>
             <span class="insp-col-hint">Köşe sürükle · kenar ortası = nokta ekle · Alt+tık = sil</span>
+            <button type="button" id="insp-col-inview" class="insp-col-reset" title="3 col’u ekranın ortasına al">Ekrana al</button>
             <button type="button" id="insp-col-reset" class="insp-col-reset">Kareyi sıfırla</button>
           </div>
           <button type="button" id="insp-delete" class="danger">Sil</button>
@@ -212,6 +219,6 @@
     <div id="drag-ghost" class="hidden"></div>
     <div id="world-labels"></div>
     <div id="tennis-scoreboard" class="hidden" aria-live="polite">Y 0 — 0 A</div>
-    <script type="module" src="./main.js?v=20251116tipClarify"></script>
+    <script type="module" src="./main.js?v=20251116noGarageWalkUi"></script>
   </body>
 </html>

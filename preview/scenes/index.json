@@ -30,6 +30,11 @@
       "id": "tennis",
       "label": "tennis",
       "file": "tennis.json"
+    },
+    {
+      "id": "garage",
+      "label": "garage",
+      "file": "garage.json"
     }
   ]
 }

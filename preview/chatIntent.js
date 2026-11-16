@@ -25,6 +25,10 @@ const SCENE_VOTE_ALIASES = {
   street: "street",
   cadde: "street",
   sokak: "street",
+  garage: "garage",
+  otopark: "garage",
+  parkinggarage: "garage",
+  hugeemptyparkinggarage: "garage",
 };
 
 const SCENE_VOTE_CANON = {
@@ -33,6 +37,7 @@ const SCENE_VOTE_CANON = {
   night_club_inside: "/nc",
   red_light_green_light: "/rl",
   street: "/cadde",
+  garage: "/garage",
 };
 
 /** Exact folded token → action slash (no args). */

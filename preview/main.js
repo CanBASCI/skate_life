@@ -16,7 +16,7 @@ import {
 import {
   tryResolveChatIntent,
   foldCmd,
-} from "./chatIntent.js?v=20251116adminVote";
+} from "./chatIntent.js?v=20251116garage";
 
 const REF = 96;
 const BUILDING_SCALE = 1.85;
@@ -54,7 +54,8 @@ const layoutEl = document.getElementById("layout");
 const uiToggleBtn = document.getElementById("ui-toggle");
 const uiRestartBtn = document.getElementById("ui-restart");
 // Default: menus + WASD HUD hidden; only show if user previously chose "Menü".
-let uiChromeHidden = localStorage.getItem(UI_CHROME_KEY) !== "0";
+// TEMP: menu open for garage/col editing — set back to localStorage default later
+let uiChromeHidden = false;
 /**
  * Session cast only — travels between scenes while the tab is open.
  * Cleared on hard refresh / Yeniden Başla (never restored from localStorage).
@@ -234,6 +235,281 @@ function isStreetLikeScene(id = activeSceneId) {
 function isNightClubScene(id = activeSceneId) {
   return id === "night_club_inside";
 }
+function isGarageScene(id = activeSceneId) {
+  return id === "garage";
+}
+
+function findGarageRoomObj() {
+  return (
+    pickables.find((o) => o?.userData && isMultiColObject(o.userData.path)) ||
+    null
+  );
+}
+
+/** Split n into k buckets as evenly as possible: 15→5,5,5 · 14→5,5,4 · 13→5,4,4 */
+function splitEvenCounts(n, k) {
+  const total = Math.max(0, Number(n) || 0);
+  const buckets = Math.max(1, Number(k) || 1);
+  const base = Math.floor(total / buckets);
+  let rem = total % buckets;
+  const out = [];
+  for (let i = 0; i < buckets; i++) {
+    out.push(base + (rem > 0 ? 1 : 0));
+    if (rem > 0) rem -= 1;
+  }
+  return out;
+}
+
+function garageEnabledColPolys() {
+  const room = findGarageRoomObj();
+  if (!room) return [];
+  const cols = ensureColsData(room);
+  const out = [];
+  for (let i = 0; i < cols.length; i++) {
+    const c = cols[i];
+    if (!c?.enabled) continue;
+    const pts = colPtsToWorld(room, c);
+    if (pts.length >= 3) out.push({ index: i, pts, room });
+  }
+  return out;
+}
+
+/** Poly centroid (average of verts) — always inside convex-ish walk areas. */
+function polyCentroid(pts) {
+  if (!pts?.length) return null;
+  let sx = 0;
+  let sz = 0;
+  for (const [x, z] of pts) {
+    sx += x;
+    sz += z;
+  }
+  return { x: sx / pts.length, z: sz / pts.length };
+}
+
+/** Grid-sample walk slots inside a world poly. */
+function sampleSlotsInPoly(pts, count, { gap = 30, edgePad = 16 } = {}) {
+  const n = Math.max(0, Number(count) || 0);
+  if (!pts?.length || n <= 0) return [];
+  let minX = Infinity;
+  let maxX = -Infinity;
+  let minZ = Infinity;
+  let maxZ = -Infinity;
+  for (const [x, z] of pts) {
+    minX = Math.min(minX, x);
+    maxX = Math.max(maxX, x);
+    minZ = Math.min(minZ, z);
+    maxZ = Math.max(maxZ, z);
+  }
+  const slots = [];
+  const tryPlace = (x, z, pad) => {
+    if (slots.length >= n) return;
+    if (!pointInPoly(x, z, pts)) return;
+    if (pad > 0 && distToPolyEdge(x, z, pts) < pad) return;
+    if (slots.some((s) => Math.hypot(s.x - x, s.z - z) < gap * 0.55)) return;
+    slots.push({ x, z });
+  };
+  const runGrid = (pad, step) => {
+    for (let z = minZ + pad; z <= maxZ - pad && slots.length < n; z += step) {
+      const row = Math.round((z - minZ) / step);
+      const xOff = (row % 2) * (step * 0.4);
+      for (
+        let x = minX + pad + xOff;
+        x <= maxX - pad && slots.length < n;
+        x += step
+      ) {
+        tryPlace(x, z, pad);
+      }
+    }
+  };
+  runGrid(edgePad, gap);
+  if (slots.length < n) runGrid(Math.min(8, edgePad), Math.min(22, gap));
+  if (slots.length < n) runGrid(0, 18);
+  // Random in-bounds probes
+  let guard = 0;
+  while (slots.length < n && guard++ < n * 60) {
+    const x = minX + Math.random() * (maxX - minX);
+    const z = minZ + Math.random() * (maxZ - minZ);
+    tryPlace(x, z, 0);
+  }
+  // Last resort: centroid
+  if (slots.length < n) {
+    const c = polyCentroid(pts);
+    if (c && pointInPoly(c.x, c.z, pts)) slots.push(c);
+  }
+  return slots.slice(0, n);
+}
+
+/**
+ * Garage: distribute cast across enabled col zones evenly (15→5/5/5, 14→5/5/4).
+ * @returns {{ x:number, z:number, colSlot:number }[]}
+ */
+function garageColCrowdSlots(count) {
+  const zones = garageEnabledColPolys();
+  if (!zones.length) return [];
+  const n = Math.max(0, Number(count) || 0);
+  const counts = splitEvenCounts(n, zones.length);
+  const slots = [];
+  // edgePad: keep feet away from thin-band corners (bottom col ~75 deep)
+  const pad = 14;
+  for (let zi = 0; zi < zones.length; zi++) {
+    const part = sampleSlotsInPoly(zones[zi].pts, counts[zi], {
+      gap: 28,
+      edgePad: pad,
+    });
+    for (const s of part) {
+      slots.push({ x: s.x, z: s.z, colSlot: zones[zi].index });
+    }
+  }
+  // If a zone couldn't fit its share, top up from any zone
+  if (slots.length < n) {
+    for (const zone of zones) {
+      if (slots.length >= n) break;
+      const extra = sampleSlotsInPoly(zone.pts, n - slots.length, {
+        gap: 20,
+        edgePad: 8,
+      });
+      for (const s of extra) {
+        if (slots.some((t) => Math.hypot(t.x - s.x, t.z - s.z) < 14)) continue;
+        slots.push({ x: s.x, z: s.z, colSlot: zone.index });
+        if (slots.length >= n) break;
+      }
+    }
+  }
+  return slots.slice(0, n);
+}
+
+/** Next live join: put into the least-filled garage col zone. */
+function garageLiveSpawnSlot() {
+  const zones = garageEnabledColPolys();
+  if (!zones.length) return null;
+  const counts = zones.map(() => 0);
+  for (const o of listPartyCharacters()) {
+    const slot = Number(o.userData?.garageColSlot);
+    const ziFromFlag = zones.findIndex((z) => z.index === slot);
+    if (ziFromFlag >= 0) {
+      counts[ziFromFlag] += 1;
+      continue;
+    }
+    const fx = o.position.x;
+    const fz = o.position.z + FEET_NUDGE_Z;
+    for (let zi = 0; zi < zones.length; zi++) {
+      if (pointInPoly(fx, fz, zones[zi].pts)) {
+        counts[zi] += 1;
+        break;
+      }
+    }
+  }
+  const order = counts
+    .map((c, i) => ({ c, i }))
+    .sort((a, b) => a.c - b.c || a.i - b.i);
+  for (const { i: bestZi } of order) {
+    const part = sampleSlotsInPoly(zones[bestZi].pts, 1, {
+      gap: 20,
+      edgePad: 14,
+    });
+    if (part.length) {
+      return { x: part[0].x, z: part[0].z, colSlot: zones[bestZi].index };
+    }
+    const c = polyCentroid(zones[bestZi].pts);
+    if (c && pointInPoly(c.x, c.z, zones[bestZi].pts)) {
+      return { x: c.x, z: c.z, colSlot: zones[bestZi].index };
+    }
+  }
+  // Absolute fallback: first zone centroid
+  const c = polyCentroid(zones[0].pts);
+  if (!c) return null;
+  return { x: c.x, z: c.z, colSlot: zones[0].index };
+}
+
+function actorInsideAnyGarageCol(obj) {
+  if (!obj) return false;
+  const fx = obj.position.x;
+  const fz = obj.position.z + FEET_NUDGE_Z;
+  for (const z of garageEnabledColPolys()) {
+    if (pointInPoly(fx, fz, z.pts)) return true;
+  }
+  return false;
+}
+
+/** Mesh anchor from feet XZ (sprites sit south of feet via FEET_NUDGE_Z). */
+function meshFromFeet(fx, fz) {
+  return { x: fx, z: fz - FEET_NUDGE_Z };
+}
+
+/** Thin garage bands can't use full NPC radius — corners become dead zones. */
+function garageColContainmentInset(radius = NPC_WALK_RADIUS) {
+  return Math.min(4, Math.max(2, (radius || NPC_WALK_RADIUS) * 0.2));
+}
+
+/** Garage col that owns this actor (flag, else feet-in-poly). */
+function garageColZoneFor(obj) {
+  const zones = garageEnabledColPolys();
+  if (!zones.length || !obj) return null;
+  const flag = Number(obj.userData?.garageColSlot);
+  const byFlag = zones.find((z) => z.index === flag);
+  if (byFlag) return byFlag;
+  const fx = obj.position.x;
+  const fz = obj.position.z + FEET_NUDGE_Z;
+  return zones.find((z) => pointInPoly(fx, fz, z.pts)) || null;
+}
+
+/** Pull feet into the walkable interior of their garage col (unstick corners). */
+function pullFeetIntoGarageCol(obj) {
+  if (!isGarageScene() || !obj) return false;
+  const zone = garageColZoneFor(obj) || garageEnabledColPolys()[0];
+  if (!zone?.pts?.length) return false;
+  const inset = garageColContainmentInset(NPC_WALK_RADIUS) + 6;
+  let fx = obj.position.x;
+  let fz = obj.position.z + FEET_NUDGE_Z;
+  const ok =
+    pointInPoly(fx, fz, zone.pts) && distToPolyEdge(fx, fz, zone.pts) >= inset;
+  if (ok) {
+    obj.userData.garageColSlot = zone.index;
+    return false;
+  }
+  const c = polyCentroid(zone.pts);
+  if (!c) return false;
+  // Prefer centroid; if still tight, walk a bit more toward center
+  fx = c.x;
+  fz = c.z;
+  if (!(pointInPoly(fx, fz, zone.pts) && distToPolyEdge(fx, fz, zone.pts) >= 2)) {
+    return false;
+  }
+  const mesh = meshFromFeet(fx, fz);
+  obj.position.set(mesh.x, 0, mesh.z);
+  obj.userData.spawnX = mesh.x;
+  obj.userData.spawnZ = mesh.z;
+  obj.userData.garageColSlot = zone.index;
+  syncDepth(obj);
+  return true;
+}
+
+/** Snap character into a garage walk col if standing outside. */
+function ensureActorInsideGarageCol(obj) {
+  if (!isGarageScene() || !obj?.userData) return false;
+  // Feet may sit outside thin bands even when mesh looks "in" — always unstick
+  if (actorInsideAnyGarageCol(obj)) {
+    return pullFeetIntoGarageCol(obj);
+  }
+  const slot =
+    garageLiveSpawnSlot() ||
+    (() => {
+      const zones = garageEnabledColPolys();
+      if (!zones.length) return null;
+      const c = polyCentroid(zones[0].pts);
+      return c ? { x: c.x, z: c.z, colSlot: zones[0].index } : null;
+    })();
+  if (!slot) return false;
+  const mesh = meshFromFeet(slot.x, slot.z);
+  obj.position.set(mesh.x, 0, mesh.z);
+  obj.userData.spawnX = mesh.x;
+  obj.userData.spawnZ = mesh.z;
+  obj.userData.garageColSlot = slot.colSlot;
+  // Do not set formationSlot — that pins actors every frame (truth-dare seats)
+  pullFeetIntoGarageCol(obj);
+  syncDepth(obj);
+  return true;
+}
 function isRedLightScene(id = activeSceneId) {
   return id === "red_light_green_light";
 }
@@ -275,6 +551,7 @@ const HELP_TICKER_GAME = [
 const HELP_TICKER_SCENE = [
   "SAHNE",
   "/cadde",
+  "/garage",
   "/tenis",
   "/dogrulukcesaret",
   "/kirmiziisik",
@@ -353,13 +630,17 @@ function isTruthDarePositionLocked(obj) {
 function isPlayfieldScene(id = activeSceneId) {
   return isFootballScene(id) || isTennisScene(id);
 }
-/** Scenes with shared walkZone (chars + ball bounce). */
+/** Scenes with shared walkZone (chars + ball bounce). Garage uses object cols only. */
 function isWalkZoneScene(id = activeSceneId) {
-  return isStreetLikeScene(id) || isRedLightScene(id) || isPlayfieldScene(id);
+  return (
+    isStreetLikeScene(id) ||
+    isRedLightScene(id) ||
+    isPlayfieldScene(id)
+  );
 }
-/** Crowd spawn buttons: street family + night club. */
+/** Crowd spawn buttons: street family + night club + garage. */
 function isCrowdScene(id = activeSceneId) {
-  return isStreetLikeScene(id) || isNightClubScene(id);
+  return isStreetLikeScene(id) || isNightClubScene(id) || isGarageScene(id);
 }
 
 /** Street + doğrulukmu: play tracks back-to-back, then loop. */
@@ -497,7 +778,7 @@ const tennisRally = {
   pointDead: false,
 };
 const redLightCastEl = document.getElementById("red-light-cast");
-const TRUTH_DARE_CROWD_COUNTS = [5, 10, 20, 30, 40, 50];
+const TRUTH_DARE_CROWD_COUNTS = [5, 10, 15, 20, 30, 40, 50];
 const RED_LIGHT_CAST_MAX = 10;
 /** @type {Map<object, { x: number, z: number, dir: string, sitting: boolean, isPlayer: boolean }>} */
 let truthDareSnapshot = new Map();
@@ -1245,6 +1526,7 @@ function pickPriority(obj) {
   // Characters / animals / balls always beat courts & cutaway rooms
   if (d.kind === "character" || isAnimalPath(p) || d.companion) score += 1_000_000;
   if (d.ball || isBallPath(p)) score += 900_000;
+  if (isVehiclePath(p) || d.vehicle || isSkateboardPath(p)) score += 850_000;
   // Buildings / props above ground tiles (grass always ray-hits under feet)
   if (d.layer === "ground" || d.tileable) score -= 800_000;
   if (/\/buildings\//i.test(p)) score += 100_000;
@@ -1323,7 +1605,11 @@ function interiorCoverOrder(px, pz) {
     const zSouth = bz + h * 0.12;
     const zNorth = bz - h * 0.85;
     if (Math.abs(px - bx) > hw || pz > zSouth || pz < zNorth) continue;
-    const roomBias = /night_club_inside/i.test(d.path) ? -4500 : -3500;
+    const roomBias = /night_club_inside/i.test(d.path)
+      ? -4500
+      : isGarageScene() && /parking_garage|huge_empty_parking/i.test(d.path)
+        ? -80000
+        : -3500;
     const roomOrder = Math.round(bz * 10 + roomBias);
     best = Math.max(best, roomOrder + 200);
   }
@@ -1348,6 +1634,14 @@ function isPlayfieldTopLayer(obj) {
   return false;
 }
 
+/** Garage: chars / pets / vehicles always paint above the parking interior. */
+function isGarageTopLayer(obj) {
+  if (!isGarageScene() || !obj?.userData) return false;
+  if (isForegroundActor(obj)) return true;
+  if (isVehicleObj(obj) || isSkateboardObj(obj)) return true;
+  return false;
+}
+
 /** @deprecated alias — prefer isPlayfieldTopLayer */
 function isRedLightTopLayer(obj) {
   return isPlayfieldTopLayer(obj);
@@ -1359,6 +1653,8 @@ function syncDepth(obj) {
   if (obj.userData?.layer === "ground") layerBias = -10000;
   // Cutaway rooms stay behind characters / pets / props in the scene
   else if (/night_club_inside/i.test(p)) layerBias = -4500;
+  // Garage parking plate always furthest back
+  else if (isGarageScene() && isInteriorPath(p)) layerBias = -80000;
   else if (isInteriorPath(p)) layerBias = -3500;
   // Buildings / courts stay visually behind actors on playfields
   else if (
@@ -1369,12 +1665,14 @@ function syncDepth(obj) {
   }
 
   let order = Math.round(obj.position.z * 10 + layerBias);
-  if (isForegroundActor(obj)) {
+  if (isForegroundActor(obj) || (isGarageScene() && isGarageTopLayer(obj))) {
     const cover = interiorCoverOrder(obj.position.x, obj.position.z);
     if (cover) order = Math.max(order, cover);
   }
   // red_light / football: characters + pets + balls above court/props
   if (isPlayfieldTopLayer(obj)) order += 200000;
+  // garage: cast + vehicles + pets above parking interior
+  if (isGarageTopLayer(obj)) order += 200000;
   // vault/jump: draw player in front of props/cars (sprites ignore depthTest paint order)
   if (
     obj.userData?.controllable &&
@@ -1386,10 +1684,58 @@ function syncDepth(obj) {
   obj.renderOrder = order;
 }
 
+const GARAGE_CHAR_SCALE = 0.75;
+const GARAGE_VEHICLE_SCALE = 0.7;
+
+function isGarageDisplayScale(s) {
+  return Math.abs(Number(s) - GARAGE_CHAR_SCALE) < 1e-6;
+}
+
+/** Non-garage size for traveling cast — never persist the garage 0.75 shrink. */
+function partyHomeScaleOf(d) {
+  const hs = d?.homeScale != null ? Number(d.homeScale) : NaN;
+  if (Number.isFinite(hs) && hs > 0 && !isGarageDisplayScale(hs)) return hs;
+  const s = d?.scale != null ? Number(d.scale) : NaN;
+  if (Number.isFinite(s) && s > 0 && !isGarageDisplayScale(s)) return s;
+  return 1;
+}
+
+/** Force garage display size on live/admin/cast (idle/walk keep userData.scale). */
+function applyGarageCharacterScale(obj) {
+  if (!isGarageScene() || !obj?.userData) return false;
+  if (obj.userData.kind !== "character") return false;
+  // Never bake 0.75 into homeScale — other scenes must restore to 1 (or true home)
+  obj.userData.homeScale = partyHomeScaleOf(obj.userData);
+  if (isGarageDisplayScale(obj.userData.scale)) {
+    applyScale(obj);
+    return false;
+  }
+  obj.userData.scale = GARAGE_CHAR_SCALE;
+  applyScale(obj);
+  return true;
+}
+
+/** Leaving garage: restore traveling cast to their non-garage size. */
+function restoreCharacterHomeScale(obj) {
+  if (!obj?.userData || obj.userData.kind !== "character") return false;
+  const home = partyHomeScaleOf(obj.userData);
+  obj.userData.homeScale = home;
+  if (Math.abs(Number(obj.userData.scale) - home) < 1e-6) {
+    applyScale(obj);
+    return false;
+  }
+  obj.userData.scale = home;
+  applyScale(obj);
+  return true;
+}
+
 function defaultScale(item) {
   if (item.kind === "object" && item.path.includes("/buildings/")) return BUILDING_SCALE;
   // tuned vs 96px character; E-ride / parked board same scale
   if (isSkateboardPath(item.path)) return 0.7;
+  // Garage scene only — smaller cast + vehicles in the parking interior
+  if (isGarageScene() && item.kind === "character") return GARAGE_CHAR_SCALE;
+  if (isGarageScene() && isVehiclePath(item.path)) return GARAGE_VEHICLE_SCALE;
   // roads / tileable paths — user prefers large default
   if (/\/props\/ground\//i.test(item.path || "")) return 1;
   if (isRoadTileItem(item) || /\/props\/road\//i.test(item.path || "")) return 3;
@@ -1808,7 +2154,14 @@ function projectHeadScreen(obj) {
   const feetSy =
     ((-_promptFeetNdc.y + 1) / 2) * canvasRect.height + canvasRect.top;
   const spritePx = Math.max(8, Math.abs(feetSy - sy));
-  const scale = Math.min(1.2, Math.max(0.52, spritePx / WORLD_LABEL_REF_PX));
+  // Label/bubble size tracks on-screen sprite height — but garage char shrink
+  // (0.75) must NOT shrink UI; measure as if the sprite were still full size.
+  let measurePx = spritePx;
+  if (isGarageScene() && isChar) {
+    const cs = Number(obj.userData?.scale);
+    if (Number.isFinite(cs) && cs > 0 && cs < 1) measurePx = spritePx / cs;
+  }
+  const scale = Math.min(1.2, Math.max(0.52, measurePx / WORLD_LABEL_REF_PX));
   return { sx, sy, scale };
 }
 
@@ -1903,6 +2256,7 @@ function enqueueNpcWalk(obj, dx, dz, dist, speed = 110, wait = 0, opts = {}) {
   clearNpcScriptMoves(obj);
   // Free from formation pin so /N20 etc. can actually move
   if (obj.userData) obj.userData.formationSlot = null;
+  if (isGarageScene()) pullFeetIntoGarageCol(obj);
   const len = Math.hypot(dx, dz) || 1;
   npcScriptMoves.push({
     obj,
@@ -1978,6 +2332,17 @@ function npcTryStep(obj, dx, dz, radius = NPC_WALK_RADIUS) {
   if (dz && !blockedAt(obj.position.x, nz + FEET_NUDGE_Z)) {
     obj.position.z = nz;
   }
+  // Corner trap (thin garage cols): axis slides stay on an edge — try diagonal
+  if (
+    obj.position.x === x0 &&
+    obj.position.z === z0 &&
+    dx &&
+    dz &&
+    !blockedAt(nx, nz + FEET_NUDGE_Z)
+  ) {
+    obj.position.x = nx;
+    obj.position.z = nz;
+  }
   const moved = Math.hypot(obj.position.x - x0, obj.position.z - z0);
   // Frame delta for ball kick impulse (cast = other players)
   obj.userData._moveDx = obj.position.x - x0;
@@ -1989,14 +2354,43 @@ function npcTryStep(obj, dx, dz, radius = NPC_WALK_RADIUS) {
   return moved;
 }
 
+/**
+ * Driven vehicle / mounted movers: always hit solid props (buildings, cars)
+ * even when street walk-zone mode would otherwise skip them for on-foot cast,
+ * and stay inside walk/col zones.
+ */
+function vehicleMoveBlocked(veh, fromX, fromZ, px, pz, radius) {
+  const r = Math.max(0, radius || NPC_WALK_RADIUS);
+  // physics:true → do not bypass building/prop solids on street
+  if (solidBlockedExcept(px, pz, r, veh, { physics: true })) return true;
+  const rider =
+    veh.userData?.driver ||
+    (veh === occupiedVehicle ? player?.mesh : null) ||
+    veh;
+  if (containmentBlocksFor(fromX, fromZ, px, pz, r, rider)) return true;
+  if (viewBoundsBlock(px, pz, r)) return true;
+  return false;
+}
+
 function npcTryStepVehicle(veh, dx, dz, radius = NPC_WALK_RADIUS) {
   const x0 = veh.position.x;
   const z0 = veh.position.z;
   const nx = x0 + dx;
   const nz = z0 + dz;
-  // Vehicles use solidBlockedExcept self
-  if (dx && !solidBlockedExcept(nx, z0, radius, veh)) veh.position.x = nx;
-  if (dz && !solidBlockedExcept(veh.position.x, nz, radius, veh)) veh.position.z = nz;
+  const blocked = (x, z) => vehicleMoveBlocked(veh, x0, z0, x, z, radius);
+  if (dx && !blocked(nx, z0)) veh.position.x = nx;
+  if (dz && !blocked(veh.position.x, nz)) veh.position.z = nz;
+  // Corner escape — axis slides alone can trap on garage col edges
+  if (
+    veh.position.x === x0 &&
+    veh.position.z === z0 &&
+    dx &&
+    dz &&
+    !blocked(nx, nz)
+  ) {
+    veh.position.x = nx;
+    veh.position.z = nz;
+  }
   if (veh.position.x !== x0 || veh.position.z !== z0) syncDepth(veh);
   return Math.hypot(veh.position.x - x0, veh.position.z - z0);
 }
@@ -2670,6 +3064,8 @@ const SCENE_VOTE_CMDS = {
   "/rl": "red_light_green_light",
   "/cadde": "street",
   "/street": "street",
+  "/garage": "garage",
+  "/otopark": "garage",
 };
 /** Live admins: scene vote alone switches (no >50% needed). Handle without @. */
 const LIVE_ADMIN_NAMES = new Set(["burakcanbasc"]);
@@ -2823,6 +3219,10 @@ async function liveSignIn(user) {
 
   const existing = liveUsers.get(id);
   if (existing && existing.parent) {
+    if (isGarageScene()) {
+      ensureActorInsideGarageCol(existing);
+      applyGarageCharacterScale(existing);
+    }
     speakAs(existing, "zaten burdayım");
     statusEl.textContent = `${name} zaten içerde`;
     return;
@@ -2840,7 +3240,10 @@ async function liveSignIn(user) {
     return;
   }
   const item = catalog[Math.floor(Math.random() * catalog.length)];
-  const pos = liveSpawnAnchor();
+  const garageSlot = isGarageScene() ? garageLiveSpawnSlot() : null;
+  const pos = garageSlot
+    ? meshFromFeet(garageSlot.x, garageSlot.z)
+    : liveSpawnAnchor();
   const obj = await spawnItem(item, pos.x, pos.z, {
     dir: "south",
     exactPos: true,
@@ -2854,6 +3257,13 @@ async function liveSignIn(user) {
   obj.userData.liveUserId = id;
   obj.userData.liveUserName = name;
   obj.userData.label = name;
+  if (garageSlot?.colSlot != null) {
+    obj.userData.garageColSlot = garageSlot.colSlot;
+  }
+  if (isGarageScene()) {
+    ensureActorInsideGarageCol(obj);
+    applyGarageCharacterScale(obj);
+  }
   liveUsers.set(id, obj);
   if (selected === obj) selectObject(null);
   try {
@@ -3320,8 +3730,19 @@ function driveVehicle(dt) {
     // vehicle footprint radius for driving collision
     const box = footprintOf(veh);
     const r = Math.max(box.hw, box.hd) * 0.55;
-    if (!solidBlocked(nx, z0, r)) veh.position.x = nx;
-    if (!solidBlocked(veh.position.x, nz, r)) veh.position.z = nz;
+    const blocked = (x, z) => vehicleMoveBlocked(veh, x0, z0, x, z, r);
+    if (dx && !blocked(nx, z0)) veh.position.x = nx;
+    if (dz && !blocked(veh.position.x, nz)) veh.position.z = nz;
+    if (
+      veh.position.x === x0 &&
+      veh.position.z === z0 &&
+      dx &&
+      dz &&
+      !blocked(nx, nz)
+    ) {
+      veh.position.x = nx;
+      veh.position.z = nz;
+    }
     player.vx = veh.position.x - x0;
     player.vz = veh.position.z - z0;
   } else {
@@ -3338,10 +3759,21 @@ function isInteriorPath(path) {
   return /\/interiors\//i.test(path || "");
 }
 
-/** Object-tied walkable polygon (night_club / stadium / tennis court). Street uses sceneWalkZone. */
+/** Object-tied walkable polygon (night_club / stadium / tennis / garage). Street uses sceneWalkZone. */
 function hasEditableCollision(path) {
-  return /night_club_inside|footballstadium|tenniscourt/i.test(path || "");
+  // Do NOT match all /interiors/ — only known walk-in rooms + garage
+  return /night_club_inside|footballstadium|tenniscourt|parking_garage|huge_empty_parking/i.test(
+    path || "",
+  );
 }
+
+/** Only garage parking asset gets 3 independent walk polys — other scenes stay 1-col. */
+function isMultiColObject(path) {
+  return /parking_garage|huge_empty_parking/i.test(path || "");
+}
+
+/** Garage / multi-zone interiors: up to 3 separate walkable polys on one object. */
+const COL_SLOT_COUNT = 3;
 
 function defaultColData() {
   return {
@@ -3354,6 +3786,56 @@ function defaultColData() {
       { fx: -0.42, fz: 0.12 },
     ],
   };
+}
+
+function cloneColData(src) {
+  const base = src && typeof src === "object" ? src : defaultColData();
+  const pts = Array.isArray(base.pts)
+    ? base.pts
+        .filter((p) => p && Number.isFinite(Number(p.fx)) && Number.isFinite(Number(p.fz)))
+        .map((p) => ({ fx: Number(p.fx), fz: Number(p.fz) }))
+    : [];
+  return {
+    enabled: !!base.enabled,
+    pts: pts.length >= 3 ? pts : defaultColData().pts.map((p) => ({ ...p })),
+  };
+}
+
+/** Ensure cols[0..2] exist; `col` always aliases the active slot for editors. */
+function ensureColsData(obj) {
+  const d = obj?.userData;
+  if (!d) return [defaultColData(), defaultColData(), defaultColData()];
+  if (!Array.isArray(d.cols) || d.cols.length < COL_SLOT_COUNT) {
+    const legacy = d.col ? cloneColData(d.col) : null;
+    const prev = Array.isArray(d.cols) ? [...d.cols] : [];
+    d.cols = [];
+    for (let i = 0; i < COL_SLOT_COUNT; i++) {
+      d.cols[i] = cloneColData(prev[i] || (i === 0 ? legacy : null));
+    }
+  } else {
+    for (let i = 0; i < COL_SLOT_COUNT; i++) {
+      if (
+        !d.cols[i] ||
+        !Array.isArray(d.cols[i].pts) ||
+        d.cols[i].pts.length < 3
+      ) {
+        d.cols[i] = cloneColData(d.cols[i]);
+      }
+    }
+  }
+  let idx = Number(d.colActiveIndex);
+  if (!Number.isFinite(idx) || idx < 0 || idx >= COL_SLOT_COUNT) idx = 0;
+  d.colActiveIndex = idx;
+  d.col = d.cols[idx];
+  return d.cols;
+}
+
+function setActiveColSlot(obj, slotIndex) {
+  if (!obj?.userData || !isMultiColObject(obj.userData.path)) return;
+  const cols = ensureColsData(obj);
+  const idx = Math.max(0, Math.min(COL_SLOT_COUNT - 1, Number(slotIndex) || 0));
+  obj.userData.colActiveIndex = idx;
+  obj.userData.col = cols[idx];
 }
 
 /** Street scene: one shared walkable polygon (world XZ). Balls/skate ignore it. */
@@ -3545,7 +4027,11 @@ function streetWalkHandlesOffscreen() {
 function ensureColData(obj) {
   const d = obj?.userData;
   if (!d) return defaultColData();
-  if (!d.col) d.col = defaultColData();
+  if (isMultiColObject(d.path)) {
+    ensureColsData(obj);
+  } else if (!d.col) {
+    d.col = defaultColData();
+  }
   const col = d.col;
   if (!Array.isArray(col.pts) || col.pts.length < 3) {
     col.pts = defaultColData().pts.map((p) => ({ ...p }));
@@ -3589,13 +4075,54 @@ function colSpriteSize(obj) {
 }
 
 /** 4 world XZ corners from stored fraction points. */
-function getColWorldPts(obj) {
-  const col = ensureColData(obj);
+function colPtsToWorld(obj, col) {
   const { w, h } = colSpriteSize(obj);
+  if (!w || !h || !col?.pts?.length) return [];
   return col.pts.map((p) => [
     obj.position.x + (Number(p.fx) || 0) * w,
     obj.position.z + (Number(p.fz) || 0) * h,
   ]);
+}
+
+function worldQuadToColPts(obj, quad) {
+  const { w, h } = colSpriteSize(obj);
+  if (!w || !h || !quad?.length) return defaultColData().pts.map((p) => ({ ...p }));
+  return quad.map(([x, z]) => ({
+    fx: (x - obj.position.x) / w,
+    fz: (z - obj.position.z) / h,
+  }));
+}
+
+function getColWorldPts(obj) {
+  return colPtsToWorld(obj, ensureColData(obj));
+}
+
+/** 3 separate walk polys stacked in the current camera view (editable corners). */
+function placeColsInView(obj) {
+  if (!obj || !isMultiColObject(obj.userData?.path)) return false;
+  const cols = ensureColsData(obj);
+  // Stack higher on screen so none sit under the ticker / near the bottom edge
+  const bands = [
+    [0.18, 0.36, 0.82, 0.46], // Col 1 — blue
+    [0.18, 0.24, 0.82, 0.34], // Col 2 — orange
+    [0.18, 0.12, 0.82, 0.22], // Col 3 — purple
+  ];
+  let ok = 0;
+  for (let i = 0; i < COL_SLOT_COUNT; i++) {
+    const [u0, v0, u1, v1] = bands[i];
+    const a = groundAtCanvasUv(u0, v0);
+    const b = groundAtCanvasUv(u1, v0);
+    const c = groundAtCanvasUv(u1, v1);
+    const d = groundAtCanvasUv(u0, v1);
+    if (!a || !b || !c || !d) continue;
+    cols[i].enabled = true;
+    cols[i].pts = worldQuadToColPts(obj, [a, b, c, d]);
+    ok += 1;
+  }
+  if (!ok) return false;
+  obj.userData.colsPlacedInView = true;
+  setActiveColSlot(obj, Number(obj.userData.colActiveIndex) || 0);
+  return true;
 }
 
 function setColWorldPt(obj, index, wx, wz) {
@@ -3608,14 +4135,85 @@ function setColWorldPt(obj, index, wx, wz) {
   };
 }
 
+/** Freeze walk polys in world XZ while the sprite scale/size changes. */
+function snapshotColsWorld(obj) {
+  if (isMultiColObject(obj?.userData?.path)) {
+    return ensureColsData(obj).map((c) =>
+      colPtsToWorld(obj, c).map(([x, z]) => [x, z]),
+    );
+  }
+  const col = ensureColData(obj);
+  return [colPtsToWorld(obj, col).map(([x, z]) => [x, z])];
+}
+
+function applyColsWorld(obj, snaps) {
+  if (!obj || !snaps) return;
+  if (isMultiColObject(obj.userData?.path)) {
+    const cols = ensureColsData(obj);
+    for (let i = 0; i < COL_SLOT_COUNT; i++) {
+      const quad = snaps[i];
+      if (!quad?.length) continue;
+      cols[i].pts = worldQuadToColPts(obj, quad);
+    }
+    setActiveColSlot(obj, Number(obj.userData.colActiveIndex) || 0);
+    return;
+  }
+  const quad = snaps[0];
+  if (quad?.length) {
+    ensureColData(obj).pts = worldQuadToColPts(obj, quad);
+  }
+}
+
+function cloneColsData(obj) {
+  if (isMultiColObject(obj?.userData?.path)) {
+    return ensureColsData(obj).map((c) => cloneColData(c));
+  }
+  return [cloneColData(ensureColData(obj))];
+}
+
+function restoreColsData(obj, cols) {
+  if (!obj?.userData || !Array.isArray(cols)) return;
+  if (isMultiColObject(obj.userData.path)) {
+    obj.userData.cols = cols.map((c) => cloneColData(c));
+    setActiveColSlot(obj, Number(obj.userData.colActiveIndex) || 0);
+    return;
+  }
+  obj.userData.col = cloneColData(cols[0]);
+}
+
 function resetColPts(obj) {
   const col = ensureColData(obj);
   col.pts = defaultColData().pts.map((p) => ({ ...p }));
 }
 
-function colFootprint(obj) {
-  if (!obj?.userData?.col || !hasEditableCollision(obj.userData.path)) return null;
-  return { kind: "poly", pts: getColWorldPts(obj) };
+function colFootprint(obj, colOverride = null) {
+  if (!hasEditableCollision(obj?.userData?.path)) return null;
+  const cols = ensureColsData(obj);
+  const col = colOverride || obj.userData.col;
+  if (!col) return null;
+  const prev = obj.userData.col;
+  obj.userData.col = col;
+  const pts = getColWorldPts(obj);
+  obj.userData.col = prev;
+  return { kind: "poly", pts };
+}
+
+function listEnabledColFootprints(obj) {
+  if (!hasEditableCollision(obj?.userData?.path)) return [];
+  if (!isMultiColObject(obj.userData.path)) {
+    const col = ensureColData(obj);
+    if (!col.enabled) return [];
+    const box = colFootprint(obj, col);
+    return box ? [box] : [];
+  }
+  const cols = ensureColsData(obj);
+  const out = [];
+  for (const c of cols) {
+    if (!c?.enabled) continue;
+    const box = colFootprint(obj, c);
+    if (box) out.push(box);
+  }
+  return out;
 }
 
 function pointInPoly(px, pz, pts) {
@@ -3695,12 +4293,13 @@ function containmentBlocksFor(fromX, fromZ, px, pz, radius, forObj = null) {
     }
   }
   for (const obj of pickables) {
-    const col = obj.userData?.col;
-    if (!col?.enabled || !hasEditableCollision(obj.userData?.path)) continue;
-    const box = colFootprint(obj);
-    if (!box) continue;
-    if (!pointInCol(fromX, fromZ, box, 0)) continue;
-    if (!pointInCol(px, pz, box, r)) return true;
+    if (!hasEditableCollision(obj.userData?.path)) continue;
+    for (const box of listEnabledColFootprints(obj)) {
+      if (!pointInCol(fromX, fromZ, box, 0)) continue;
+      // Garage floor bands are thin — full radius inset traps feet in corners
+      const colInset = isGarageScene() ? garageColContainmentInset(r) : r;
+      if (!pointInCol(px, pz, box, colInset)) return true;
+    }
   }
   return false;
 }
@@ -3867,8 +4466,9 @@ function actorMoveSpeed(obj) {
 
 /** Gentle push-apart so sprites don't fully overlap. */
 function tickCharacterSeparation(dt) {
-  // Pin truth-dare row/seat slots so soft-sep can't shove someone forward
+  // Pin lineup/seat slots so soft-sep can't shove someone forward (not garage)
   for (const o of listSeparableCharacters()) {
+    if (isGarageScene()) break;
     const slot = o.userData?.formationSlot;
     if (!slot || o.userData?.formationMove) continue;
     if (Math.hypot(o.position.x - slot.x, o.position.z - slot.z) > 0.5) {
@@ -3963,8 +4563,10 @@ function playerCollides(px, pz, radius) {
   if ((forming || elimRun) && isRedLightScene()) {
     return solidBlocked(px, pz, radius);
   }
+  // Skate/vehicle riders must not clip buildings that on-foot walk-zone mode skips
+  const mounted = !!(player?.skating || occupiedVehicle);
   return (
-    solidBlocked(px, pz, radius) ||
+    solidBlocked(px, pz, radius, mounted ? { physics: true } : {}) ||
     containmentBlocks(px, pz, radius) ||
     viewBoundsBlock(px, pz, radius) ||
     (!skipChar &&
@@ -4820,15 +5422,13 @@ function tickCompanions(dt) {
     const nx = dx / dist;
     const nz = dz / dist;
     const step = Math.min(dist - COMPANION_FOLLOW_STOP, COMPANION_SPEED * dt);
-    companion.position.x += nx * step;
-    companion.position.z += nz * step;
+    companionTryStep(nx * step, nz * step);
     const facing = dirFromVector(nx, nz) || companion.userData.dir || "south";
     setPetClip(companion, "walk", facing);
   } else if (dist > COMPANION_FOLLOW_STOP) {
     const nx = dx / dist;
     const nz = dz / dist;
-    companion.position.x += nx * COMPANION_SPEED * 0.45 * dt;
-    companion.position.z += nz * COMPANION_SPEED * 0.45 * dt;
+    companionTryStep(nx * COMPANION_SPEED * 0.45 * dt, nz * COMPANION_SPEED * 0.45 * dt);
     const facing = dirFromVector(nx, nz) || companion.userData.dir || "south";
     setPetClip(companion, "walk", facing);
   } else {
@@ -4843,6 +5443,37 @@ function tickCompanions(dt) {
   companion.position.z = clamped.z;
   syncDepth(companion);
   syncPetColRing();
+}
+
+/** Pet follows with the same blockers as characters (solids + walk/col). */
+function companionTryStep(dx, dz) {
+  if (!companion) return 0;
+  const x0 = companion.position.x;
+  const z0 = companion.position.z;
+  const nx = x0 + dx;
+  const nz = z0 + dz;
+  const r = PET_COL_RADIUS;
+  const blocked = (x, z) => {
+    const feetZ = z + PET_FEET_NUDGE_Z;
+    return (
+      solidBlocked(x, feetZ, r, { physics: true }) ||
+      containmentBlocksFor(x0, z0 + PET_FEET_NUDGE_Z, x, feetZ, r, companion) ||
+      viewBoundsBlock(x, feetZ, r)
+    );
+  };
+  if (dx && !blocked(nx, z0)) companion.position.x = nx;
+  if (dz && !blocked(companion.position.x, nz)) companion.position.z = nz;
+  if (
+    companion.position.x === x0 &&
+    companion.position.z === z0 &&
+    dx &&
+    dz &&
+    !blocked(nx, nz)
+  ) {
+    companion.position.x = nx;
+    companion.position.z = nz;
+  }
+  return Math.hypot(companion.position.x - x0, companion.position.z - z0);
 }
 
 function rotationUrl(path, dir) {
@@ -4972,6 +5603,10 @@ function setMap(obj, tex) {
   } else {
     d.w = tex.image.width;
     d.h = tex.image.height;
+  }
+  // Garage idle/walk frame swaps must keep scene scale (admin/live included)
+  if (isGarageScene() && d.kind === "character") {
+    d.scale = GARAGE_CHAR_SCALE;
   }
   if (obj.userData.vehicle || isVehiclePath(obj.userData.path)) {
     try {
@@ -5110,7 +5745,17 @@ async function spawnItem(item, x, z, opts = {}) {
     userData.solid = true;
   }
   if (hasEditableCollision(item.path)) {
-    userData.col = defaultColData();
+    if (isMultiColObject(item.path)) {
+      userData.cols = [
+        defaultColData(),
+        defaultColData(),
+        defaultColData(),
+      ];
+      userData.colActiveIndex = 0;
+      userData.col = userData.cols[0];
+    } else {
+      userData.col = defaultColData();
+    }
     userData.solid = false;
   }
   if (userData.vehicle) {
@@ -5163,6 +5808,15 @@ async function spawnItem(item, x, z, opts = {}) {
     // Keep intended gather/home — not mid-entrance garage coords
     obj.userData.spawnX = x;
     obj.userData.spawnZ = z;
+    // Garage display scale is scene-local; homeScale is what other scenes restore
+    if (!isGarageScene()) {
+      obj.userData.homeScale = isGarageDisplayScale(scale) ? 1 : scale;
+    } else if (
+      obj.userData.homeScale == null ||
+      isGarageDisplayScale(obj.userData.homeScale)
+    ) {
+      obj.userData.homeScale = 1;
+    }
     // User-placed cast travels across scenes (not JSON props / traffic / loading)
     if (
       !sceneLoading &&
@@ -5258,10 +5912,9 @@ function roundSceneNum(n, digits = 2) {
   return Math.round(Number(n) * p) / p;
 }
 
-/** Snapshot night_club walkable polygon. */
-function serializeCol(obj) {
-  if (!hasEditableCollision(obj?.userData?.path)) return null;
-  const col = ensureColData(obj);
+/** Snapshot one walkable polygon slot. */
+function serializeOneCol(col) {
+  if (!col) return null;
   return {
     enabled: !!col.enabled,
     pts: (col.pts || []).map((p) => ({
@@ -5271,17 +5924,39 @@ function serializeCol(obj) {
   };
 }
 
+/** Snapshot night_club / garage walkable polygon(s). */
+function serializeCol(obj) {
+  if (!hasEditableCollision(obj?.userData?.path)) return null;
+  return serializeOneCol(ensureColData(obj));
+}
+
+function serializeCols(obj) {
+  if (!isMultiColObject(obj?.userData?.path)) return null;
+  const cols = ensureColsData(obj);
+  return cols.map((c) => serializeOneCol(c));
+}
+
 function applySerializedCol(obj, colData) {
   if (!obj || !colData || !hasEditableCollision(obj.userData?.path)) return;
-  const pts = Array.isArray(colData.pts)
-    ? colData.pts
-        .filter((p) => p && Number.isFinite(Number(p.fx)) && Number.isFinite(Number(p.fz)))
-        .map((p) => ({ fx: Number(p.fx), fz: Number(p.fz) }))
-    : [];
-  obj.userData.col = {
-    enabled: !!colData.enabled,
-    pts: pts.length >= 3 ? pts : defaultColData().pts.map((p) => ({ ...p })),
-  };
+  if (isMultiColObject(obj.userData.path)) {
+    applySerializedCols(obj, [colData]);
+    return;
+  }
+  obj.userData.col = cloneColData(colData);
+  syncColSolid(obj);
+}
+
+function applySerializedCols(obj, colsData) {
+  if (!obj || !isMultiColObject(obj.userData?.path)) return;
+  const list = Array.isArray(colsData) ? colsData : [];
+  obj.userData.cols = [];
+  for (let i = 0; i < COL_SLOT_COUNT; i++) {
+    obj.userData.cols[i] = cloneColData(list[i] || (i === 0 ? list[0] : null));
+  }
+  obj.userData.colActiveIndex = 0;
+  obj.userData.col = obj.userData.cols[0];
+  // Saved garage cols — don't auto "Ekrana al" overwrite
+  obj.userData.colsPlacedInView = true;
   syncColSolid(obj);
 }
 
@@ -5338,9 +6013,15 @@ function serializeScene() {
       dir: d.dir || "south",
     };
     if (d.dancing) entry.dancing = true;
-    // Always embed night_club_inside walkable collision polygon
-    const col = serializeCol(obj);
-    if (col) entry.col = col;
+    // Garage: up to 3 cols; other rooms: single col
+    const cols = serializeCols(obj);
+    if (cols) {
+      entry.cols = cols;
+      entry.col = cols[0];
+    } else {
+      const col = serializeCol(obj);
+      if (col) entry.col = col;
+    }
     objects.push(entry);
   }
   const out = {
@@ -5481,15 +6162,20 @@ function snapshotPartyFromWorld() {
   }
   const list = [];
   const seen = new Set();
+  const garageSnap = isGarageScene();
   for (const o of listPartyCharacters()) {
     if (seen.has(o)) continue;
     seen.add(o);
     const d = o.userData || {};
     const liveId = d.liveUserId || null;
+    // Outside garage, current scale is home. Inside garage, never save 0.75.
+    if (!garageSnap) d.homeScale = partyHomeScaleOf({ scale: d.scale ?? 1 });
+    const homeScale = partyHomeScaleOf(d);
+    d.homeScale = homeScale;
     list.push({
       path: d.path,
       id: d.catalogId || null,
-      scale: d.scale ?? 1,
+      scale: homeScale,
       dir: d.dir || "south",
       liveUserId: liveId,
       liveUserName: d.liveUserName || null,
@@ -5502,10 +6188,13 @@ function snapshotPartyFromWorld() {
     if (!obj?.parent || seen.has(obj)) continue;
     seen.add(obj);
     const d = obj.userData || {};
+    if (!garageSnap) d.homeScale = partyHomeScaleOf({ scale: d.scale ?? 1 });
+    const homeScale = partyHomeScaleOf(d);
+    d.homeScale = homeScale;
     list.push({
       path: d.path,
       id: d.catalogId || null,
-      scale: d.scale ?? 1,
+      scale: homeScale,
       dir: d.dir || "south",
       liveUserId: lid,
       liveUserName: d.liveUserName || null,
@@ -5523,7 +6212,11 @@ async function restorePartyIntoScene() {
   const home = streetGatherTarget || player?.mesh?.position || { x: 0, z: 200 };
   const club = isNightClubScene();
   const street = isStreetLikeScene();
+  const garageScene = isGarageScene();
   const clubSlots = club ? nightClubCrowdSlots(persistentParty.length) : [];
+  const garageSlots = garageScene
+    ? garageColCrowdSlots(persistentParty.length)
+    : [];
   const gate = club ? nightClubEntranceGate() : null;
   const post = street ? findScenePostOffice() : null;
   const garage = post ? postOfficeGarageExit(post) : null;
@@ -5533,14 +6226,21 @@ async function restorePartyIntoScene() {
     const entry = persistentParty[i];
     const item = findCatalogItem(entry);
     if (!item) continue;
-    const dir = club ? dirs[i % dirs.length] : entry.dir || "south";
-    const slot = clubSlots[i] || null;
+    const dir =
+      club || garageScene ? dirs[i % dirs.length] : entry.dir || "south";
+    const slot = garageScene
+      ? garageSlots[i] || null
+      : club
+        ? clubSlots[i] || null
+        : null;
     const ang = (i / Math.max(persistentParty.length, 1)) * Math.PI * 2;
     const rad = 22 + (i % 3) * 10;
-    const gather = {
-      x: home.x + Math.cos(ang) * rad,
-      z: home.z + Math.sin(ang) * rad,
-    };
+    const gather = slot
+      ? { x: slot.x, z: slot.z }
+      : {
+          x: home.x + Math.cos(ang) * rad,
+          z: home.z + Math.sin(ang) * rad,
+        };
     let spawnX;
     let spawnZ;
     if (club && gate) {
@@ -5563,9 +6263,13 @@ async function restorePartyIntoScene() {
       spawnZ = gather.z;
     }
     try {
+      const homeScale = partyHomeScaleOf({
+        scale: entry.scale,
+        homeScale: entry.scale,
+      });
       const obj = await spawnItem(item, gather.x, gather.z, {
         dir,
-        scale: entry.scale != null ? Number(entry.scale) : undefined,
+        scale: garageScene ? GARAGE_CHAR_SCALE : homeScale,
         exactPos: true,
         recordUndo: false,
         select: false,
@@ -5573,9 +6277,20 @@ async function restorePartyIntoScene() {
         partyMember: false,
       });
       // Override spawnItem position — gather is home; visual start is gate/garage
-      obj.position.set(spawnX, 0, spawnZ);
-      obj.userData.spawnX = gather.x;
-      obj.userData.spawnZ = gather.z;
+      // Garage slots are feet XZ — convert to mesh so FEET_NUDGE_Z stays inside the band
+      if (garageScene && slot) {
+        const mesh = meshFromFeet(slot.x, slot.z);
+        const home = meshFromFeet(gather.x, gather.z);
+        obj.position.set(mesh.x, 0, mesh.z);
+        obj.userData.spawnX = home.x;
+        obj.userData.spawnZ = home.z;
+      } else {
+        obj.position.set(spawnX, 0, spawnZ);
+        obj.userData.spawnX = gather.x;
+        obj.userData.spawnZ = gather.z;
+      }
+      obj.userData.homeScale = homeScale;
+      if (!garageScene) restoreCharacterHomeScale(obj);
       obj.userData.partyMember = true;
       obj.userData.editable = true;
       obj.userData.redLightBench = false;
@@ -5584,6 +6299,9 @@ async function restorePartyIntoScene() {
       obj.userData.redLightFinished = false;
       obj.userData.redLightFinishing = false;
       obj.visible = true;
+      if (slot?.colSlot != null) {
+        obj.userData.garageColSlot = slot.colSlot;
+      }
       if (entry.liveUserId) {
         const lid = String(entry.liveUserId);
         const lname = String(entry.liveUserName || entry.liveUserId);
@@ -5597,14 +6315,27 @@ async function restorePartyIntoScene() {
         obj.userData.crowdExtra = entry.crowdExtra !== false;
       }
       syncDepth(obj);
-      if (club && slot) {
+      if ((club || garageScene) && slot) {
         obj.userData.formationMove = true;
-        scriptActorTo(obj, slot.x, slot.z, {
+        const dest = garageScene
+          ? meshFromFeet(slot.x, slot.z)
+          : { x: slot.x, z: slot.z };
+        scriptActorTo(obj, dest.x, dest.z, {
           run: true,
           faceDir: dir,
-          idleOnArrive: false,
-          wait: i * 0.14,
+          idleOnArrive: !garageScene,
+          wait: i * 0.12,
           onDone: () => {
+            obj.userData.formationMove = false;
+            if (garageScene) {
+              // Clear pin — garage cols are walk zones, not locked seats
+              obj.userData.formationSlot = null;
+              pullFeetIntoGarageCol(obj);
+              attachIdle(obj, obj.userData.path, dir, {
+                allowSouthFallback: true,
+              }).catch(() => {});
+              return;
+            }
             attachDance(obj, obj.userData.path, dir, {
               allowSouthFallback: true,
             })
@@ -6064,7 +6795,11 @@ async function loadScene(data, { persist = true, carryParty = true } = {}) {
         playEntrance: false,
       });
       if (entry.sceneOverlay) obj.userData.sceneOverlay = entry.sceneOverlay;
-      if (entry.col) applySerializedCol(obj, entry.col);
+      if (Array.isArray(entry.cols) && entry.cols.length) {
+        applySerializedCols(obj, entry.cols);
+      } else if (entry.col) {
+        applySerializedCol(obj, entry.col);
+      }
       if (entry.dancing && obj.userData.kind === "character") {
         await setCharacterDancing(obj, true);
       }
@@ -6100,6 +6835,24 @@ async function loadScene(data, { persist = true, carryParty = true } = {}) {
     }
     if (partyN > 0) {
       statusEl.textContent = `${statusEl.textContent || "Hazır"} · parti ${partyN}`;
+    }
+    if (isGarageScene()) {
+      for (const o of listPartyCharacters()) {
+        ensureActorInsideGarageCol(o);
+        applyGarageCharacterScale(o);
+        o.userData.formationSlot = null;
+        o.userData.formationMove = false;
+      }
+      if (player?.mesh) {
+        ensureActorInsideGarageCol(player.mesh);
+        player.mesh.userData.formationSlot = null;
+        player.mesh.userData.formationMove = false;
+      }
+      if (partyN > 0) {
+        const zones = garageEnabledColPolys().length || 3;
+        const parts = splitEvenCounts(partyN, zones).join("/");
+        statusEl.textContent = `Garage · parti ${partyN} → ${parts} (3 col)`;
+      }
     }
     if (isRedLightScene()) {
       redLightCastCount = Math.min(
@@ -6376,13 +7129,16 @@ function truthDareActorPool() {
 function syncTruthDareCrowdUi() {
   const panel = truthDareCrowdEl;
   if (!panel) return;
-  // Street: pick count → doğrulukmu. Night club: pack the floor.
+  // Street / night club / garage: boy/girl kalabalık
   const show = isCrowdScene();
   const club = isNightClubScene();
+  const garage = isGarageScene();
   panel.classList.toggle("hidden", !show);
   panel.title = club
     ? "Night club dans alanına boy/girl kalabalık"
-    : "Street’te sayı seç → doğrulukmu_cesaretmi’ye geç";
+    : garage
+      ? "Garage col zonlarına boy/girl kalabalık"
+      : "Street’te sayı seç → doğrulukmu_cesaretmi’ye geç";
   panel.querySelectorAll("button[data-crowd]").forEach((btn) => {
     const n = Number(btn.getAttribute("data-crowd"));
     btn.classList.remove("hidden");
@@ -9718,9 +10474,45 @@ async function spawnCrowdExtras(count) {
     return 0;
   }
   const club = isNightClubScene();
+  const garageScene = isGarageScene();
   const n = Math.max(0, Math.min(50, Number(count) || 0));
   const dirs = ["south", "south-east", "south-west", "east", "west"];
   let placed = 0;
+
+  if (garageScene) {
+    const slots = garageColCrowdSlots(n);
+    if (!slots.length) {
+      statusEl.textContent = "Garage col yok — kalabalık eklenemedi";
+      return 0;
+    }
+    for (let i = 0; i < slots.length; i++) {
+      const item = catalog[i % catalog.length];
+      const slot = slots[i];
+      const dir = dirs[i % dirs.length];
+      const mesh = meshFromFeet(slot.x, slot.z);
+      try {
+        const obj = await spawnItem(item, mesh.x, mesh.z, {
+          dir,
+          exactPos: true,
+          recordUndo: false,
+          select: false,
+          playEntrance: false,
+        });
+        obj.userData.crowdExtra = true;
+        obj.userData.partyMember = true;
+        obj.userData.garageColSlot = slot.colSlot;
+        obj.userData.spawnX = mesh.x;
+        obj.userData.spawnZ = mesh.z;
+        obj.userData.formationSlot = null;
+        obj.userData.formationMove = false;
+        pullFeetIntoGarageCol(obj);
+        placed += 1;
+      } catch (err) {
+        console.warn("garage crowd spawn", err);
+      }
+    }
+    return placed;
+  }
 
   if (club) {
     const slots = nightClubCrowdSlots(n);
@@ -9854,6 +10646,10 @@ async function setTruthDareCrowdCount(count) {
     statusEl.textContent = `Kalabalık: ${placed} karakter · dizilim`;
   } else if (isNightClubScene()) {
     statusEl.textContent = `Kalabalık: ${placed} · night club`;
+  } else if (isGarageScene()) {
+    const zones = garageEnabledColPolys().length || 3;
+    const parts = splitEvenCounts(placed, zones).join("/");
+    statusEl.textContent = `Kalabalık: ${placed} · garage ${parts}`;
   } else {
     statusEl.textContent = `Kalabalık: ${placed} — sahneler arası geliyor`;
   }
@@ -10541,7 +11337,9 @@ function nightClubColTarget() {
   return nightClubRoomObj();
 }
 
-/** Outline + vertex handles for night_club object col. */
+const COL_SLOT_COLORS = [0x5ec8ff, 0xffb86b, 0xb48cff];
+
+/** Outline + vertex handles for night_club / garage object col(s). */
 function updateColGizmo(obj) {
   if (!obj || !hasEditableCollision(obj.userData?.path)) {
     if (isWalkZoneScene()) updateStreetWalkGizmo();
@@ -10553,11 +11351,133 @@ function updateColGizmo(obj) {
     disposeColGizmo();
     return;
   }
-  const col = ensureColData(obj);
-  buildPolyGizmo(getColWorldPts(obj), !!col.enabled, { street: false });
-  if (colGizmo) {
-    colGizmo.userData.nightClub = true;
-    colGizmo.userData.nightClubObj = obj;
+  // Other scenes: classic single walk poly (unchanged)
+  if (!isMultiColObject(obj.userData.path)) {
+    const col = ensureColData(obj);
+    buildPolyGizmo(getColWorldPts(obj), !!col.enabled, { street: false });
+    if (colGizmo) {
+      colGizmo.userData.nightClub = true;
+      colGizmo.userData.nightClubObj = obj;
+    }
+    return;
+  }
+  const cols = ensureColsData(obj);
+  // Garage interiors: default fx/fz land off-screen — pull into camera once
+  if (!obj.userData.colsPlacedInView) {
+    placeColsInView(obj);
+  }
+  const active = Number(obj.userData.colActiveIndex) || 0;
+  disposeColGizmo();
+  colGizmo = new THREE.Group();
+  colGizmo.userData.skipPick = true;
+  colGizmo.userData.colGizmo = true;
+  colGizmo.userData.streetWalk = true; // big hit radii
+  colGizmo.userData.handleHitR = COL_HANDLE_HIT_R * 1.65;
+  colGizmo.userData.maxPts = COL_MAX_PTS;
+  colGizmo.userData.nightClub = true;
+  colGizmo.userData.nightClubObj = obj;
+  for (let i = 0; i < COL_SLOT_COUNT; i++) {
+    addColSlotGizmo(obj, i, cols[i], i === active);
+  }
+  scene.add(colGizmo);
+}
+
+/** One colored poly + corner/edge handles for a col slot. */
+function addColSlotGizmo(obj, slotIndex, col, isActive) {
+  if (!colGizmo || !col?.pts?.length) return;
+  const corners = colPtsToWorld(obj, col);
+  if (corners.length < 3) return;
+  const color = COL_SLOT_COLORS[slotIndex] || COL_GIZMO_COLOR;
+  const enabled = !!col.enabled;
+  const y = isActive ? 0.14 : 0.12;
+  const lineOpacity = isActive ? (enabled ? 0.95 : 0.45) : enabled ? 0.65 : 0.3;
+  const positions = [];
+  for (let k = 0; k < corners.length; k++) {
+    const [x0, z0] = corners[k];
+    const [x1, z1] = corners[(k + 1) % corners.length];
+    positions.push(x0, y, z0, x1, y, z1);
+  }
+  const lineGeo = new THREE.BufferGeometry();
+  lineGeo.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+  const line = new THREE.LineSegments(
+    lineGeo,
+    new THREE.LineBasicMaterial({
+      color,
+      depthTest: false,
+      transparent: true,
+      opacity: lineOpacity,
+    }),
+  );
+  line.renderOrder = 100001;
+  line.frustumCulled = false;
+  line.userData.skipPick = true;
+  colGizmo.add(line);
+
+  const handleR = isActive ? 16 : 12;
+  const rimInner = isActive ? 13 : 9;
+  const rimOuter = isActive ? 18 : 13;
+  const midR = isActive ? 12 : 8;
+  const handleOpacity = isActive ? 1 : 0.85;
+  for (let i = 0; i < corners.length; i++) {
+    const [cx, cz] = corners[i];
+    const handle = new THREE.Mesh(
+      new THREE.CircleGeometry(handleR, 20),
+      new THREE.MeshBasicMaterial({
+        color: 0xffffff,
+        depthTest: false,
+        transparent: true,
+        opacity: handleOpacity,
+      }),
+    );
+    handle.rotation.x = -Math.PI / 2;
+    handle.position.set(cx, y + 0.02, cz);
+    handle.renderOrder = 100002;
+    handle.frustumCulled = false;
+    handle.userData.skipPick = true;
+    handle.userData.colCorner = i;
+    handle.userData.colSlot = slotIndex;
+    const rim = new THREE.Mesh(
+      new THREE.RingGeometry(rimInner, rimOuter, 20),
+      new THREE.MeshBasicMaterial({
+        color,
+        depthTest: false,
+        transparent: true,
+        opacity: handleOpacity,
+      }),
+    );
+    rim.rotation.x = -Math.PI / 2;
+    rim.position.set(cx, y + 0.03, cz);
+    rim.renderOrder = 100003;
+    rim.frustumCulled = false;
+    rim.userData.skipPick = true;
+    rim.userData.colCorner = i;
+    rim.userData.colSlot = slotIndex;
+    colGizmo.add(handle, rim);
+  }
+  if (corners.length < COL_MAX_PTS) {
+    for (let i = 0; i < corners.length; i++) {
+      const [ax, az] = corners[i];
+      const [bx, bz] = corners[(i + 1) % corners.length];
+      const mx = (ax + bx) * 0.5;
+      const mz = (az + bz) * 0.5;
+      const mid = new THREE.Mesh(
+        new THREE.CircleGeometry(midR, 16),
+        new THREE.MeshBasicMaterial({
+          color,
+          depthTest: false,
+          transparent: true,
+          opacity: isActive ? 0.9 : 0.55,
+        }),
+      );
+      mid.rotation.x = -Math.PI / 2;
+      mid.position.set(mx, y + 0.025, mz);
+      mid.renderOrder = 100004;
+      mid.frustumCulled = false;
+      mid.userData.skipPick = true;
+      mid.userData.colEdge = i;
+      mid.userData.colSlot = slotIndex;
+      colGizmo.add(mid);
+    }
   }
 }
 
@@ -10726,10 +11646,61 @@ function hitColCorner(wx, wz, obj) {
   return hitPolyCorner(wx, wz, getColWorldPts(obj));
 }
 
+/** Closest corner across all 3 col slots → { slot, index } or null. */
+function hitAnyColCorner(wx, wz, obj) {
+  if (!obj || !hasEditableCollision(obj.userData?.path)) return null;
+  if (!isMultiColObject(obj.userData.path)) {
+    const i = hitColCorner(wx, wz, obj);
+    return i >= 0 ? { slot: 0, index: i } : null;
+  }
+  const cols = ensureColsData(obj);
+  let best = null;
+  let bestD = polyHandleHitR();
+  for (let s = 0; s < COL_SLOT_COUNT; s++) {
+    const corners = colPtsToWorld(obj, cols[s]);
+    for (let i = 0; i < corners.length; i++) {
+      const d = Math.hypot(wx - corners[i][0], wz - corners[i][1]);
+      if (d < bestD) {
+        bestD = d;
+        best = { slot: s, index: i };
+      }
+    }
+  }
+  return best;
+}
+
 /** Edge index whose midpoint is near (wx,wz), or -1. */
 function hitColEdgeMid(wx, wz, obj) {
   if (!obj || !hasEditableCollision(obj.userData?.path)) return -1;
   return hitPolyEdgeMid(wx, wz, getColWorldPts(obj));
+}
+
+function hitAnyColEdgeMid(wx, wz, obj) {
+  if (!obj || !hasEditableCollision(obj.userData?.path)) return null;
+  if (!isMultiColObject(obj.userData.path)) {
+    const i = hitColEdgeMid(wx, wz, obj);
+    return i >= 0 ? { slot: 0, index: i } : null;
+  }
+  const cols = ensureColsData(obj);
+  const maxPts = colGizmo?.userData?.maxPts || COL_MAX_PTS;
+  let best = null;
+  let bestD = polyHandleHitR() * 0.9;
+  for (let s = 0; s < COL_SLOT_COUNT; s++) {
+    const corners = colPtsToWorld(obj, cols[s]);
+    if (corners.length >= maxPts) continue;
+    for (let i = 0; i < corners.length; i++) {
+      const [ax, az] = corners[i];
+      const [bx, bz] = corners[(i + 1) % corners.length];
+      const mx = (ax + bx) * 0.5;
+      const mz = (az + bz) * 0.5;
+      const d = Math.hypot(wx - mx, wz - mz);
+      if (d < bestD) {
+        bestD = d;
+        best = { slot: s, index: i };
+      }
+    }
+  }
+  return best;
 }
 
 function selectObject(obj) {
@@ -10857,9 +11828,16 @@ function refreshInspector() {
 
   const colEditable = hasEditableCollision(d.path);
   if (inspCol) inspCol.classList.toggle("hidden", !colEditable);
+  const multiCol = colEditable && isMultiColObject(d.path);
+  const slotsEl = document.getElementById("insp-col-slots");
+  const inviewBtn = document.getElementById("insp-col-inview");
+  if (slotsEl) slotsEl.classList.toggle("hidden", !multiCol);
+  if (inviewBtn) inviewBtn.classList.toggle("hidden", !multiCol);
   if (colEditable) {
+    if (multiCol) ensureColsData(selected);
     const col = ensureColData(selected);
     if (inspColOn) inspColOn.checked = !!col.enabled;
+    if (multiCol) syncInspColSlotButtons(selected);
     updateColGizmo(selected);
   } else if (isWalkZoneScene()) {
     updateStreetWalkGizmo();
@@ -10984,12 +11962,19 @@ inspZ.addEventListener("change", () => {
 });
 // pushMoveUndo already schedules persist
 let scaleBefore = null;
+let scaleColsBefore = null;
 inspScale.addEventListener("pointerdown", () => {
   if (!selected) return;
   scaleBefore = selected.userData.scale;
+  scaleColsBefore = hasEditableCollision(selected.userData?.path)
+    ? cloneColsData(selected)
+    : null;
 });
 inspScale.addEventListener("input", () => {
   if (!selected) return;
+  const worldCols = hasEditableCollision(selected.userData?.path)
+    ? snapshotColsWorld(selected)
+    : null;
   selected.userData.scale = Number(inspScale.value);
   inspScaleVal.textContent = selected.userData.scale.toFixed(2);
   if (selected.userData.tileable) {
@@ -10997,14 +11982,17 @@ inspScale.addEventListener("input", () => {
     selected.userData.tileSize = base * selected.userData.scale;
   }
   applyScale(selected);
+  if (worldCols) applyColsWorld(selected, worldCols);
   if (hasEditableCollision(selected.userData?.path)) updateColGizmo(selected);
 });
 inspScale.addEventListener("change", () => {
   if (!selected || scaleBefore == null) return;
   const obj = selected;
   const from = scaleBefore;
+  const colsFrom = scaleColsBefore;
   const to = obj.userData.scale;
   scaleBefore = null;
+  scaleColsBefore = null;
   if (from === to) return;
   pushUndo({
     undo() {
@@ -11014,6 +12002,7 @@ inspScale.addEventListener("change", () => {
         obj.userData.tileSize = base * from;
       }
       applyScale(obj);
+      if (colsFrom) restoreColsData(obj, colsFrom);
       if (selected === obj) refreshInspector();
       else selectObject(obj);
       schedulePersistScene();
@@ -11034,13 +12023,48 @@ function applyColInspector() {
     : "İç alan kapalı";
 }
 
+function syncInspColSlotButtons(obj) {
+  const wrap = document.getElementById("insp-col-slots");
+  if (!wrap) return;
+  const idx = Number(obj?.userData?.colActiveIndex) || 0;
+  wrap.querySelectorAll("button[data-col-slot]").forEach((btn) => {
+    const i = Number(btn.getAttribute("data-col-slot"));
+    btn.classList.toggle("active", i === idx);
+    const on = !!obj?.userData?.cols?.[i]?.enabled;
+    btn.classList.toggle("col-on", on);
+  });
+}
+
+document.getElementById("insp-col-slots")?.addEventListener("click", (e) => {
+  const btn = e.target?.closest?.("button[data-col-slot]");
+  if (!btn || !selected || !hasEditableCollision(selected.userData?.path)) return;
+  setActiveColSlot(selected, Number(btn.getAttribute("data-col-slot")));
+  refreshInspector();
+  statusEl.textContent = `Collision ${
+    (Number(selected.userData.colActiveIndex) || 0) + 1
+  } / 3`;
+});
+
 inspColOn?.addEventListener("change", applyColInspector);
+document.getElementById("insp-col-inview")?.addEventListener("click", () => {
+  if (!selected || !hasEditableCollision(selected.userData?.path)) return;
+  selected.userData.colsPlacedInView = false;
+  if (!placeColsInView(selected)) {
+    statusEl.textContent = "Ekrana alınamadı — kamerayı kontrol et";
+    return;
+  }
+  refreshInspector();
+  schedulePersistScene();
+  statusEl.textContent = "Col 1/2/3 ekranda · aktif slotun köşelerini sürükle";
+});
 inspColReset?.addEventListener("click", () => {
   if (!selected || !hasEditableCollision(selected.userData?.path)) return;
   resetColPts(selected);
   updateColGizmo(selected);
   schedulePersistScene();
-  statusEl.textContent = "Collision karesi sıfırlandı";
+  statusEl.textContent = `Col ${
+    (Number(selected.userData.colActiveIndex) || 0) + 1
+  } sıfırlandı`;
 });
 
 document.getElementById("night-club-col")?.addEventListener("click", (e) => {
@@ -11265,20 +12289,24 @@ function onPointerDown(event) {
         ? selected
         : null;
   if (gp0 && nightColObj && hasEditableCollision(nightColObj.userData?.path)) {
-    const corner = hitColCorner(gp0.x, gp0.z, nightColObj);
-    if (corner >= 0) {
+    const hit = hitAnyColCorner(gp0.x, gp0.z, nightColObj);
+    if (hit) {
       if (placing) endPaletteDrag();
+      setActiveColSlot(nightColObj, hit.slot);
+      syncInspColSlotButtons(nightColObj);
+      if (inspColOn) inspColOn.checked = !!ensureColData(nightColObj).enabled;
       if (event.altKey) {
         const from = ensureColData(nightColObj).pts.map((p) => ({ fx: p.fx, fz: p.fz }));
-        if (removeColPt(nightColObj, corner)) {
+        if (removeColPt(nightColObj, hit.index)) {
           pushUndo({
             undo() {
+              setActiveColSlot(nightColObj, hit.slot);
               ensureColData(nightColObj).pts = from.map((p) => ({ ...p }));
-              updateNightClubColGizmo();
+              updateColGizmo(nightColObj);
             },
           });
-          updateNightClubColGizmo();
-          statusEl.textContent = "Köşe silindi (Alt+tık)";
+          updateColGizmo(nightColObj);
+          statusEl.textContent = `Col ${hit.slot + 1} köşe silindi (Alt+tık)`;
         } else {
           statusEl.textContent = "En az 3 köşe gerekli";
         }
@@ -11287,32 +12315,37 @@ function onPointerDown(event) {
       const col = ensureColData(nightColObj);
       colCornerDrag = {
         obj: nightColObj,
-        index: corner,
+        slot: hit.slot,
+        index: hit.index,
         from: col.pts.map((p) => ({ fx: p.fx, fz: p.fz })),
       };
       controls.enabled = false;
       renderer.domElement.setPointerCapture(event.pointerId);
-      statusEl.textContent = `Köşe ${corner + 1} — sürükle · Alt+tık sil`;
+      updateColGizmo(nightColObj);
+      statusEl.textContent = `Col ${hit.slot + 1} köşe ${hit.index + 1} — sürükle`;
       return;
     }
-    const edge = hitColEdgeMid(gp0.x, gp0.z, nightColObj);
-    if (edge >= 0) {
+    const edgeHit = hitAnyColEdgeMid(gp0.x, gp0.z, nightColObj);
+    if (edgeHit) {
       if (placing) endPaletteDrag();
+      setActiveColSlot(nightColObj, edgeHit.slot);
+      syncInspColSlotButtons(nightColObj);
       const from = ensureColData(nightColObj).pts.map((p) => ({ fx: p.fx, fz: p.fz }));
-      const newIndex = insertColPtOnEdge(nightColObj, edge, gp0.x, gp0.z);
+      const newIndex = insertColPtOnEdge(nightColObj, edgeHit.index, gp0.x, gp0.z);
       if (newIndex < 0) {
         statusEl.textContent = `En fazla ${COL_MAX_PTS} köşe`;
         return;
       }
       colCornerDrag = {
         obj: nightColObj,
+        slot: edgeHit.slot,
         index: newIndex,
         from,
       };
       controls.enabled = false;
       renderer.domElement.setPointerCapture(event.pointerId);
-      updateNightClubColGizmo();
-      statusEl.textContent = "Kenara nokta eklendi — sürükle";
+      updateColGizmo(nightColObj);
+      statusEl.textContent = `Col ${edgeHit.slot + 1} kenara nokta — sürükle`;
       return;
     }
   } else if (gp0 && isWalkZoneScene() && colGizmo?.userData?.streetWalk) {
@@ -11482,12 +12515,11 @@ function onPointerMove(event) {
       else updateStreetWalkGizmo();
       return;
     }
-    setColWorldPt(colCornerDrag.obj, colCornerDrag.index, gp.x, gp.z);
-    if (colGizmo?.userData?.nightClub || isNightClubScene()) {
-      updateNightClubColGizmo();
-    } else {
-      updateColGizmo(colCornerDrag.obj);
+    if (colCornerDrag.slot != null) {
+      setActiveColSlot(colCornerDrag.obj, colCornerDrag.slot);
     }
+    setColWorldPt(colCornerDrag.obj, colCornerDrag.index, gp.x, gp.z);
+    updateColGizmo(colCornerDrag.obj);
     return;
   }
   if (!dragging) return;
@@ -12145,16 +13177,40 @@ function clampActorsIntoWalkZone() {
       if (player.syncDepth) player.syncDepth(player.mesh);
     }
   }
+  // Driven vehicle stays inside walk/col zone (same rule as on-foot)
+  if (occupiedVehicle && dragging !== occupiedVehicle) {
+    const veh = occupiedVehicle;
+    const box = footprintOf(veh);
+    const r = Math.max(box.hw, box.hd) * 0.55;
+    const c = projectIntoWalkZone(veh.position.x, veh.position.z, r, player?.mesh);
+    if (c.x !== veh.position.x || c.z !== veh.position.z) {
+      veh.position.x = c.x;
+      veh.position.z = c.z;
+      if (player?.mesh) {
+        player.mesh.position.x = c.x;
+        player.mesh.position.z = c.z;
+      }
+      syncDepth(veh);
+    }
+  }
   for (const obj of pickables) {
     if (obj === player?.mesh) continue;
     if (obj.visible === false) continue;
     if (dragging === obj) continue; // free editor move
     const isChar = obj.userData?.kind === "character";
     const isPet = !!obj.userData?.companion || isAnimalPath(obj.userData?.path);
-    if (!isChar && !isPet) continue;
+    const isDriven =
+      isVehicleObj(obj) &&
+      (!!obj.userData?.driver || obj === occupiedVehicle);
+    if (!isChar && !isPet && !isDriven) continue;
     if (obj.userData?.formationMove) continue;
     if (obj.userData?.tennisFan) continue; // sideline outside court
-    const r = isPet ? PET_COL_RADIUS : NPC_WALK_RADIUS;
+    if (obj === occupiedVehicle) continue; // handled above
+    const r = isPet
+      ? PET_COL_RADIUS
+      : isDriven
+        ? Math.max(footprintOf(obj).hw, footprintOf(obj).hd) * 0.55
+        : NPC_WALK_RADIUS;
     const c = projectIntoWalkZone(obj.position.x, obj.position.z, r, obj);
     if (c.x !== obj.position.x || c.z !== obj.position.z) {
       obj.position.x = c.x;

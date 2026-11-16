@@ -1815,6 +1815,13 @@
       ]
     },
     {
+      "id": "447cdd69-d155-49d2-b8b0-2402ef215793",
+      "name": "huge_empty_parking_garage...",
+      "state": null,
+      "size": "256x256",
+      "path": "assets/interiors/huge_empty_parking_garage/256x256/default"
+    },
+    {
       "id": "e47fe1f5-6b5f-4e20-9574-a23858a749e7",
       "name": "inside",
       "state": null,

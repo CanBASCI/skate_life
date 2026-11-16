@@ -421,7 +421,15 @@ def object_out_path(row: dict) -> Path | None:
     if name in {"skateboard"}:
         return ROOT / "assets" / "objects" / "skateboard" / size / slug(state or "default")
 
-    if "night" in name.lower() or name in {"inside", "night_club_inside"} or "nightclub" in name.lower() or "side-scroller" in name.lower() or "side view" in name.lower():
+    if (
+        "night" in name.lower()
+        or name in {"inside", "night_club_inside"}
+        or "nightclub" in name.lower()
+        or "side-scroller" in name.lower()
+        or "side view" in name.lower()
+        or "parking_garage" in name.lower()
+        or "garage" in name.lower()
+    ):
         return ROOT / "assets" / "interiors" / slug(name) / size / slug(state or "default")
 
     # fallback misc
